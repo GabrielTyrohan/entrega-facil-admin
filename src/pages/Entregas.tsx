@@ -154,14 +154,6 @@ const Entregas: React.FC = () => {
   };
 
   const handleViewEntrega = (entrega: Entrega) => {
-    console.log('=== DEBUG ENTREGA ===');
-    console.log('Entrega ID:', entrega.id);
-    console.log('Cliente ID:', entrega.cliente_id);
-    console.log('Cliente objeto:', entrega.cliente);
-    console.log('Cliente CPF RAW:', entrega.cliente?.cpf);
-    console.log('Cliente CPF LENGTH:', entrega.cliente?.cpf?.length);
-    console.log('Cliente nome:', entrega.cliente?.nome);
-    console.log('====================');
     
     // Converter Entrega para EntregaComDetalhes para compatibilidade com o modal
     const entregaComDetalhes: EntregaComDetalhes = {

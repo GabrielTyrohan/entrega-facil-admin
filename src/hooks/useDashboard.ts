@@ -298,64 +298,6 @@ export const useTopVendedores = (administrador_id: string, options?: { enabled?:
   };
 };
 
-// Hook para atividades recentes - REMOVIDO
-// // Tipos para as atividades recentes
-// export interface AtividadeRecente {
-//   administrador_id: string;
-//   tipo_atividade: 'entrega' | 'pagamento' | 'vendedor' | 'cliente';
-//   atividade_id: number;
-//   data_atividade: string;
-//   nome_cliente?: string | null;
-//   nome_vendedor?: string | null;
-//   valor?: number | null;
-//   status_entrega?: string | null;
-//   valor_pagamento?: number | null;
-//   data_entrega?: string | null;
-// }
-
-// export const useAtividadesRecentes = (administrador_id: string, options?: { enabled?: boolean }) => {
-//   // WORKAROUND: Buscar dados diretamente das tabelas em vez da view problemática
-//   // Buscar apenas vendedores cadastrados recentemente como atividade
-//   const query = supabase
-//     .from('vendedores')
-//     .select(`
-//       id,
-//       nome,
-//       created_at,
-//       administrador_id
-//     `)
-//     .eq('administrador_id', administrador_id)
-//     .order('created_at', { ascending: false })
-//     .limit(20);
-
-//   const vendedoresQuery = useSupabaseQuery('VENDEDORES_RECENTES', query, {
-//     enabled: options?.enabled && !!administrador_id,
-//   });
-
-//   // Transformar dados para o formato esperado
-//   const transformedData = React.useMemo(() => {
-//     if (!vendedoresQuery.data || !Array.isArray(vendedoresQuery.data)) return [];
-    
-//     return vendedoresQuery.data.map((vendedor: any) => ({
-//       administrador_id: vendedor.administrador_id,
-//       tipo_atividade: 'vendedor' as const,
-//       atividade_id: vendedor.id,
-//       data_atividade: vendedor.created_at,
-//       nome_cliente: null,
-//       nome_vendedor: vendedor.nome,
-//       valor: null,
-//       status_entrega: null,
-//       valor_pagamento: null,
-//       data_entrega: null,
-//     }));
-//   }, [vendedoresQuery.data]);
-
-//   return {
-//     ...vendedoresQuery,
-//     data: transformedData,
-//   };
-// };
-
 // Hook para pagamentos mensais dos últimos 12 meses
 export const usePagamentosMensais = (administrador_id: string, options?: { enabled?: boolean }) => {
   const currentDate = new Date();

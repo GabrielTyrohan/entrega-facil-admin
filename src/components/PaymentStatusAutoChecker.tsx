@@ -20,7 +20,6 @@ const PaymentStatusAutoChecker: React.FC = () => {
     // Função para verificar o status de pagamento
     const checkPaymentStatus = async () => {
       try {
-        console.log('🔍 Verificando status de pagamento automaticamente...');
         
         // Busca os dados do administrador atual
         const { data: adminData, error } = await supabase
@@ -35,15 +34,10 @@ const PaymentStatusAutoChecker: React.FC = () => {
         }
 
         if (adminData && adminData.status_pagamento === 'vencido') {
-          console.log('⚠️ Status de pagamento vencido detectado. Fazendo logout automático...');
           
           // Faz logout do usuário
           await logout();
-          
-          // Redireciona para a página de login (o AuthContext já faz isso automaticamente)
-          console.log('✅ Usuário deslogado devido ao status de pagamento vencido');
         } else {
-          console.log('✅ Status de pagamento OK');
         }
       } catch (error) {
         console.error('Erro na verificação automática de pagamento:', error);
@@ -58,9 +52,6 @@ const PaymentStatusAutoChecker: React.FC = () => {
     // Configura verificação a cada 10 minutos (600.000 ms)
     intervalRef.current = setInterval(checkPaymentStatus, 10 * 60 * 1000);
 
-
-    console.log('🚀 Verificação automática de pagamento iniciada (a cada 10 minutos)');
-
     // Cleanup function
     return () => {
       if (intervalRef.current) {
@@ -68,7 +59,6 @@ const PaymentStatusAutoChecker: React.FC = () => {
         intervalRef.current = null;
       }
       clearTimeout(initialTimeout);
-      console.log('🛑 Verificação automática de pagamento parada');
     };
   }, [user, logout]);
 

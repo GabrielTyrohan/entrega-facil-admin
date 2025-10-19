@@ -28,9 +28,6 @@ export const useSuporteSolicitacoes = () => {
         throw new Error('Usuário não autenticado. Faça login novamente.');
       }
 
-      console.log('Usuário autenticado:', user.id);
-      console.log('Administrador ID:', administrador.id);
-
       // Mapear tipos do formulário para banco
       const tipoMap: Record<string, SuporteSolicitacao['tipo']> = {
         bug: 'bug',
@@ -51,8 +48,6 @@ export const useSuporteSolicitacoes = () => {
         status: 'aberto' as const,
         sincronizado: false,
       };
-
-      console.log('Dados para inserir:', dadosParaInserir);
 
       const { data, error: supabaseError } = await supabase
         .from('suporte_solicitacoes')

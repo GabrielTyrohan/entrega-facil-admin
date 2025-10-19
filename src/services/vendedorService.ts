@@ -61,7 +61,6 @@ export class VendedorService {
   // Criar novo vendedor
   static async createVendedor(vendedorData: Omit<Vendedor, 'id' | 'created_at'>): Promise<Vendedor> {
     try {
-      console.log('Tentando criar vendedor com dados:', vendedorData);
       
       const { data, error } = await supabase
         .from('vendedores')
@@ -86,10 +85,6 @@ export class VendedorService {
         }
       }
 
-      // Debug: verificar se data está vazio mesmo sem erro
-      console.log('Resultado da inserção - Data:', data);
-      console.log('Resultado da inserção - Error:', error);
-
       if (!data) {
         console.warn('⚠️ AVISO: Data é null/undefined mesmo sem erro!');
         // Tentar buscar o vendedor recém-criado pelo email
@@ -108,14 +103,12 @@ export class VendedorService {
         }
 
         if (searchData) {
-          console.log('✅ Vendedor encontrado após busca:', searchData);
           return searchData;
         } else {
           throw new Error('Vendedor não foi criado - dados não encontrados');
         }
       }
-
-      console.log('Vendedor criado com sucesso:', data);
+      
       return data;
     } catch (error) {
       console.error('Erro no createVendedor:', error);

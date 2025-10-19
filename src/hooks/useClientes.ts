@@ -48,8 +48,6 @@ export const useClientes = (options?: {
 
   if (options?.search) {
     const orFilter = `nome.ilike.%${options.search}%,email.ilike.%${options.search}%,telefone.ilike.%${options.search}%`;
-    console.log('🔍 DEBUG useClientes - orFilter:', orFilter);
-    console.log('🔍 DEBUG useClientes - Tem parênteses?', orFilter.includes('('), orFilter.includes(')'));
     query = query.or(orFilter);
   }
 

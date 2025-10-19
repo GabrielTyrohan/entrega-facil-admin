@@ -258,7 +258,7 @@ const Vendedores: React.FC = () => {
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-        <div className="flex flex-col space-y-3 sm:space-y-4 sm:flex-row sm:space-y-0 sm:space-x-4">
+        <div className="flex flex-col space-y-3 sm:flex-row sm:space-y-0 sm:space-x-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input

@@ -168,23 +168,6 @@ const NovoVendedor: React.FC = () => {
         return;
       }
 
-      // Log dos dados para debug
-      console.log('Dados do vendedor:', {
-        nome: formData.nome,
-        email: formData.email,
-        telefone: formData.telefone,
-        senha: formData.senha,
-        endereco: formData.endereco,
-        data_inicio: formData.dataInicio,
-        tipo_vinculo: formData.tipoVinculo,
-        percentual_minimo: formData.percentualMinimo,
-        contrato: formData.contrato,
-        ativo: formData.ativo,
-        status: formData.status,
-        dados_bancarios: dadosBancarios,
-        administrador_id: user?.id
-      });
-
       // Map form data to Vendedor interface structure
       const vendedorData = {
         nome: formData.nome.trim(),
@@ -203,10 +186,6 @@ const NovoVendedor: React.FC = () => {
                         ? dadosBancarios : undefined,
         administrador_id: user?.id || ''
       };
-
-      // Debug: verificar se o administrador_id está correto
-      console.log('Administrador ID:', user?.id);
-      console.log('Dados do vendedor:', vendedorData);
 
       // Use the vendedorService to create the vendor
       const result = await vendedorService.VendedorService.createVendedor(vendedorData);

@@ -5,8 +5,6 @@ export const PaymentStatusChecker: React.FC = () => {
   const { checkPaymentStatus } = usePaymentStatus();
 
   useEffect(() => {
-    // DESATIVADO: Verificação automática removida para evitar logout após login
-    console.log('PaymentStatusChecker: Componente desativado - verificação acontece apenas no login');
     return;
 
     // ... existing code ...
