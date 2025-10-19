@@ -1,0 +1,200 @@
+import { useSupabaseQuery, useSupabaseMutation } from '../lib/supabaseCache';
+import { supabase } from '../lib/supabase';
+
+export interface Pagamento {
+  id: string;
+  entrega_id: string;
+  valor: number;
+  data_pagamento: string;
+  metodo_pagamento: string;
+  observacoes?: string;
+  created_at: string;
+  updated_at: string;
+  entregas?: {
+    id: string;
+    vendedor_id: string;
+    cliente_id: string;
+    produto_id: string;
+    valor: number;
+    data_entrega: string;
+    vendedores?: {
+      id: string;
+      nome: string;
+      administrador_id: string;
+    };
+    clientes?: {
+      id: string;
+      nome: string;
+    };
+    produtos?: {
+      id: string;
+      nome: string;
+    };
+  };
+}
+
+// Hook para listar todos os pagamentos
+export const usePagamentos = (options?: {
+  enabled?: boolean;
+  entrega_id?: string;
+  vendedor_id?: string;
+  data_inicio?: string;
+  data_fim?: string;
+  administrador_id?: string;
+}) => {
+  let query = supabase
+    .from('pagamentos')
+    .select(`
+      *,
+      entregas!inner(
+        id,
+        vendedor_id,
+        cliente_id,
+        produto_id,
+        valor,
+        data_entrega,
+        vendedores!inner(id, nome, administrador_id),
+        clientes(id, nome),
+        produtos(id, nome)
+      )
+    `)
+    .order('data_pagamento', { ascending: false });
+
+  // Filtro por administrador (obrigatório para segurança)
+  if (options?.administrador_id) {
+    query = query.eq('entregas.vendedores.administrador_id', options.administrador_id);
+  }
+
+  // Filtros opcionais
+  if (options?.entrega_id) {
+    query = query.eq('entrega_id', options.entrega_id);
+  }
+  
+  if (options?.vendedor_id) {
+    query = query.eq('entregas.vendedor_id', options.vendedor_id);
+  }
+
+  if (options?.data_inicio) {
+    query = query.gte('data_pagamento', options.data_inicio);
+  }
+
+  if (options?.data_fim) {
+    query = query.lte('data_pagamento', options.data_fim);
+  }
+
+  return useSupabaseQuery('PAGAMENTOS', query, {
+    enabled: options?.enabled,
+  });
+};
+
+// Hook para buscar pagamento por ID
+export const usePagamento = (id: string, options?: { enabled?: boolean }) => {
+  const query = supabase
+    .from('pagamentos')
+    .select(`
+      *,
+      entregas(
+        id,
+        vendedor_id,
+        cliente_id,
+        valor,
+        data_entrega,
+        vendedores(id, nome),
+        clientes(id, nome)
+      )
+    `)
+    .eq('id', id)
+    .single();
+
+  return useSupabaseQuery('PAGAMENTOS', query, {
+    enabled: options?.enabled && !!id,
+  });
+};
+
+// Hook para pagamentos por entrega
+export const usePagamentosPorEntrega = (
+  entrega_id: string,
+  options?: { enabled?: boolean }
+) => {
+  const query = supabase
+    .from('pagamentos')
+    .select('*')
+    .eq('entrega_id', entrega_id)
+    .order('data_pagamento', { ascending: false });
+
+  return useSupabaseQuery('PAGAMENTOS', query, {
+    enabled: options?.enabled && !!entrega_id,
+  });
+};
+
+// Hook para criar pagamento
+export const useCreatePagamento = (options?: {
+  onSuccess?: (pagamento: Pagamento) => void;
+  onError?: (error: any) => void;
+}) => {
+  return useSupabaseMutation('PAGAMENTOS', 'insert', {
+    onSuccess: options?.onSuccess,
+    onError: options?.onError,
+    // Invalidar cache relacionado
+    invalidateRelated: ['ENTREGAS', 'VENDEDORES'],
+  });
+};
+
+// Hook para atualizar pagamento
+export const useUpdatePagamento = (options?: {
+  onSuccess?: (pagamento: Pagamento) => void;
+  onError?: (error: any) => void;
+}) => {
+  return useSupabaseMutation('PAGAMENTOS', 'update', {
+    onSuccess: options?.onSuccess,
+    onError: options?.onError,
+    // Invalidar cache relacionado
+    invalidateRelated: ['ENTREGAS'],
+  });
+};
+
+// Hook para deletar pagamento
+export const useDeletePagamento = (options?: {
+  onSuccess?: () => void;
+  onError?: (error: any) => void;
+}) => {
+  return useSupabaseMutation('PAGAMENTOS', 'delete', {
+    onSuccess: options?.onSuccess,
+    onError: options?.onError,
+    // Invalidar cache relacionado
+    invalidateRelated: ['ENTREGAS'],
+    // Atualização otimista para remoção
+    optimisticUpdate: {
+      updateFn: (oldData: Pagamento[], variables: { id: string }) => {
+        return oldData.filter(pagamento => pagamento.id !== variables.id);
+      },
+      rollbackFn: (oldData: Pagamento[]) => oldData,
+    },
+  });
+};
+
+// Hook para estatísticas de pagamentos
+export const useEstatisticasPagamentos = (
+  administrador_id?: string,
+  options?: { enabled?: boolean }
+) => {
+  let query = supabase
+    .from('pagamentos')
+    .select(`
+      id,
+      valor,
+      data_pagamento,
+      metodo_pagamento,
+      entregas!inner(
+        vendedores!inner(administrador_id)
+      )
+    `);
+
+  if (administrador_id) {
+    query = query.eq('entregas.vendedores.administrador_id', administrador_id);
+  }
+
+  return useSupabaseQuery('PAGAMENTOS', query, {
+    enabled: options?.enabled,
+  });
+};

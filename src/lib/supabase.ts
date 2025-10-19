@@ -1,0 +1,166 @@
+import { createClient } from '@supabase/supabase-js'
+
+// Configurações do Supabase
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing Supabase environment variables')
+}
+
+// Cliente Supabase com configurações de autenticação aprimoradas
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+    storage: window.localStorage,
+    storageKey: 'supabase.auth.token',
+    flowType: 'pkce'
+  },
+  db: {
+    schema: 'public'
+  }
+})
+
+// Tipos para as tabelas do banco
+export interface Administrador {
+  id: string
+  nome: string
+  email: string
+  created_at: string
+}
+
+export interface Vendedor {
+  id: string
+  administrador_id: string
+  nome: string
+  senha?: number  // Alterado de string para number
+  telefone?: string
+  percentual_minimo?: number
+  last_sync?: string
+  token?: string
+  ativo?: boolean
+  created_at: string
+  email?: string
+  endereco?: string
+  data_inicio?: string
+  tipo_vinculo?: string
+  contrato?: string
+  contrato_arquivo_url?: string
+  status?: boolean
+  dados_bancarios?: any
+}
+
+export interface Cliente {
+  id: string
+  vendedor_id: string
+  nome: string
+  sobrenome?: string
+  cpf: string
+  rg?: string
+  data_nascimento?: string
+  sexo?: string
+  estado_civil?: string
+  nacionalidade?: string
+  nome_pai?: string
+  nome_mae?: string
+  telefone: string
+  email?: string
+  endereco: string
+  nome_conjuge?: string
+  renda_mensal?: number
+  ponto_referencia?: string
+  menor_idade?: boolean
+  ativo?: boolean
+  sincronizado?: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Produto {
+  id: string
+  vendedor_id: string
+  nome: string
+  preco: number
+  descricao?: string
+  ativo?: boolean
+  sincronizado?: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Entrega {
+  id: string
+  vendedor_id: string
+  cliente_id: string
+  produto_id: string
+  valor: number
+  data_entrega: string
+  pago?: boolean
+  sincronizado?: boolean
+  created_at: string
+  updated_at: string
+  mes_cobranca?: string
+  status_pagamento?: string
+  dataRetorno?: string
+  // Relacionamentos
+  cliente?: Cliente
+  produto?: Produto
+  vendedor?: Vendedor
+}
+
+export interface Pagamento {
+  id: string
+  entrega_id: string
+  forma_pagamento: string
+  valor: number
+  data_pagamento: string
+  sincronizado?: boolean
+  created_at: string
+  updated_at: string
+  // Relacionamentos
+  entrega?: Entrega
+}
+
+export interface SuporteSolicitacao {
+  id: string
+  administrador_id: string
+  nome_contato: string
+  email_contato: string
+  telefone_contato?: string
+  tipo: 'bug' | 'duvida' | 'feature' | 'performance' | 'outro'
+  urgencia: 'baixa' | 'media' | 'alta'
+  assunto: string
+  descricao: string
+  anexo_url?: string
+  status: 'aberto' | 'em_analise' | 'resolvido' | 'fechado'
+  resposta_desenvolvedor?: string
+  tempo_resposta_horas?: number
+  sincronizado?: boolean
+  created_at: string
+  updated_at: string
+  resolvido_em?: string
+}
+
+export interface SuporteMensagem {
+  id: string
+  solicitacao_id: string
+  remetente_tipo: 'administrador' | 'desenvolvedor'
+  remetente_nome: string
+  mensagem: string
+  anexo_url?: string
+  sincronizado?: boolean
+  created_at: string
+}
+
+export interface SistemaStatus {
+  id: string
+  status: 'operacional' | 'instavel' | 'manutencao' | 'offline'
+  mensagem?: string
+  inicio: string
+  termino?: string
+  notificar_usuarios?: boolean
+  created_at: string
+  updated_at: string
+}
