@@ -32,7 +32,12 @@ const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cl
     telefone: '',
     email: '',
     endereco: '',
+    numero: '',
+    Bairro: '',
+    Cidade: '',
+    Estado: '',
     cep: '',
+    complemento: '',
     ponto_referencia: '',
     vendedor_id: '',
     menor_idade: false,
@@ -62,14 +67,17 @@ const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cl
         telefone: formatPhone(cliente.telefone || ''),
         email: cliente.email || '',
         endereco: cliente.endereco || '',
+        numero: cliente.numero || '',
+        Bairro: cliente.Bairro || '',
+        Cidade: cliente.Cidade || '',
+        Estado: cliente.Estado || '',
         cep: formatCEP(cliente.cep || ''),
+        complemento: cliente.complemento || '',
         ponto_referencia: cliente.ponto_referencia || '',
         vendedor_id: cliente.vendedor_id || '',
         menor_idade: cliente.menor_idade || false,
-        ativo: cliente.ativo !== undefined ? cliente.ativo : true
+        ativo: cliente.ativo ?? true
       });
-      
-      console.log('FormData definido com estado_civil:', cliente.estado_civil || '');
     }
   }, [cliente]);
 
@@ -468,11 +476,76 @@ const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cl
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Endereço
                 </label>
-                <textarea
+                <input
+                  type="text"
                   name="endereco"
                   value={formData.endereco}
                   onChange={handleInputChange}
-                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Número
+                </label>
+                <input
+                  type="text"
+                  name="numero"
+                  value={formData.numero}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Bairro
+                </label>
+                <input
+                  type="text"
+                  name="Bairro"
+                  value={formData.Bairro}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Cidade
+                </label>
+                <input
+                  type="text"
+                  name="Cidade"
+                  value={formData.Cidade}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Estado
+                </label>
+                <input
+                  type="text"
+                  name="Estado"
+                  value={formData.Estado}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Complemento
+                </label>
+                <input
+                  type="text"
+                  name="complemento"
+                  value={formData.complemento}
+                  onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                 />
               </div>

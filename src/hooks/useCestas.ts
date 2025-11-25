@@ -9,7 +9,6 @@ export interface CestaData {
   cesta_nome: string;
   data_montagem: string;
   status: 'em_uso' | 'entregue' | 'retornada';
-  limite_maximo: number;
   total_itens: number;
   valor_total: number;
   itens: Array<{
@@ -113,7 +112,6 @@ export const useCestas = () => {
               cesta_nome: cesta.nome,
               data_montagem: cesta.created_at,
               status: cesta.ativo ? 'entregue' as const : 'retornada' as const,
-              limite_maximo: 50, // Valor padrão, pode ser ajustado conforme necessário
               total_itens,
               valor_total,
               itens
@@ -123,7 +121,7 @@ export const useCestas = () => {
 
         // Filtrar cestas que falharam ao carregar
         return cestasComItens.filter(cesta => cesta !== null) as CestaData[];
-      } catch {
+      } catch (error: any) {
         throw error;
       }
     },

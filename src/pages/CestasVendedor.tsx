@@ -24,6 +24,7 @@ const CestasVendedor: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('todos');
   const [selectedCesta, setSelectedCesta] = useState<Cesta | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [cestaParaExcluir, setCestaParaExcluir] = useState<Cesta | null>(null);
 
   // Filtrar cestas
   useEffect(() => {
@@ -54,25 +55,21 @@ const CestasVendedor: React.FC = () => {
     navigate(`/produtos/cestas/editar/${cesta.id}`);
   };
 
-  const handleDeleteCesta = async (cesta: Cesta) => {
+  const handleDeleteCesta = async () => {
+    try {
+      // Implementar exclusão no Supabase quando disponível
+      await refetch();
+    } catch {
+      // Error handling sem expor dados sensíveis
+    }
+  };
+
+  const solicitarExclusaoCesta = (cesta: Cesta) => {
     if (cesta.status === 'em_uso') {
       alert('Não é possível excluir uma cesta em uso. Finalize ou retorne a cesta primeiro.');
       return;
     }
-    
-    const confirmMessage = `Tem certeza que deseja excluir a cesta "${cesta.cesta_nome}" do vendedor "${cesta.vendedor_nome}"?\n\n⚠️ ATENÇÃO: Se você apagar esta cesta do vendedor, não terá como recuperar as informações daquela cesta.`;
-    
-    if (confirm(confirmMessage)) {
-      try {
-        // Aqui você pode implementar a lógica de exclusão no Supabase
-        // Por enquanto, apenas recarregar os dados
-        await refetch();
-        alert('Cesta excluída com sucesso!');
-      } catch {
-        // Error handling without logging sensitive data
-        alert('Erro ao excluir cesta. Tente novamente.');
-      }
-    }
+    setCestaParaExcluir(cesta);
   };
 
   const getStatusColor = (status: string) => {
@@ -252,9 +249,6 @@ const CestasVendedor: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 dark:text-white">
-                        {cesta.total_itens} / {cesta.limite_maximo}
-                      </div>
                       <div className="text-xs text-gray-500 dark:text-gray-400">
                         {cesta.itens.length} produtos diferentes
                       </div>
@@ -286,7 +280,7 @@ const CestasVendedor: React.FC = () => {
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuItem 
-                            onClick={() => handleDeleteCesta(cesta)}
+                            onClick={() => solicitarExclusaoCesta(cesta)}
                             className="text-red-600 dark:text-red-400"
                             disabled={cesta.status === 'em_uso'}
                           >
@@ -503,6 +497,36 @@ const CestasVendedor: React.FC = () => {
                 className="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
               >
                 Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cestaParaExcluir && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg w-[90%] max-w-sm p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Confirmar exclusão</h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+              Tem certeza que deseja excluir a cesta "{cestaParaExcluir.cesta_nome}" do vendedor "{cestaParaExcluir.vendedor_nome}"?
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                onClick={() => setCestaParaExcluir(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                onClick={async () => {
+                  await handleDeleteCesta();
+                  setCestaParaExcluir(null);
+                }}
+              >
+                OK
               </button>
             </div>
           </div>

@@ -25,7 +25,7 @@ import {
   type Vendedor 
 } from '../hooks/useVendedores';
 import { useAuth } from '../contexts/AuthContext';
-import { EntregaComDetalhes } from '../services/entregaService';
+import { EntregaComDetalhes, EntregaService } from '../services/entregaService';
 import EntregaModal from '../components/ui/EntregaModal';
 
 const Entregas: React.FC = () => {
@@ -36,6 +36,8 @@ const Entregas: React.FC = () => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [selectedEntrega, setSelectedEntrega] = useState<EntregaComDetalhes | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [entregaParaExcluir, setEntregaParaExcluir] = useState<Entrega | null>(null);
+  const entregaService = useMemo(() => new EntregaService(user?.id || ''), [user?.id]);
 
   // React Query hooks para dados
   const { data: entregasData = [], isLoading, error } = useEntregas({ 
@@ -153,6 +155,33 @@ const Entregas: React.FC = () => {
     return new Date(dateString).toLocaleDateString('pt-BR');
   };
 
+  // Monta o endereço completo do cliente com tolerância a variações de capitalização
+  const formatClienteAddress = (entrega: Entrega) => {
+    const c: any = entrega.cliente || {};
+    const rua = c?.endereco ?? entrega.cliente_endereco ?? '';
+    const numero = c?.numero;
+    const bairro = c?.Bairro ?? c?.bairro;
+    const cidade = c?.Cidade ?? c?.cidade;
+    const estado = c?.Estado ?? c?.estado;
+    
+    const baseParts = [
+      rua || null,
+      numero || null,
+      bairro || null,
+    ].filter(Boolean) as string[];
+
+    let cidadeEstado = '';
+    if (cidade) {
+      cidadeEstado = `${cidade}${estado ? ` - ${estado}` : ''}`;
+    } else if (estado) {
+      cidadeEstado = estado;
+    }
+
+    const parts = [...baseParts, cidadeEstado || null].filter(Boolean) as string[];
+
+    return parts.length ? parts.join(', ') : 'N/A';
+  };
+
   const handleViewEntrega = (entrega: Entrega) => {
     
     // Converter Entrega para EntregaComDetalhes para compatibilidade com o modal
@@ -172,7 +201,7 @@ const Entregas: React.FC = () => {
       updated_at: entrega.updated_at,
       // Flat properties
       cliente_nome: entrega.cliente?.nome || entrega.cliente_nome || '',
-      cliente_sobrenome: null,
+      cliente_sobrenome: (entrega.cliente as any)?.sobrenome || null,
       cliente_cpf: entrega.cliente?.cpf || '',
       cliente_telefone: entrega.cliente?.telefone || '',
       cliente_email: null,
@@ -183,11 +212,17 @@ const Entregas: React.FC = () => {
       // Nested objects
       cliente: entrega.cliente ? {
         nome: entrega.cliente.nome,
-        sobrenome: null,
+        sobrenome: (entrega.cliente as any).sobrenome || null,
         cpf: entrega.cliente.cpf || '',
         telefone: entrega.cliente.telefone || '',
         email: null,
-        endereco: entrega.cliente_endereco || ''
+        endereco: entrega.cliente_endereco || '',
+        numero: entrega.cliente.numero || '',
+        Bairro: (entrega.cliente as any).Bairro || entrega.cliente.bairro || '',
+        Cidade: (entrega.cliente as any).Cidade || entrega.cliente.cidade || '',
+        Estado: (entrega.cliente as any).Estado || entrega.cliente.estado || '',
+        cep: entrega.cliente.cep || '',
+        complemento: entrega.cliente.complemento || ''
       } : undefined,
       vendedor: entrega.vendedor,
       produto: entrega.produto ? {
@@ -197,28 +232,33 @@ const Entregas: React.FC = () => {
       // Endereço de entrega - usando o endereço do cliente como padrão
       endereco_entrega: (entrega.cliente?.endereco || entrega.cliente_endereco) ? {
         rua: entrega.cliente?.endereco || entrega.cliente_endereco || '',
-        numero: '',
-        bairro: '',
+        numero: entrega.cliente?.numero || '',
+        bairro: (entrega.cliente as any)?.Bairro || entrega.cliente?.bairro || '',
         cep: entrega.cliente?.cep || '',
-        cidade: '',
-        estado: '',
-        complemento: ''
+        cidade: (entrega.cliente as any)?.Cidade || entrega.cliente?.cidade || '',
+        estado: (entrega.cliente as any)?.Estado || entrega.cliente?.estado || '',
+        complemento: entrega.cliente?.complemento || ''
       } : undefined
     };
     
     setSelectedEntrega(entregaComDetalhes);
     setIsModalOpen(true);
+
+    // Buscar detalhes completos (itens da cesta, itens adicionais e totais)
+    entregaService.getEntregaDetalhadaById(entrega.id)
+      .then((detalhes) => {
+        setSelectedEntrega(detalhes);
+      })
+      .catch(() => {
+        // Se falhar, mantemos os dados básicos já abertos no modal
+      });
   };
 
   const handleDeleteEntrega = async (entrega: Entrega) => {
-    const confirmMessage = `Tem certeza que deseja excluir a entrega para ${entrega.cliente?.nome}?\n\n⚠️ ATENÇÃO: Se você apagar esta entrega, não terá como recuperar as informações dessa entrega.`;
-    
-    if (window.confirm(confirmMessage)) {
-      try {
-        await deleteEntregaMutation.mutateAsync(entrega.id);
-      } catch {
-        // Error handling without logging sensitive data
-      }
+    try {
+      await deleteEntregaMutation.mutateAsync({ id: entrega.id });
+    } catch {
+      // Error handling without logging sensitive data
     }
   };
 
@@ -358,7 +398,7 @@ const Entregas: React.FC = () => {
                         </div>
                         <div className="ml-3">
                           <div className="text-sm font-medium text-gray-900 dark:text-white">
-                            {entrega.cliente?.nome || 'N/A'}
+                            {([entrega.cliente?.nome, (entrega.cliente as any)?.sobrenome].filter(Boolean) as string[]).join(' ') || 'N/A'}
                           </div>
                           <div className="text-sm text-gray-500 dark:text-gray-400">
                             ID: {entrega.id.slice(0, 8)}...
@@ -369,8 +409,8 @@ const Entregas: React.FC = () => {
                     <td className="px-6 py-4">
                       <div className="flex items-start">
                         <MapPin className="w-4 h-4 text-gray-400 mt-0.5 mr-2 flex-shrink-0" />
-                        <div className="text-sm text-gray-900 dark:text-white max-w-xs">
-                          {entrega.cliente?.endereco || entrega.cliente_endereco || 'N/A'}
+                    <div className="text-sm text-gray-900 dark:text-white max-w-xs">
+                          {formatClienteAddress(entrega)}
                         </div>
                       </div>
                     </td>
@@ -404,7 +444,7 @@ const Entregas: React.FC = () => {
                             Visualizar
                           </DropdownMenuItem>
                           <DropdownMenuItem 
-                            onClick={() => handleDeleteEntrega(entrega)}
+                            onClick={() => setEntregaParaExcluir(entrega)}
                             className="text-red-600 dark:text-red-400"
                             disabled={deleteEntregaMutation.isPending}
                           >
@@ -497,6 +537,37 @@ const Entregas: React.FC = () => {
         isOpen={isModalOpen}
         onClose={handleCloseModal}
       />
+
+      {entregaParaExcluir && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg w-[90%] max-w-sm p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Confirmar exclusão</h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Tem certeza que deseja excluir a entrega?</p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                onClick={() => setEntregaParaExcluir(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                disabled={deleteEntregaMutation.isPending}
+                onClick={async () => {
+                  if (entregaParaExcluir) {
+                    await handleDeleteEntrega(entregaParaExcluir);
+                  }
+                  setEntregaParaExcluir(null);
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

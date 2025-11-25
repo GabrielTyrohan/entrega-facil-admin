@@ -198,8 +198,8 @@ const Dashboard: React.FC = () => {
               <div className="flex-1 min-w-0">
                 <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1 truncate">{stat.title}</p>
                 <p className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white break-words">{stat.value}</p>
-                {/* Hide percentage for "Vendedores Ativos" and "Faltante" */}
-                {stat.title !== 'Vendedores Ativos' && stat.title !== 'Faltante' && (
+                {/* Variação: mostra porcentagem ou um espaçador invisível para manter altura consistente */}
+                {stat.title !== 'Vendedores Ativos' && stat.title !== 'Faltante' ? (
                   <div className="flex items-center mt-2">
                     <TrendingUp className={`w-3 h-3 sm:w-4 sm:h-4 mr-1 flex-shrink-0 ${
                       stat.changeType === 'increase' ? 'text-green-500' : 
@@ -213,6 +213,8 @@ const Dashboard: React.FC = () => {
                     </span>
                     <span className="text-xs text-gray-500 dark:text-gray-400 ml-1 hidden sm:inline">vs mês anterior</span>
                   </div>
+                ) : (
+                  <div className="mt-2 h-5 sm:h-6" aria-hidden />
                 )}
               </div>
               <div className={`w-10 h-10 sm:w-12 sm:h-12 ${stat.color} rounded-lg flex items-center justify-center flex-shrink-0 ml-3`}>

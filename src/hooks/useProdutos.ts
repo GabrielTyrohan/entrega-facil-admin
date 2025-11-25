@@ -7,7 +7,7 @@ export interface Produto {
   id: string;
   administrador_id: string;
   produto_nome: string;
-  produto_cod: number;
+  produto_cod: string;
   categoria: string;
   qtd_estoque: number;
   preco_unt: number;

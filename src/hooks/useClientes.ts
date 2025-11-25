@@ -18,8 +18,12 @@ export interface Cliente {
   telefone: string;
   email?: string;
   endereco: string;
-  cidade?: string;
+  numero?: string;
+  Bairro?: string;
+  Cidade?: string;
+  Estado?: string;
   cep?: string;
+  complemento?: string;
   nome_conjuge?: string;
   renda_mensal?: number;
   ponto_referencia?: string;

@@ -8,7 +8,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import ProdutoModal from '@/components/ui/ProdutoModal';
 import { 
-  useProdutos, 
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
+  useProdutos,
   useDeleteProduto,
   type Produto 
 } from '../hooks/useProdutos';
@@ -17,10 +26,8 @@ const categorias = [
   'Todas',
   'Bebidas',
   'Alimentos',
-  'Utilidades',
   'Limpeza',
   'Higiene',
-  'Eletrônicos',
   'Outros'
 ];
 
@@ -30,13 +37,16 @@ const Produtos: React.FC = () => {
   const [selectedProduto, setSelectedProduto] = useState<Produto | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'view' | 'edit' | 'create'>('view');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [produtoParaExcluir, setProdutoParaExcluir] = useState<Produto | null>(null);
 
   // Usar hooks de cache para buscar produtos
-  const { 
-    data: produtosData = [], 
-    isLoading, 
+  const {
+    data: produtosData = [],
+    isLoading,
     error,
-    refetch 
+    refetch
   } = useProdutos();
 
   // Buscar categorias disponíveis (removido - não utilizado)
@@ -47,6 +57,50 @@ const Produtos: React.FC = () => {
 
   // Tipar os dados corretamente
   const produtos = produtosData as Produto[];
+
+  // Função para calcular itens por página baseado no tamanho da tela
+  const calculateItemsPerPage = () => {
+    const height = window.innerHeight;
+    const width = window.innerWidth;
+
+    // Altura disponível para a tabela (descontando header, filtros, etc.)
+    const availableHeight = height - 400; // ~400px para header, filtros, paginação
+    const rowHeight = 73; // altura aproximada de cada linha da tabela
+
+    let baseItemsPerPage = Math.floor(availableHeight / rowHeight);
+
+    // Ajustar baseado na largura da tela para melhor experiência
+    if (width >= 1920) { // 4K ou maior
+      baseItemsPerPage = Math.max(baseItemsPerPage, 15);
+    } else if (width >= 1440) { // Desktop grande
+      baseItemsPerPage = Math.max(baseItemsPerPage, 12);
+    } else if (width >= 1024) { // Desktop padrão
+      baseItemsPerPage = Math.max(baseItemsPerPage, 10);
+    } else { // Tablet/Mobile
+      baseItemsPerPage = Math.max(baseItemsPerPage, 8);
+    }
+
+    // Garantir um mínimo e máximo razoável
+    return Math.min(Math.max(baseItemsPerPage, 5), 25);
+  };
+
+  // Atualizar itens por página quando a tela redimensionar
+  React.useEffect(() => {
+    const handleResize = () => {
+      const newItemsPerPage = calculateItemsPerPage();
+      setItemsPerPage(newItemsPerPage);
+
+      // Ajustar página atual se necessário
+      const maxPage = Math.ceil(produtos.length / newItemsPerPage);
+      if (currentPage > maxPage && maxPage > 0) {
+        setCurrentPage(maxPage);
+      }
+    };
+
+    handleResize(); // Calcular inicial
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [produtos.length, currentPage]);
 
   // Filtrar produtos usando useMemo para otimização
   const filteredProdutos = useMemo(() => {
@@ -68,6 +122,43 @@ const Produtos: React.FC = () => {
     return filtered;
   }, [produtos, searchTerm, selectedCategory]);
 
+  // Lógica de paginação
+  const totalPages = Math.ceil(filteredProdutos.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentProdutos = filteredProdutos.slice(startIndex, endIndex);
+
+  // Reset página quando filtro mudar
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedCategory]);
+
+  // Função para gerar números das páginas
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisiblePages = window.innerWidth >= 768 ? 7 : 5; // Mais páginas em telas maiores
+
+    if (totalPages <= maxVisiblePages) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      const halfVisible = Math.floor(maxVisiblePages / 2);
+      let startPage = Math.max(1, currentPage - halfVisible);
+      const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+      if (endPage - startPage < maxVisiblePages - 1) {
+        startPage = Math.max(1, endPage - maxVisiblePages + 1);
+      }
+
+      for (let i = startPage; i <= endPage; i++) {
+        pages.push(i);
+      }
+    }
+
+    return pages;
+  };
+
   const handleViewProduto = (produto: Produto) => {
     setSelectedProduto(produto);
     setModalMode('view');
@@ -81,16 +172,10 @@ const Produtos: React.FC = () => {
   };
 
   const handleDeleteProduto = async (produto: Produto) => {
-    const confirmMessage = `Tem certeza que deseja excluir o produto "${produto.produto_nome}"?\n\n⚠️ ATENÇÃO: Se você apagar este produto, não terá como recuperar as informações daquele produto.`;
-    
-    if (confirm(confirmMessage)) {
-      try {
-        await deleteProdutoMutation.mutateAsync(produto.id);
-        alert('Produto excluído com sucesso!');
-      } catch {
-        // Error handling without logging sensitive data
-        alert('Erro ao excluir produto. Tente novamente.');
-      }
+    try {
+      await deleteProdutoMutation.mutateAsync(produto.id);
+    } catch {
+      // Error handling without logging sensitive data
     }
   };
 
@@ -231,7 +316,17 @@ const Produtos: React.FC = () => {
               {selectedCategory === 'Todas' ? 'Todos os Produtos' : selectedCategory} ({filteredProdutos.length})
             </h2>
           </div>
-          
+
+          {/* Informações de paginação */}
+          <div className="px-4 sm:px-6 py-2 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+            <span>
+              Mostrando {startIndex + 1} a {Math.min(endIndex, filteredProdutos.length)} de {filteredProdutos.length} produtos
+            </span>
+            <span>
+              {itemsPerPage} por página
+            </span>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full min-w-[800px]">
               <thead className="bg-gray-50 dark:bg-gray-700">
@@ -260,7 +355,7 @@ const Produtos: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {filteredProdutos.map((produto) => (
+                {currentProdutos.map((produto) => (
                   <tr key={produto.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                     <td className="px-3 sm:px-6 py-3 sm:py-4">
                       <div className="min-w-0 flex-1">
@@ -329,7 +424,7 @@ const Produtos: React.FC = () => {
                             Editar
                           </DropdownMenuItem>
                           <DropdownMenuItem 
-                            onClick={() => handleDeleteProduto(produto)}
+                            onClick={() => setProdutoParaExcluir(produto)}
                             className="text-red-600 dark:text-red-400"
                           >
                             <Trash2 className="w-4 h-4 mr-2" />
@@ -378,6 +473,105 @@ const Produtos: React.FC = () => {
         mode={modalMode}
         onSave={handleSaveProduto}
       />
+
+      {/* Paginação */}
+      {totalPages > 1 && (
+        <div className="flex justify-center px-4">
+          <Pagination>
+            <PaginationContent className="flex-wrap gap-1">
+              <PaginationItem>
+                <PaginationPrevious
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (currentPage > 1) setCurrentPage(currentPage - 1);
+                  }}
+                  className={`${currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} touch-manipulation`}
+                  size="default"
+                />
+              </PaginationItem>
+
+              {getPageNumbers().map((pageNum, index, array) => {
+                const showEllipsisBefore = index === 0 && pageNum > 1;
+                const showEllipsisAfter = index === array.length - 1 && pageNum < totalPages;
+
+                return (
+                  <React.Fragment key={pageNum}>
+                    {showEllipsisBefore && (
+                      <PaginationItem>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    )}
+
+                    <PaginationItem>
+                      <PaginationLink
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setCurrentPage(pageNum);
+                        }}
+                        isActive={currentPage === pageNum}
+                        className="cursor-pointer touch-manipulation"
+                        size="default"
+                      >
+                        {pageNum}
+                      </PaginationLink>
+                    </PaginationItem>
+
+                    {showEllipsisAfter && (
+                      <PaginationItem>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+
+              <PaginationItem>
+                <PaginationNext
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+                  }}
+                  className={`${currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'} touch-manipulation`}
+                  size="default"
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        </div>
+      )}
+
+      {produtoParaExcluir && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg w-[90%] max-w-sm p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Confirmar exclusão</h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+              Tem certeza que deseja excluir o produto {produtoParaExcluir.produto_nome}?
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                onClick={() => setProdutoParaExcluir(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                onClick={async () => {
+                  await handleDeleteProduto(produtoParaExcluir);
+                  setProdutoParaExcluir(null);
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

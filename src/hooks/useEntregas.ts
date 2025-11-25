@@ -23,10 +23,19 @@ export interface Entrega {
   cliente?: {
     id: string;
     nome: string;
+    sobrenome?: string;
     telefone?: string;
     endereco?: string;
+    numero?: string;
+    Bairro?: string;
+    Cidade?: string;
+    Estado?: string;
+    bairro?: string;
+    cidade?: string;
+    estado?: string;
     cpf?: string;
     cep?: string;
+    complemento?: string;
   };
   vendedor?: {
     id: string;
@@ -63,7 +72,7 @@ export const useEntregas = (options?: {
     .from('entregas')
     .select(`
       *,
-      cliente:clientes(id, nome, telefone, endereco, cpf, cep),
+      cliente:clientes(id, nome, sobrenome, telefone, endereco, numero, "Bairro", "Cidade", "Estado", cep, complemento, cpf),
       vendedor:vendedores!inner(id, nome, administrador_id),
       produto:produtos(id, nome)
     `)
@@ -102,7 +111,7 @@ export const useEntrega = (id: string, options?: { enabled?: boolean }) => {
     .from('entregas')
     .select(`
       *,
-      cliente:clientes(id, nome, telefone, endereco, cpf, cep),
+      cliente:clientes(id, nome, telefone, endereco, numero, "Bairro", "Cidade", "Estado", cep, complemento, cpf),
       vendedor:vendedores(id, nome),
       itens:entrega_itens(
         id,
@@ -132,7 +141,7 @@ export const useEntregasPorVendedor = (
     .from('entregas')
     .select(`
       *,
-      cliente:clientes(id, nome, telefone)
+      cliente:clientes(id, nome, telefone, endereco, numero, "Bairro", "Cidade", "Estado", cep, complemento)
     `)
     .eq('vendedor_id', vendedor_id)
     .order('data_entrega', { ascending: false });
@@ -263,7 +272,7 @@ export const useEntregasPaginadas = (
       vendedor_id,
       created_at,
       updated_at,
-      cliente:clientes(id, nome, telefone),
+      cliente:clientes(id, nome, telefone, endereco, numero, "Bairro", "Cidade", "Estado", cep, complemento),
       vendedor:vendedores!inner(id, nome, administrador_id)
     `, { count: 'exact' })
     .order('data_entrega', { ascending: false })
@@ -317,7 +326,7 @@ export const usePrefetchEntrega = () => {
           .from('entregas')
           .select(`
             *,
-            cliente:clientes(id, nome, telefone, endereco),
+            cliente:clientes(id, nome, telefone, endereco, numero, "Bairro", "Cidade", "Estado", cep, complemento),
             vendedor:vendedores(id, nome),
             itens:entrega_itens(
               id,

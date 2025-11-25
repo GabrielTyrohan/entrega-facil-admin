@@ -11,8 +11,15 @@ import {
   FileText,
   Printer,
   CreditCard,
-  Info
+  Info,
+  MoreHorizontal
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuth } from '../contexts/AuthContext';
 import { usePagamentos } from '../hooks/usePagamentos';
 import { useEntregas } from '../hooks/useEntregas';
@@ -312,6 +319,159 @@ const Relatorios: React.FC = () => {
         };
         html2pdf.default().set(opt).from(element).save();
       });
+    }
+  };
+
+  // Utilidade: montar HTML fragmentado do relatório do vendedor com estilo que força texto preto
+  const buildVendorReportHtml = (vendedor: any) => {
+    try {
+      const entregasVendedor = Array.isArray(dadosPeriodo.entregas)
+        ? dadosPeriodo.entregas.filter((e: any) => e?.vendedor_id === vendedor.id)
+        : [];
+
+      const pagamentosVendedor = Array.isArray(dadosPeriodo.pagamentos)
+        ? dadosPeriodo.pagamentos.filter((p: any) => entregasVendedor.some((e: any) => e?.id === p?.entrega_id))
+        : [];
+
+      const vendedorNome = String(vendedor?.nome || 'Vendedor');
+      const adminEmail = String(user?.email || 'Administrador');
+      const hoje = new Date().toLocaleDateString('pt-BR');
+
+      const entregasRows = entregasVendedor.map((e: any) => `
+          <tr>
+            <td>${new Date(String(e?.data_entrega || '')).toLocaleDateString('pt-BR')}</td>
+            <td>${String((e?.cliente as any)?.nome || e?.cliente_nome || 'N/A')}</td>
+            <td>${formatCurrency(Number(e?.valor) || 0)}</td>
+            <td>${e?.pago ? 'Pago' : 'Pendente'}</td>
+          </tr>
+        `).join('');
+
+      const pagamentosRows = pagamentosVendedor.map((p: any) => {
+        // Tentar obter o nome do cliente diretamente do pagamento -> entrega -> cliente
+        const nomeClienteDireto = String(((p?.entregas as any)?.clientes?.nome) || '');
+        // Fallback: buscar a entrega correspondente deste pagamento dentro das entregas do vendedor e pegar o nome do cliente
+        const entregaMatch = entregasVendedor.find((e: any) => e?.id === p?.entrega_id);
+        const nomeClienteEntrega = String(
+          ((entregaMatch?.cliente as any)?.nome) || entregaMatch?.cliente_nome || ''
+        );
+        const nomeCliente = nomeClienteDireto || nomeClienteEntrega || 'N/A';
+
+        return `
+          <tr>
+            <td>${new Date(String(p?.data_pagamento || '')).toLocaleDateString('pt-BR')}</td>
+            <td>${nomeCliente}</td>
+            <td>${formatCurrency(Number(p?.valor) || 0)}</td>
+          </tr>
+        `;
+      }).join('');
+
+      return `
+        <style>
+          .vendor-pdf, .vendor-pdf * { color: #000 !important; background: #fff !important; }
+          .vendor-pdf { font-family: Arial, sans-serif; margin: 24px; }
+          .vendor-pdf h1, .vendor-pdf h2 { margin: 0 0 12px 0; }
+          .vendor-pdf .header { border-bottom: 2px solid #000; padding-bottom: 12px; margin-bottom: 16px; }
+          .vendor-pdf .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+          .vendor-pdf .card { border: 1px solid #000; padding: 10px; }
+          .vendor-pdf table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 12px; }
+          .vendor-pdf th, .vendor-pdf td { border: 1px solid #000; padding: 6px; text-align: left; }
+          .vendor-pdf th { background: #f0f0f0; }
+          @media print { * { -webkit-print-color-adjust: exact; } }
+        </style>
+        <div class="vendor-pdf">
+          <div class="header">
+            <h1>Relatório do Vendedor</h1>
+            <div>Vendedor: <strong>${vendedorNome}</strong></div>
+            <div>Administrador: ${adminEmail}</div>
+            <div>Período: Últimos ${selectedPeriod} dias</div>
+            <div>Gerado em: ${hoje}</div>
+          </div>
+
+          <h2>Métricas</h2>
+          <div class="metrics">
+            <div class="card">Total de Entregas: <strong>${Number(vendedor.totalEntregas) || 0}</strong></div>
+            <div class="card">Total de Vendas: <strong>${formatCurrency(Number(vendedor.totalVendas) || 0)}</strong></div>
+            <div class="card">Total de Pagamentos: <strong>${formatCurrency(Number(vendedor.totalPagamentos) || 0)}</strong></div>
+            <div class="card">Entregas Pagas: <strong>${Number(vendedor.entregasPagas) || 0}</strong></div>
+            <div class="card">Taxa de Conversão: <strong>${String(vendedor.taxaConversao || '0')}%</strong></div>
+          </div>
+
+          <h2>Entregas</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Cliente</th>
+                <th>Valor</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${entregasRows || '<tr><td colspan="4">Nenhuma entrega no período</td></tr>'}
+            </tbody>
+          </table>
+
+          <h2>Pagamentos</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Cliente</th>
+                <th>Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${pagamentosRows || '<tr><td colspan="3">Nenhum pagamento no período</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      `;
+    } catch (error) {
+      console.error('Erro ao montar relatório do vendedor:', error);
+      return '<div class="vendor-pdf">Erro ao gerar relatório do vendedor.</div>';
+    }
+  };
+
+  const handlePrintVendor = (vendedor: any) => {
+    const content = buildVendorReportHtml(vendedor);
+    const htmlDoc = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8" />
+      <title>Impressão - Relatório do Vendedor</title>
+      <style>html, body { background: #fff; } .vendor-pdf, .vendor-pdf * { color: #000 !important; }</style>
+    </head><body>${content}</body></html>`;
+    const printWindow = window.open('', 'PRINT', 'height=800,width=1000');
+    if (!printWindow) {
+      console.warn('Não foi possível abrir a janela de impressão.');
+      return;
+    }
+    printWindow.document.write(htmlDoc);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+    printWindow.close();
+  };
+
+  const exportVendorPDF = async (vendedor: any) => {
+    const container = document.createElement('div');
+    container.className = 'print-area';
+    // Força cores neutras para evitar texto branco em fundo branco
+    const content = buildVendorReportHtml(vendedor);
+    container.innerHTML = `<style>.print-area, .print-area * { color: #000 !important; background: #fff !important; }</style>${content}`;
+    document.body.appendChild(container);
+    try {
+      const html2pdf = await import('html2pdf.js');
+      const safeName = String(vendedor?.nome || 'vendedor').replace(/\s+/g, '-');
+      const opt = {
+        margin: 1,
+        filename: `relatorio-vendedor-${safeName}-${new Date().toISOString().split('T')[0]}.pdf`,
+        image: { type: 'jpeg' as const, quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' as const }
+      };
+      await html2pdf.default().set(opt).from(container).save();
+    } catch (error) {
+      console.error('Erro ao exportar PDF do vendedor:', error);
+    } finally {
+      container.remove();
     }
   };
 
@@ -640,6 +800,9 @@ const Relatorios: React.FC = () => {
                     <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Taxa Conversão
                     </th>
+                    <th className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider no-print">
+                      Ações
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -662,6 +825,26 @@ const Relatorios: React.FC = () => {
                       </td>
                       <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm text-gray-900 dark:text-white">
                         {vendedor.taxaConversao}%
+                      </td>
+                      <td className="px-3 sm:px-6 py-4 text-right no-print">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600"
+                              aria-label="Ações"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => exportVendorPDF(vendedor)}>
+                              Baixar PDF
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handlePrintVendor(vendedor)}>
+                              Imprimir
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </td>
                     </tr>
                   ))}

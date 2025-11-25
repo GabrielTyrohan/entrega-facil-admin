@@ -72,14 +72,67 @@ const EntregaModal: React.FC<EntregaModalProps> = ({ entrega, isOpen, onClose })
     return cleaned + ' (incompleto)';
   };
 
-  // Função para obter cor do status
-  const getStatusColor = () => {
-    return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400';
+  // Normaliza o status (lowercase e remove acentos) para comparação
+  const normalizeStatus = (status?: string) => {
+    if (!status) return '';
+    return status
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
   };
 
-  // Função para obter label do status
+  // Função para obter cor do status da entrega
+  const getStatusColor = () => {
+    const key = normalizeStatus(entrega.status_entrega);
+    switch (key) {
+      case 'entregue':
+        return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400';
+      case 'devendo':
+        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400';
+      case 'devolucao':
+        return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-700/30 dark:text-gray-300';
+    }
+  };
+
+  // Função para obter label do status da entrega
   const getStatusLabel = () => {
-    return 'Entregue';
+    const key = normalizeStatus(entrega.status_entrega);
+    switch (key) {
+      case 'entregue':
+        return 'Entregue';
+      case 'devendo':
+        return 'Devendo';
+      case 'devolucao':
+        return 'Devolução';
+      default:
+        return entrega.status_entrega ? entrega.status_entrega : 'Sem Status';
+    }
+  };
+
+  // Formata o endereço igual à lista em Entregas.tsx
+  const formatListAddress = () => {
+    const c: any = entrega.cliente || {};
+    const e: EntregaComDetalhes['endereco_entrega'] | undefined = entrega.endereco_entrega;
+    const rua = c?.endereco ?? entrega.cliente_endereco ?? e?.rua ?? '';
+    const numero = c?.numero ?? e?.numero;
+    const bairro = c?.Bairro ?? c?.bairro ?? e?.bairro;
+    const cidade = c?.Cidade ?? c?.cidade ?? e?.cidade;
+    const estado = c?.Estado ?? c?.estado ?? e?.estado;
+
+    const baseParts = [rua || null, numero || null, bairro || null].filter(Boolean) as string[];
+
+    let cidadeEstado = '';
+    if (cidade) {
+      cidadeEstado = `${cidade}${estado ? ` - ${estado}` : ''}`;
+    } else if (estado) {
+      cidadeEstado = estado;
+    }
+
+    const parts = [...baseParts, cidadeEstado || null].filter(Boolean) as string[];
+
+    return parts.length ? parts.join(', ') : 'N/A';
   };
 
   // Função para lidar com clique no backdrop
@@ -142,7 +195,7 @@ const EntregaModal: React.FC<EntregaModalProps> = ({ entrega, isOpen, onClose })
                   <div className="min-w-0 flex-1">
                     <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Nome</p>
                     <p className="text-sm sm:text-base text-gray-900 dark:text-white font-medium break-words">
-                      {entrega.cliente?.nome || 'N/A'}
+                      {([entrega.cliente?.nome ?? entrega.cliente_nome, entrega.cliente?.sobrenome ?? entrega.cliente_sobrenome ?? undefined].filter(Boolean).join(' ')) || 'N/A'}
                     </p>
                   </div>
                 </div>
@@ -181,6 +234,19 @@ const EntregaModal: React.FC<EntregaModalProps> = ({ entrega, isOpen, onClose })
                     <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">CPF</p>
                     <p className="text-sm sm:text-base text-gray-900 dark:text-white font-medium">
                       {formatCPF(entrega.cliente?.cpf)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Endereço (integrado nas informações do cliente) */}
+                <div className="flex items-start space-x-3">
+                  <div className="p-2 bg-red-100 dark:bg-red-900/20 rounded-lg flex-shrink-0">
+                    <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 dark:text-red-400" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Endereço</p>
+                    <p className="text-sm sm:text-base text-gray-900 dark:text-white font-medium break-words">
+                      {formatListAddress()}
                     </p>
                   </div>
                 </div>
@@ -248,25 +314,99 @@ const EntregaModal: React.FC<EntregaModalProps> = ({ entrega, isOpen, onClose })
             </div>
           </div>
 
-          {/* Endereço de Entrega */}
+          {/* Endereço agora integrado na seção de Informações do Cliente */}
+
+          {/* Itens da Cesta */}
+          {Array.isArray(entrega.cesta_itens) && entrega.cesta_itens.length > 0 && (
+            <div className="mt-6 lg:mt-8">
+              <h4 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                Itens da Cesta
+              </h4>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Produto</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Código</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Categoria</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Qtd</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Preço</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    {entrega.cesta_itens.map((item, idx) => (
+                      <tr key={`cesta-item-${idx}`}>
+                        <td className="px-3 py-2 text-gray-900 dark:text-white break-words">{item.produto.produto_nome}</td>
+                        <td className="px-3 py-2 text-gray-900 dark:text-white break-words">{item.produto.produto_cod}</td>
+                        <td className="px-3 py-2 text-gray-900 dark:text-white break-words">{item.produto.categoria}</td>
+                        <td className="px-3 py-2 text-right text-gray-900 dark:text-white">{item.quantidade}</td>
+                        <td className="px-3 py-2 text-right text-gray-900 dark:text-white">{formatCurrency(item.produto.preco_unt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Itens Adicionais da Entrega */}
+          {Array.isArray(entrega.itens_adicionais) && entrega.itens_adicionais.length > 0 && (
+            <div className="mt-6 lg:mt-8">
+              <h4 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                Itens Adicionais (alterações do vendedor)
+              </h4>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Produto</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Código</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Categoria</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Qtd</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Unitário</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    {entrega.itens_adicionais.map((item) => (
+                      <tr key={item.id}>
+                        <td className="px-3 py-2 text-gray-900 dark:text-white break-words">{item.produto.produto_nome}</td>
+                        <td className="px-3 py-2 text-gray-900 dark:text-white break-words">{item.produto.produto_cod}</td>
+                        <td className="px-3 py-2 text-gray-900 dark:text-white break-words">{item.produto.categoria}</td>
+                        <td className="px-3 py-2 text-right text-gray-900 dark:text-white">{item.quantidade}</td>
+                        <td className="px-3 py-2 text-right text-gray-900 dark:text-white">{formatCurrency(item.preco_unitario)}</td>
+                        <td className="px-3 py-2 text-right text-gray-900 dark:text-white">{formatCurrency(item.subtotal)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Totais */}
           <div className="mt-6 lg:mt-8">
-            <h4 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-3 flex items-center">
-              <MapPin className="w-4 h-4 sm:w-5 sm:h-5 mr-2 flex-shrink-0" />
-              <span className="truncate">Endereço de Entrega</span>
+            <h4 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-3">
+              Totais da Entrega
             </h4>
-            
             <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 sm:p-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                 <div>
-                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Endereço</p>
-                  <p className="text-sm sm:text-base text-gray-900 dark:text-white font-medium break-words">
-                    {entrega.endereco_entrega?.rua || 'N/A'}
+                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Valor da Cesta</p>
+                  <p className="text-sm sm:text-base text-gray-900 dark:text-white font-medium">
+                    {formatCurrency(entrega.valor_cesta ?? entrega.valor)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">CEP</p>
+                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Itens Adicionais</p>
                   <p className="text-sm sm:text-base text-gray-900 dark:text-white font-medium">
-                    {entrega.endereco_entrega?.cep || 'N/A'}
+                    {formatCurrency(entrega.valor_adicionais ?? 0)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Valor Total</p>
+                  <p className="text-sm sm:text-base text-gray-900 dark:text-white font-medium">
+                    {formatCurrency(entrega.valor_total ?? (entrega.valor + (entrega.valor_adicionais ?? 0)))}
                   </p>
                 </div>
               </div>

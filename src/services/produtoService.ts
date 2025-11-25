@@ -4,7 +4,7 @@ export interface ProdutoCadastrado {
   id: string;
   administrador_id: string;
   produto_nome: string;
-  produto_cod: number;
+  produto_cod: string;
   categoria: string;
   qtd_estoque: number;
   preco_unt: number;
@@ -14,7 +14,7 @@ export interface ProdutoCadastrado {
 
 export interface CreateProdutoData {
   produto_nome: string;
-  produto_cod: number;
+  produto_cod: string;
   categoria: string;
   qtd_estoque: number;
   preco_unt: number;
@@ -29,7 +29,7 @@ export class ProdutoService {
   }
 
   // Métodos estáticos para uso sem instância
-  static async checkExistingCode(codigo: number, adminId: string, excludeId?: string): Promise<boolean> {
+  static async checkExistingCode(codigo: string, adminId: string, excludeId?: string): Promise<boolean> {
     try {
       let query = supabase
         .from('produtos_cadastrado')
@@ -191,7 +191,7 @@ export class ProdutoService {
   }
 
   // Verificar se código do produto já existe
-  async verificarCodigoExistente(codigo: number, excludeId?: string): Promise<boolean> {
+  async verificarCodigoExistente(codigo: string, excludeId?: string): Promise<boolean> {
     try {
       let query = supabase
         .from('produtos_cadastrado')

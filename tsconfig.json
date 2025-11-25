@@ -13,6 +13,5 @@
     "paths": {
       "@/*": ["./src/*"]
     }
-  },
-  "extends": "expo/tsconfig.base"
+  }
 }

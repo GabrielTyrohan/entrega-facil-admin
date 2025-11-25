@@ -38,6 +38,7 @@ const Clientes: React.FC = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [clienteToEdit, setClienteToEdit] = useState<Cliente | null>(null);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [clienteParaExcluir, setClienteParaExcluir] = useState<Cliente | null>(null);
 
   // Usar hooks de cache para buscar dados
   const { 
@@ -207,16 +208,10 @@ const Clientes: React.FC = () => {
   };
 
   const handleDeleteCliente = async (cliente: Cliente) => {
-    const confirmMessage = `Tem certeza que deseja excluir o cliente ${cliente.nome}?\n\n⚠️ ATENÇÃO: Se você apagar este cliente, não terá como recuperar as informações daquele cliente.`;
-    
-    if (window.confirm(confirmMessage)) {
-      try {
-        await deleteClienteMutation.mutateAsync(cliente.id);
-        alert('Cliente excluído com sucesso!');
-      } catch {
-        // Error handling without logging sensitive data
-        alert('Erro ao excluir cliente. Tente novamente.');
-      }
+    try {
+      await deleteClienteMutation.mutateAsync(cliente.id);
+    } catch {
+      // Error handling without logging sensitive data
     }
   };
 
@@ -383,7 +378,7 @@ const Clientes: React.FC = () => {
                     </td>
                     <td className="px-3 sm:px-6 py-3 sm:py-4 hidden lg:table-cell">
                       <div className="text-sm text-gray-900 dark:text-white max-w-xs truncate">
-                        {cliente.endereco || 'N/A'}
+                        {`${cliente.endereco || ''}${cliente.numero ? `, ${cliente.numero}` : ''}${cliente.Bairro ? `, ${cliente.Bairro}` : ''}${cliente.Cidade ? `, ${cliente.Cidade}` : ''}${cliente.Estado ? ` - ${cliente.Estado}` : ''}${cliente.cep ? `, CEP: ${cliente.cep}` : ''}${cliente.complemento ? `, ${cliente.complemento}` : ''}`.replace(/^, /g, '') || 'N/A'}
                       </div>
                     </td>
                     <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden md:table-cell">
@@ -411,7 +406,7 @@ const Clientes: React.FC = () => {
                             Editar
                           </DropdownMenuItem>
                           <DropdownMenuItem 
-                            onClick={() => handleDeleteCliente(cliente)}
+                            onClick={() => setClienteParaExcluir(cliente)}
                             className="text-red-600 dark:text-red-400"
                           >
                             <Trash2 className="w-4 h-4 mr-2" />
@@ -516,6 +511,36 @@ const Clientes: React.FC = () => {
           setClienteToEdit(null);
         }}
       />
+
+      {clienteParaExcluir && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg w-[90%] max-w-sm p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Confirmar exclusão</h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+              Tem certeza que deseja excluir o cliente {clienteParaExcluir.nome}?
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                onClick={() => setClienteParaExcluir(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                onClick={async () => {
+                  await handleDeleteCliente(clienteParaExcluir);
+                  setClienteParaExcluir(null);
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

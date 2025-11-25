@@ -33,6 +33,7 @@ const Vendedores: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [vendedorParaExcluir, setVendedorParaExcluir] = useState<Vendedor | null>(null);
 
   // React Query hooks para dados
   const { data: vendedores = [], isLoading, error } = useVendedores({
@@ -101,14 +102,11 @@ const Vendedores: React.FC = () => {
   };
 
   const handleDeleteVendedor = async (vendedor: Vendedor) => {
-    const confirmMessage = `Tem certeza que deseja excluir o vendedor ${vendedor.nome}?\n\n⚠️ ATENÇÃO: Se você apagar este vendedor, não terá como recuperar as informações daquele vendedor.`;
-    
-    if (window.confirm(confirmMessage)) {
-      try {
-        await deleteVendedorMutation.mutateAsync(vendedor.id);
-      } catch {
-        // Error handling without logging sensitive data
-      }
+    try {
+      // A API de delete espera um objeto com a chave primária
+      await deleteVendedorMutation.mutateAsync({ id: vendedor.id });
+    } catch {
+      // Error handling without logging sensitive data
     }
   };
 
@@ -404,7 +402,7 @@ const Vendedores: React.FC = () => {
                             Editar
                           </DropdownMenuItem>
                           <DropdownMenuItem 
-                            onClick={() => handleDeleteVendedor(vendedor)}
+                            onClick={() => setVendedorParaExcluir(vendedor)}
                             className="text-red-600 dark:text-red-400"
                             disabled={deleteVendedorMutation.isPending}
                           >
@@ -497,6 +495,37 @@ const Vendedores: React.FC = () => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
       />
+
+      {vendedorParaExcluir && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg w-[90%] max-w-sm p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Confirmar exclusão</h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+              Tem certeza que deseja excluir o vendedor {vendedorParaExcluir.nome}?
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                onClick={() => setVendedorParaExcluir(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                disabled={deleteVendedorMutation.isPending}
+                onClick={async () => {
+                  await handleDeleteVendedor(vendedorParaExcluir);
+                  setVendedorParaExcluir(null);
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

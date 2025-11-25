@@ -84,6 +84,7 @@ export interface EntregaComDetalhes {
   valor: number;
   data_entrega: string;
   pago: boolean;
+  status_entrega?: string;
   status: string; // Added for status display
   status_pagamento: string;
   mes_cobranca: string | null;
@@ -103,6 +104,34 @@ export interface EntregaComDetalhes {
   // Dados do produto (flat properties for backward compatibility)
   produto_nome: string;
   produto_preco: number;
+  // Itens detalhados da cesta e itens adicionais da entrega
+  cesta_itens?: Array<{
+    produto: {
+      id: string;
+      produto_nome: string;
+      produto_cod: string;
+      categoria: string;
+      preco_unt: number;
+    };
+    quantidade: number;
+  }>;
+  itens_adicionais?: Array<{
+    id: string;
+    quantidade: number;
+    preco_unitario: number;
+    subtotal: number;
+    produto: {
+      id: string;
+      produto_nome: string;
+      produto_cod: string;
+      categoria: string;
+      preco_unt: number;
+    };
+  }>;
+  // Totais calculados
+  valor_cesta?: number;
+  valor_adicionais?: number;
+  valor_total?: number;
   // Nested objects for component compatibility
   cliente?: {
     nome: string;
@@ -111,6 +140,12 @@ export interface EntregaComDetalhes {
     telefone: string;
     email?: string | null;
     endereco: string;
+    numero?: string;
+    Bairro?: string;
+    Cidade?: string;
+    Estado?: string;
+    cep?: string;
+    complemento?: string | null;
   };
   vendedor?: {
     nome: string;
@@ -156,6 +191,7 @@ export class EntregaService {
           valor,
           data_entrega,
           pago,
+          status_entrega,
           status_pagamento,
           mes_cobranca,
           dataRetorno,
@@ -195,6 +231,7 @@ export class EntregaService {
         valor: Number(entrega.valor),
         data_entrega: entrega.data_entrega,
         pago: Boolean(entrega.pago),
+        status_entrega: entrega.status_entrega || null,
         status: entrega.status_pagamento, // Map status_pagamento to status
         status_pagamento: entrega.status_pagamento,
         mes_cobranca: entrega.mes_cobranca,
@@ -272,6 +309,7 @@ export class EntregaService {
           valor,
           data_entrega,
           pago,
+          status_entrega,
           status_pagamento,
           mes_cobranca,
           dataRetorno,
@@ -310,6 +348,7 @@ export class EntregaService {
         valor: Number(entrega.valor),
         data_entrega: entrega.data_entrega,
         pago: Boolean(entrega.pago),
+        status_entrega: entrega.status_entrega || null,
         status: entrega.status_pagamento, // Map status_pagamento to status
         status_pagamento: entrega.status_pagamento,
         mes_cobranca: entrega.mes_cobranca,
@@ -380,6 +419,7 @@ export class EntregaService {
         valor,
         data_entrega,
         pago,
+        status_entrega,
         status_pagamento,
         mes_cobranca,
         dataRetorno,
@@ -438,6 +478,7 @@ export class EntregaService {
       valor: Number(entrega.valor),
       data_entrega: entrega.data_entrega,
       pago: Boolean(entrega.pago),
+      status_entrega: entrega.status_entrega || null,
       status: entrega.status_pagamento || 'pendente', // Add status property
       status_pagamento: entrega.status_pagamento,
       mes_cobranca: entrega.mes_cobranca,
@@ -493,6 +534,187 @@ export class EntregaService {
     }
 
     return entregas;
+  }
+
+  // Busca detalhada de uma entrega com itens da cesta, itens adicionais e totais
+  async getEntregaDetalhadaById(entregaId: string): Promise<EntregaComDetalhes> {
+    // Buscar a entrega com joins básicos
+    const { data: entrega, error: entregaError } = await supabase
+      .from('entregas')
+      .select(`
+        id,
+        vendedor_id,
+        cliente_id,
+        produto_id,
+        valor,
+        data_entrega,
+        pago,
+        status_entrega,
+        status_pagamento,
+        mes_cobranca,
+        dataRetorno,
+        created_at,
+        updated_at,
+        clientes!entregas_cliente_id_fkey (
+          nome,
+          sobrenome,
+          cpf,
+          telefone,
+          email,
+          endereco,
+          cep,
+          numero,
+          "Bairro",
+          "Cidade",
+          "Estado",
+          complemento
+        ),
+        vendedores!entregas_vendedor_id_fkey (
+          nome
+        ),
+        produtos!entregas_produto_id_fkey (
+          id,
+          nome,
+          preco
+        )
+      `)
+      .eq('id', entregaId)
+      .single();
+
+    if (entregaError || !entrega) {
+      throw new Error('Entrega não encontrada');
+    }
+
+    // Itens da cesta (produtos_na_cesta) vinculados ao produto (cesta)
+    const cestaId = (entrega.produtos as any)?.id || entrega.produto_id;
+    const { data: itensCesta, error: itensCestaError } = await supabase
+      .from('produtos_na_cesta')
+      .select(`
+        quantidade,
+        produtos_cadastrado!inner (
+          id,
+          produto_nome,
+          produto_cod,
+          categoria,
+          preco_unt
+        )
+      `)
+      .eq('cesta_id', cestaId);
+
+    if (itensCestaError) {
+      throw new Error('Erro ao buscar itens da cesta');
+    }
+
+    // Itens adicionais da entrega (itens_entrega)
+    const { data: itensEntrega, error: itensEntregaError } = await supabase
+      .from('itens_entrega')
+      .select(`
+        id,
+        quantidade,
+        preco_unitario,
+        subtotal,
+        produtos_cadastrado!inner (
+          id,
+          produto_nome,
+          produto_cod,
+          categoria,
+          preco_unt
+        )
+      `)
+      .eq('entrega_id', entrega.id);
+
+    if (itensEntregaError) {
+      throw new Error('Erro ao buscar itens adicionais da entrega');
+    }
+
+    // Mapear para o formato esperado
+    const detalhesBase: EntregaComDetalhes = {
+      id: String(entrega.id),
+      vendedor_id: String(entrega.vendedor_id),
+      cliente_id: String(entrega.cliente_id),
+      produto_id: String(entrega.produto_id),
+      valor: Number(entrega.valor),
+      data_entrega: entrega.data_entrega,
+      pago: Boolean(entrega.pago),
+      status_entrega: (entrega as any).status_entrega || null,
+      status: entrega.status_pagamento,
+      status_pagamento: entrega.status_pagamento,
+      mes_cobranca: entrega.mes_cobranca,
+      dataRetorno: entrega.dataRetorno,
+      created_at: entrega.created_at,
+      updated_at: entrega.updated_at,
+      observacoes: (entrega as any).observacoes || null,
+      cliente_nome: (entrega.clientes as any)?.nome || '',
+      cliente_sobrenome: (entrega.clientes as any)?.sobrenome || null,
+      cliente_cpf: (entrega.clientes as any)?.cpf || '',
+      cliente_telefone: (entrega.clientes as any)?.telefone || '',
+      cliente_email: (entrega.clientes as any)?.email || null,
+      cliente_endereco: (entrega.clientes as any)?.endereco || '',
+      vendedor_nome: (entrega.vendedores as any)?.nome || '',
+      produto_nome: (entrega.produtos as any)?.nome || '',
+      produto_preco: Number((entrega.produtos as any)?.preco || 0),
+      cliente: entrega.clientes ? {
+        nome: (entrega.clientes as any).nome || '',
+        sobrenome: (entrega.clientes as any).sobrenome || null,
+        cpf: (entrega.clientes as any).cpf || '',
+        telefone: (entrega.clientes as any).telefone || '',
+        email: (entrega.clientes as any).email || null,
+        endereco: (entrega.clientes as any).endereco || '',
+        numero: (entrega.clientes as any).numero || '',
+        Bairro: (entrega.clientes as any).Bairro || '',
+        Cidade: (entrega.clientes as any).Cidade || '',
+        Estado: (entrega.clientes as any).Estado || '',
+        cep: (entrega.clientes as any).cep || '',
+        complemento: (entrega.clientes as any).complemento || null,
+      } : undefined,
+      vendedor: entrega.vendedores ? {
+        nome: (entrega.vendedores as any).nome || '',
+      } : undefined,
+      produto: entrega.produtos ? {
+        nome: (entrega.produtos as any).nome || '',
+        preco: Number((entrega.produtos as any).preco || 0),
+      } : undefined,
+      endereco_entrega: (entrega.clientes as any)?.endereco ?
+        parseEndereco((entrega.clientes as any).endereco) : undefined,
+    };
+
+    const cesta_itens = (itensCesta || []).map((item: any) => ({
+      produto: {
+        id: String(item.produtos_cadastrado?.id || ''),
+        produto_nome: String(item.produtos_cadastrado?.produto_nome || ''),
+        produto_cod: String(item.produtos_cadastrado?.produto_cod || ''),
+        categoria: String(item.produtos_cadastrado?.categoria || ''),
+        preco_unt: Number(item.produtos_cadastrado?.preco_unt || 0),
+      },
+      quantidade: Number(item.quantidade || 0),
+    }));
+
+    const itens_adicionais = (itensEntrega || []).map((item: any) => ({
+      id: String(item.id),
+      quantidade: Number(item.quantidade || 0),
+      preco_unitario: Number(item.preco_unitario || 0),
+      subtotal: Number(item.subtotal || 0),
+      produto: {
+        id: String(item.produtos_cadastrado?.id || ''),
+        produto_nome: String(item.produtos_cadastrado?.produto_nome || ''),
+        produto_cod: String(item.produtos_cadastrado?.produto_cod || ''),
+        categoria: String(item.produtos_cadastrado?.categoria || ''),
+        preco_unt: Number(item.produtos_cadastrado?.preco_unt || 0),
+      },
+    }));
+
+    const valor_cesta = Number(detalhesBase.valor || detalhesBase.produto_preco || 0);
+    const valor_adicionais = itens_adicionais.reduce((acc, curr) => acc + Number(curr.subtotal || 0), 0);
+    const valor_total = valor_cesta + valor_adicionais;
+
+    return {
+      ...detalhesBase,
+      cesta_itens,
+      itens_adicionais,
+      valor_cesta,
+      valor_adicionais,
+      valor_total,
+    };
   }
 }
 

@@ -264,22 +264,12 @@ const ClienteModal: React.FC<ClienteModalProps> = ({ cliente, isOpen, onClose })
                     <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600 dark:text-orange-400" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Endereço</p>
-                    <p className="text-sm sm:text-base text-gray-900 dark:text-white font-medium break-words">{cliente.endereco || 'N/A'}</p>
+                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Endereço Completo</p>
+                    <p className="text-sm sm:text-base text-gray-900 dark:text-white font-medium break-words">
+                      {`${cliente.endereco || ''}${cliente.numero ? `, ${cliente.numero}` : ''}${cliente.Bairro ? `, ${cliente.Bairro}` : ''}${cliente.Cidade ? `, ${cliente.Cidade}` : ''}${cliente.Estado ? ` - ${cliente.Estado}` : ''}${cliente.cep ? `, CEP: ${cliente.cep}` : ''}${cliente.complemento ? `, ${cliente.complemento}` : ''}`.replace(/^, /g, '') || 'N/A'}
+                    </p>
                   </div>
                 </div>
-
-                {cliente.cidade && (
-                  <div className="flex items-start space-x-3">
-                    <div className="p-2 bg-indigo-100 dark:bg-indigo-900/20 rounded-lg flex-shrink-0">
-                      <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600 dark:text-indigo-400" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Cidade</p>
-                      <p className="text-sm sm:text-base text-gray-900 dark:text-white font-medium">{cliente.cidade}</p>
-                    </div>
-                  </div>
-                )}
 
                 {cliente.cep && (
                   <div className="flex items-start space-x-3">

@@ -13,6 +13,17 @@ const Configuracoes: React.FC = () => {
   const [cpfCnpj, setCpfCnpj] = useState<string>(user?.cpf_cnpj || '');
   const [cep, setCep] = useState<string>(user?.cep || '');
   const [estado, setEstado] = useState<string>(user?.estado || '');
+  const [nome, setNome] = useState<string>(user?.nome || '');
+  const [sobrenome, setSobrenome] = useState<string>(user?.sobrenome || '');
+  const [telefone, setTelefone] = useState<string>(user?.telefone || '');
+  const [telefoneSecundario, setTelefoneSecundario] = useState<string>(user?.telefone_secundario || '');
+  const [nomeEmpresa, setNomeEmpresa] = useState<string>(user?.nome_empresa || '');
+  const [endereco, setEndereco] = useState<string>(user?.endereco || '');
+  const [numero, setNumero] = useState<string>(user?.numero || '');
+  const [complemento, setComplemento] = useState<string>(user?.complemento || '');
+  const [bairro, setBairro] = useState<string>(user?.bairro || '');
+  const [cidade, setCidade] = useState<string>(user?.cidade || '');
+  const [pais, setPais] = useState<string>(user?.pais || '');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
@@ -40,6 +51,21 @@ const Configuracoes: React.FC = () => {
     }
   }, [user?.estado]);
 
+  useEffect(() => {
+    if (!user) return;
+    setNome(user.nome || '');
+    setSobrenome(user.sobrenome || '');
+    setTelefone(user.telefone || '');
+    setTelefoneSecundario(user.telefone_secundario || '');
+    setNomeEmpresa(user.nome_empresa || '');
+    setEndereco(user.endereco || '');
+    setNumero(user.numero || '');
+    setComplemento(user.complemento || '');
+    setBairro(user.bairro || '');
+    setCidade(user.cidade || '');
+    setPais(user.pais || '');
+  }, [user]);
+
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'Não informado';
     return new Date(dateString).toLocaleDateString('pt-BR');
@@ -53,14 +79,17 @@ const Configuracoes: React.FC = () => {
     }).format(value);
   };
 
-  const formatPhone = (phone?: string) => {
-    if (!phone) return 'Não informado';
+  const formatPhone = (phone: string): string => {
     const cleaned = phone.replace(/\D/g, '');
     if (cleaned.length === 11) {
       return cleaned.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+    } else if (cleaned.length === 10) {
+      return cleaned.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
     }
-    return phone;
+    return cleaned;
   };
+
+
 
   const formatCPF = (cpf: string) => {
     return cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
@@ -115,18 +144,44 @@ const Configuracoes: React.FC = () => {
     }
   };
 
+  const handleTelefoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const cleaned = value.replace(/\D/g, '');
+    if (cleaned.length <= 11) {
+      setTelefone(cleaned);
+    }
+  };
+
+  const handleTelefoneSecundarioChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const cleaned = value.replace(/\D/g, '');
+    if (cleaned.length <= 11) {
+      setTelefoneSecundario(cleaned);
+    }
+  };
+
   const handleSave = async () => {
     if (!user) {
       setMessage({ type: 'error', text: 'Usuário não encontrado.' });
       return;
     }
 
-    // Verificar se houve alterações
     const hasChanges = 
       tipoPessoa !== (user.tipo_pessoa || '') ||
       cpfCnpj !== (user.cpf_cnpj || '') ||
       cep !== (user.cep || '') ||
-      estado !== (user.estado || '');
+      estado !== (user.estado || '') ||
+      nome !== (user.nome || '') ||
+      sobrenome !== (user.sobrenome || '') ||
+      telefone !== (user.telefone || '') ||
+      telefoneSecundario !== (user.telefone_secundario || '') ||
+      nomeEmpresa !== (user.nome_empresa || '') ||
+      endereco !== (user.endereco || '') ||
+      numero !== (user.numero || '') ||
+      complemento !== (user.complemento || '') ||
+      bairro !== (user.bairro || '') ||
+      cidade !== (user.cidade || '') ||
+      pais !== (user.pais || '');
 
     if (!hasChanges) {
       setMessage({ type: 'info', text: 'Nenhuma alteração foi detectada. Não é necessário salvar.' });
@@ -143,8 +198,19 @@ const Configuracoes: React.FC = () => {
         .update({
           tipo_pessoa: tipoPessoa,
           cpf_cnpj: cpfCnpj,
-          cep: cep,
-          estado: estado,
+          cep,
+          estado,
+          nome,
+          sobrenome,
+          telefone,
+          telefone_secundario: telefoneSecundario,
+          nome_empresa: nomeEmpresa,
+          endereco,
+          numero,
+          complemento,
+          bairro,
+          cidade,
+          pais,
           updated_at: new Date().toISOString()
         })
         .eq('id', user.id);
@@ -154,10 +220,7 @@ const Configuracoes: React.FC = () => {
       }
 
       setMessage({ type: 'success', text: 'Alterações salvas com sucesso!' });
-      
-      // Limpar mensagem após 3 segundos
       setTimeout(() => setMessage(null), 3000);
-      
     } catch (error) {
       console.error('Erro ao salvar:', error);
       setMessage({ type: 'error', text: 'Erro ao salvar os dados. Tente novamente.' });
@@ -206,6 +269,20 @@ const Configuracoes: React.FC = () => {
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Dados Pessoais</h2>
           </div>
           
+          {/* Informações básicas */}
+          <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Email:</span>
+                <p className="text-gray-900 dark:text-white">{user?.email || 'Não informado'}</p>
+              </div>
+              <div>
+                <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Data de Cadastro:</span>
+                <p className="text-gray-900 dark:text-white">{formatDate(user?.created_at)}</p>
+              </div>
+            </div>
+          </div>
+          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -213,9 +290,9 @@ const Configuracoes: React.FC = () => {
               </label>
               <input
                 type="text"
-                value={user?.nome || ''}
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                readOnly
               />
             </div>
             <div>
@@ -224,20 +301,9 @@ const Configuracoes: React.FC = () => {
               </label>
               <input
                 type="text"
-                value={user?.sobrenome || ''}
+                value={sobrenome}
+                onChange={(e) => setSobrenome(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                readOnly
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Email
-              </label>
-              <input
-                type="email"
-                value={user?.email || ''}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                readOnly
               />
             </div>
             <div>
@@ -246,9 +312,10 @@ const Configuracoes: React.FC = () => {
               </label>
               <input
                 type="text"
-                value={formatPhone(user?.telefone)}
+                value={formatPhone(telefone)}
+                onChange={handleTelefoneChange}
+                placeholder="(11) 99999-9999"
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                readOnly
               />
             </div>
             <div>
@@ -257,20 +324,10 @@ const Configuracoes: React.FC = () => {
               </label>
               <input
                 type="text"
-                value={formatPhone(user?.telefone_secundario)}
+                value={formatPhone(telefoneSecundario)}
+                onChange={handleTelefoneSecundarioChange}
+                placeholder="(11) 99999-9999"
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                readOnly
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Data de Cadastro
-              </label>
-              <input
-                type="text"
-                value={formatDate(user?.created_at)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                readOnly
               />
             </div>
 
@@ -346,9 +403,9 @@ const Configuracoes: React.FC = () => {
             </label>
             <input
               type="text"
-              value={user?.nome_empresa || 'Não informado'}
+              value={nomeEmpresa}
+              onChange={(e) => setNomeEmpresa(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-              readOnly
             />
           </div>
           <div>
@@ -410,9 +467,9 @@ const Configuracoes: React.FC = () => {
             </label>
             <input
               type="text"
-              value={user?.endereco || 'Não informado'}
+              value={endereco}
+              onChange={(e) => setEndereco(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-              readOnly
             />
           </div>
           <div>
@@ -421,9 +478,9 @@ const Configuracoes: React.FC = () => {
             </label>
             <input
               type="text"
-              value={user?.numero || 'Não informado'}
+              value={numero}
+              onChange={(e) => setNumero(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-              readOnly
             />
           </div>
           <div>
@@ -432,9 +489,9 @@ const Configuracoes: React.FC = () => {
             </label>
             <input
               type="text"
-              value={user?.complemento || 'Não informado'}
+              value={complemento}
+              onChange={(e) => setComplemento(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-              readOnly
             />
           </div>
           <div>
@@ -443,9 +500,9 @@ const Configuracoes: React.FC = () => {
             </label>
             <input
               type="text"
-              value={user?.bairro || 'Não informado'}
+              value={bairro}
+              onChange={(e) => setBairro(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-              readOnly
             />
           </div>
           <div>
@@ -454,9 +511,9 @@ const Configuracoes: React.FC = () => {
             </label>
             <input
               type="text"
-              value={user?.cidade || 'Não informado'}
+              value={cidade}
+              onChange={(e) => setCidade(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-              readOnly
             />
           </div>
           <div>
@@ -482,9 +539,9 @@ const Configuracoes: React.FC = () => {
             </label>
             <input
               type="text"
-              value={user?.pais || 'Não informado'}
+              value={pais}
+              onChange={(e) => setPais(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-              readOnly
             />
           </div>
         </div>

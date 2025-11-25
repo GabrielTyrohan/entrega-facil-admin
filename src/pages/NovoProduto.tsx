@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Save, Package, Hash, Tag, DollarSign } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { ValidationService } from '../services/validationService';
@@ -15,12 +15,24 @@ interface FormData {
 const categorias = [
   'Bebidas',
   'Alimentos',
-  'Utilidades',
   'Limpeza',
   'Higiene',
-  'Eletrônicos',
   'Outros'
 ];
+
+const gerarSKU = (categoria: string): string => {
+  const categoriaMap: { [key: string]: string } = {
+    'Bebidas': 'BEB',
+    'Alimentos': 'ALI',
+    'Limpeza': 'LIM',
+    'Higiene': 'HIG',
+    'Outros': 'OUT'
+  };
+
+  const prefixo = categoriaMap[categoria] || 'GEN';
+  const timestamp = Date.now().toString().slice(-6);
+  return `${prefixo}-${timestamp}`;
+};
 
 const NovoProduto: React.FC = () => {
   const navigate = useNavigate();
@@ -37,8 +49,34 @@ const NovoProduto: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
 
+  // useEffect para gerar SKU quando categoria mudar
+  useEffect(() => {
+    if (formData.categoria) {
+      const novoSKU = gerarSKU(formData.categoria);
+      console.log('🔍 Categoria selecionada:', formData.categoria);
+      console.log('🔍 SKU gerado:', novoSKU);
+      setFormData(prev => ({ ...prev, codigo: novoSKU }));
+      
+      // Limpar erro do código quando categoria for selecionada
+      if (errors.codigo) {
+        setErrors(prev => {
+          const newErrors = { ...prev };
+          delete newErrors.codigo;
+          return newErrors;
+        });
+      }
+    } else {
+      setFormData(prev => ({ ...prev, codigo: '' }));
+    }
+  }, [formData.categoria]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
+    
+    // Limpar mensagem de sucesso
+    if (successMessage) {
+      setSuccessMessage('');
+    }
     
     if (name === 'quantidade') {
       setFormData(prev => ({ ...prev, [name]: parseInt(value) || 0 }));
@@ -50,15 +88,11 @@ const NovoProduto: React.FC = () => {
 
     // Limpar erro do campo quando o usuário começar a digitar
     if (errors[name]) {
-      setErrors(prev => ({
-        ...prev,
-        [name]: ''
-      }));
-    }
-
-    // Limpar mensagem de sucesso
-    if (successMessage) {
-      setSuccessMessage('');
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
     }
   };
 
@@ -82,11 +116,12 @@ const NovoProduto: React.FC = () => {
       }
     }
 
-    // Simular validação de código único (em um sistema real, isso seria uma consulta ao backend)
-    const produtosExistentes = JSON.parse(localStorage.getItem('produtos') || '[]');
-    const codigoValidation = ValidationService.validateCodigoUnico(formData.codigo, produtosExistentes);
-    if (!codigoValidation.isValid) {
-      newErrors.codigo = codigoValidation.message!;
+    if (!formData.codigo) {
+      newErrors.codigo = 'Selecione uma categoria para gerar o código SKU.';
+    }
+
+    if (formData.codigo.length !== 10) {
+      newErrors.codigo = 'O código SKU deve ter 10 caracteres (XXX-######).';
     }
 
     setErrors(newErrors);
@@ -158,7 +193,6 @@ const NovoProduto: React.FC = () => {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Informações Básicas */}
         {/* Mensagem de Sucesso */}
         {successMessage && (
           <div className="mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg">
@@ -201,28 +235,6 @@ const NovoProduto: React.FC = () => {
             
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Código do Produto (SKU) *
-              </label>
-              <div className="relative">
-                <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  name="codigo"
-                  value={formData.codigo}
-                  onChange={handleInputChange}
-                  className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white ${
-                    errors.codigo ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-gray-600'
-                  }`}
-                  placeholder="Ex: COCA350ML"
-                />
-              </div>
-              {errors.codigo && (
-                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.codigo}</p>
-              )}
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Categoria *
               </label>
               <div className="relative">
@@ -243,6 +255,27 @@ const NovoProduto: React.FC = () => {
               </div>
               {errors.categoria && (
                 <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.categoria}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Código do Produto (SKU) *
+              </label>
+              <div className="relative">
+                <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  name="codigo"
+                  value={formData.codigo}
+                  readOnly
+                  className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 cursor-not-allowed font-mono"
+                  placeholder="Selecione uma categoria"
+                />
+              </div>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Gerado automaticamente ao selecionar a categoria</p>
+              {errors.codigo && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.codigo}</p>
               )}
             </div>
             
@@ -311,8 +344,8 @@ const NovoProduto: React.FC = () => {
           <h3 className="text-sm font-medium text-blue-900 dark:text-blue-300 mb-2">Resumo do Produto</h3>
           <div className="text-sm text-blue-800 dark:text-blue-400 space-y-1">
             <p><strong>Nome:</strong> {formData.nome || 'Não informado'}</p>
-            <p><strong>Código:</strong> {formData.codigo || 'Não informado'}</p>
             <p><strong>Categoria:</strong> {formData.categoria || 'Não selecionada'}</p>
+            <p><strong>Código SKU:</strong> {formData.codigo || 'Não gerado'}</p>
             <p><strong>Estoque:</strong> {formData.quantidade} unidades</p>
             <p><strong>Preço:</strong> R$ {formData.preco.toFixed(2)}</p>
           </div>

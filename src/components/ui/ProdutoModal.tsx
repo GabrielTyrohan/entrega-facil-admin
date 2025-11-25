@@ -16,12 +16,24 @@ interface ProdutoModalProps {
 const categorias = [
   'Bebidas',
   'Alimentos',
-  'Utilidades',
   'Limpeza',
   'Higiene',
-  'Eletrônicos',
   'Outros'
 ];
+
+const gerarSKU = (categoria: string): string => {
+  const categoriaMap: { [key: string]: string } = {
+    'Bebidas': 'BEB',
+    'Alimentos': 'ALI',
+    'Limpeza': 'LIM',
+    'Higiene': 'HIG',
+    'Outros': 'OUT'
+  };
+
+  const prefixo = categoriaMap[categoria] || 'GEN';
+  const timestamp = Date.now().toString().slice(-6);
+  return `${prefixo}-${timestamp}`;
+};
 
 const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, mode, onSave }) => {
   const { user } = useAuth();
@@ -30,7 +42,7 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
     id: '',
     administrador_id: '',
     produto_nome: '',
-    produto_cod: 0,
+    produto_cod: '', // Alterado para string
     categoria: '',
     qtd_estoque: 0,
     preco_unt: 0,
@@ -49,7 +61,7 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
            id: '',
            administrador_id: '',
            produto_nome: '',
-           produto_cod: 0,
+           produto_cod: '', // Alterado para string
            categoria: '',
            qtd_estoque: 0,
            preco_unt: 0,
@@ -59,13 +71,24 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
         setPrecoDisplay('');
       } else if (produto && (mode === 'edit' || mode === 'view')) {
         // Load product data for edit/view mode
-        setFormData(produto);
-        // Corrigir a formatação do preço - multiplicar por 100 e converter para string de centavos
-        const precoEmCentavos = Math.round(produto.preco_unt * 100).toString();
-        setPrecoDisplay(produto.preco_unt > 0 ? applyCurrencyMask(precoEmCentavos) : '');
+        setFormData({
+          ...produto,
+          produto_cod: String(produto.produto_cod) // Garante que produto_cod seja string
+        });
+        setPrecoDisplay(produto.preco_unt > 0 ? applyCurrencyMask(String(Math.round(produto.preco_unt * 100))) : '');
       }
     }
   }, [produto, mode, isOpen, user?.id]);
+
+  // useEffect para gerar SKU quando categoria mudar no modo 'create'
+  useEffect(() => {
+    if (mode === 'create' && formData.categoria) {
+      const novoSKU = gerarSKU(formData.categoria);
+      setFormData(prev => ({ ...prev, produto_cod: novoSKU }));
+    } else if (mode === 'create' && !formData.categoria) {
+      setFormData(prev => ({ ...prev, produto_cod: '' }));
+    }
+  }, [formData.categoria, mode]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -99,8 +122,13 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
         return;
       }
       
-      if (!formData.produto_cod || formData.produto_cod <= 0) {
-        alert('Código do produto é obrigatório e deve ser maior que zero');
+      if (!formData.produto_cod.trim()) { // Alterado para trim()
+        alert('Código do produto é obrigatório');
+        return;
+      }
+      
+      if (formData.produto_cod.length !== 10) { // Validação do tamanho do SKU
+        alert('O código SKU deve ter 10 caracteres (XXX-######).');
         return;
       }
       
@@ -135,7 +163,7 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
         const createData: CreateProdutoData = {
           administrador_id: user.id,
           produto_nome: formData.produto_nome,
-          produto_cod: formData.produto_cod,
+          produto_cod: formData.produto_cod, // Mantido como string
           categoria: formData.categoria,
           qtd_estoque: formData.qtd_estoque,
           preco_unt: formData.preco_unt
@@ -155,7 +183,7 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
           id: '',
           administrador_id: '',
           produto_nome: '',
-          produto_cod: 0,
+          produto_cod: '', // Alterado para string
           categoria: '',
           qtd_estoque: 0,
           preco_unt: 0,
@@ -185,7 +213,7 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
           // Atualizar o produto
           const produtoAtualizado = await produtoService.updateProduto(formData.id, {
             produto_nome: formData.produto_nome,
-            produto_cod: formData.produto_cod,
+            produto_cod: formData.produto_cod, // Mantido como string
             categoria: formData.categoria,
             qtd_estoque: formData.qtd_estoque,
             preco_unt: formData.preco_unt
@@ -229,7 +257,7 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
                   id: '',
                   administrador_id: '',
                   produto_nome: '',
-                  produto_cod: 0,
+                  produto_cod: '', // Alterado para string
                   categoria: '',
                   qtd_estoque: 0,
                   preco_unt: 0,
@@ -283,14 +311,12 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
                 <div className="relative">
                   <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
-                    type="number"
+                    type="text" // Alterado para text
                     name="produto_cod"
-                    value={formData.produto_cod || ''}
-                    onChange={handleInputChange}
-                    className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                    placeholder="Digite o código do produto"
-                    min="1"
-                    step="1"
+                    value={formData.produto_cod}
+                    readOnly // Adicionado readOnly
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 cursor-not-allowed font-mono"
+                    placeholder="Gerado automaticamente"
                   />
                 </div>
               )}
@@ -407,7 +433,7 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
                   id: '',
                   administrador_id: '',
                   produto_nome: '',
-                  produto_cod: 0,
+                  produto_cod: '', // Alterado para string
                   categoria: '',
                   qtd_estoque: 0,
                   preco_unt: 0,

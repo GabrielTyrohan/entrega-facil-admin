@@ -24,7 +24,7 @@ const PaymentStatusAutoChecker: React.FC = () => {
         // Busca os dados do administrador atual
         const { data: adminData, error } = await supabase
           .from('administradores')
-          .select('status_pagamento, email, nome, sobrenome')
+          .select('status_pagamento, data_vencimento, email, nome, sobrenome')
           .eq('id', user.id)
           .single();
 
@@ -33,11 +33,31 @@ const PaymentStatusAutoChecker: React.FC = () => {
           return;
         }
 
-        if (adminData && adminData.status_pagamento === 'vencido') {
-          
-          // Faz logout do usuário
+        // Verificação por status explícito
+        const isStatusVencido = adminData && adminData.status_pagamento === 'vencido';
+
+        // Verificação por data de vencimento (<= hoje)
+        const hojeStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+        const rawVencStr: string | undefined = (adminData as any)?.data_vencimento || (adminData as any)?.data_vendimento;
+
+        const normalizeDateStr = (value?: string): string | null => {
+          if (!value) return null;
+          try {
+            // Normaliza para YYYY-MM-DD
+            const norm = new Date(value).toISOString().slice(0, 10);
+            return norm;
+          } catch {
+            // Fallback simples caso venha apenas YYYY-MM-DD
+            return value.slice(0, 10);
+          }
+        };
+
+        const vencStr = normalizeDateStr(rawVencStr);
+        const isExpiredByDate = !!vencStr && vencStr <= hojeStr;
+
+        if (isStatusVencido || isExpiredByDate) {
+          // Faz logout do usuário e ProtectedRoute redireciona para /login
           await logout();
-        } else {
         }
       } catch (error) {
         console.error('Erro na verificação automática de pagamento:', error);
