@@ -3,25 +3,34 @@ import { createClient } from '@supabase/supabase-js'
 // Configurações do Supabase
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+// const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables')
+  throw new Error('Variáveis VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY obrigatórias')
 }
 
-// Cliente Supabase com configurações de autenticação aprimoradas
+// Cliente público (anon) para uso no frontend
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true,
-    storage: window.localStorage,
-    storageKey: 'supabase.auth.token',
-    flowType: 'pkce'
-  },
-  db: {
-    schema: 'public'
+    detectSessionInUrl: false
   }
 })
+
+// Não é mais necessário usar service role no cliente.
+// Operações privilegiadas são feitas via RPC segura no backend.
+//
+// export const supabaseAdmin = createClient(
+//   supabaseUrl,
+//   import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY,
+//   {
+//     auth: {
+//       autoRefreshToken: false,
+//       persistSession: false
+//     }
+//   }
+// )
 
 // Tipos para as tabelas do banco
 export interface Administrador {

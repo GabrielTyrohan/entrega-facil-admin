@@ -105,9 +105,15 @@ const Pagamentos: React.FC = () => {
 
   // Filtrar pagamentos baseado nos critérios de busca
   const filteredPagamentos = pagamentos.filter(pagamento => {
-    const matchesSearch = 
-      pagamento.cliente_nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      pagamento.forma_pagamento?.toLowerCase().includes(searchTerm.toLowerCase());
+    const q = searchTerm.trim().toLowerCase();
+    const matchesSearch =
+      q === '' ||
+      pagamento.cliente_nome?.toLowerCase().includes(q) ||
+      pagamento.forma_pagamento?.toLowerCase().includes(q) ||
+      pagamento.vendedor_nome?.toLowerCase().includes(q) ||
+      pagamento.produto_nome?.toLowerCase().includes(q) ||
+      String(pagamento.entrega_id || '').toLowerCase().includes(q) ||
+      (pagamento.cliente_telefone || '').includes(searchTerm.trim());
     
     const matchesVendedor = selectedVendedor === '' || pagamento.vendedor_id === selectedVendedor;
     

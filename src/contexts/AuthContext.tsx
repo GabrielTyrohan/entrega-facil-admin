@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import type { User as SupabaseUser } from '@supabase/supabase-js';
+import { toast } from '@/utils/toast';
+// Removido import de tipo SupabaseUser não utilizado
 
 interface User {
   id: string;
@@ -42,10 +43,11 @@ interface User {
 interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<boolean>;
-  signIn: (email: string, password: string) => Promise<{ error?: string }>;
+  signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
   logout: () => void;
   loading: boolean;
+  paymentExpired: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -61,89 +63,92 @@ export const useAuth = () => {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [paymentExpired] = useState(false);
+  const [manualLogout, setManualLogout] = useState(false);
+  
+  // Função central para validar permissões via RPC segura
+  const loadUserData = async (userId: string) => {
+    try {
+      setLoading(true);
+      // Referência explícita para evitar warning de parâmetro não utilizado
+      void userId;
 
-  useEffect(() => {
-    const checkUser = async () => {
-      try {
-        const { data: { user: supabaseUser } } = await supabase.auth.getUser();
-        
-        if (supabaseUser) {
-          // Usar a mesma lógica do signIn para carregar dados completos
-          const { data: adminData, error: adminError } = await supabase
-            .from('administradores')
-            .select('*')
-            .eq('id', supabaseUser.id)
-            .single();
+      const { data, error } = await supabase.rpc('validar_login_admin');
 
-          if (!adminError && adminData) {
-            const userData: User = {
-              id: adminData.id,
-              name: adminData.nome || supabaseUser.email?.split('@')[0] || 'Admin',
-              email: adminData.email || supabaseUser.email || '',
-              role: 'admin',
-              // Informações de pagamento
-              valor_assinatura: adminData.valor_assinatura,
-              status_pagamento: adminData.status_pagamento,
-              data_vencimento: adminData.data_vencimento,
-              mp_preapproval_id: adminData.mp_preapproval_id,
-              mp_payer_email: adminData.mp_payer_email,
-              ultima_cobranca: adminData.ultima_cobranca,
-              // Dados pessoais
-              nome: adminData.nome,
-              sobrenome: adminData.sobrenome,
-              telefone: adminData.telefone,
-              telefone_secundario: adminData.telefone_secundario,
-              avatar_url: adminData.avatar_url,
-              // Dados da empresa
-              nome_empresa: adminData.nome_empresa,
-              tipo_pessoa: adminData.tipo_pessoa,
-              cpf_cnpj: adminData.cpf_cnpj,
-              inscricao_estadual: adminData.inscricao_estadual,
-              // Endereço
-              cep: adminData.cep,
-              endereco: adminData.endereco,
-              numero: adminData.numero,
-              complemento: adminData.complemento,
-              bairro: adminData.bairro,
-              cidade: adminData.cidade,
-              estado: adminData.estado,
-              pais: adminData.pais,
-              // Outros
-              aceite_termos: adminData.aceite_termos,
-              created_at: adminData.created_at
-            };
-            setUser(userData);
-          } else {
-            // Fallback para usuário básico se não encontrar dados
-            const basicUser: User = {
-              id: supabaseUser.id,
-              name: supabaseUser.email?.split('@')[0] || 'Admin',
-              email: supabaseUser.email || '',
-              role: 'admin'
-            };
-            setUser(basicUser);
-          }
-        }
-        
+      if (error) {
+        console.error('Erro ao validar admin:', error);
+        await supabase.auth.signOut();
+        setUser(null);
         setLoading(false);
-      } catch (error) {
-        console.error('Erro ao verificar usuário:', error);
+        return;
+      }
+
+      if (!data || !data.success) {
+        const errorMsg = (data as any)?.error || 'Acesso negado';
+
+        if (errorMsg.includes('não tem permissão')) {
+          toast.error('Você não tem permissão de administrador');
+        } else if (errorMsg.includes('cancelada')) {
+          toast.error('Sua assinatura está cancelada');
+        } else if (errorMsg.includes('não encontrado')) {
+          toast.error('Conta não encontrada');
+        } else {
+          toast.error(errorMsg);
+        }
+
+        await supabase.auth.signOut();
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      const admin: any = (data as any).admin;
+      admin.role = 'admin';
+
+      setUser(admin as User);
+      setLoading(false);
+
+    } catch (err) {
+      console.error('Erro:', err);
+      await supabase.auth.signOut();
+      setUser(null);
+      setLoading(false);
+    }
+  };
+
+  // Observa sessão inicial e mudanças de autenticação
+  useEffect(() => {
+    // Verificar sessão inicial
+    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+      if (error) {
+        toast.error('Sessão expirada. Faça login novamente');
+        await supabase.auth.signOut();
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+      if (session?.user) {
+        loadUserData(session.user.id);
+      } else {
+        setUser(null);
         setLoading(false);
       }
-    };
+    });
 
-    checkUser();
-
+    // Observar mudanças de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event) => {
-        if (event === 'SIGNED_OUT') {
+      async (event, session) => {
+        if (event === 'TOKEN_REFRESHED') {
+          return;
+        }
+        if (session?.user) {
+          await loadUserData(session.user.id);
+        } else {
+          if (event === 'SIGNED_OUT' && !manualLogout) {
+            toast.error('Sessão expirada. Faça login novamente');
+          }
           setUser(null);
           setLoading(false);
-        } else if (event === 'TOKEN_REFRESHED') {
-          // Não fazer nada especial no refresh do token
-        } else if (event === 'SIGNED_IN') {
-          // IMPORTANTE: NÃO fazer nada aqui para evitar interferência com o signIn
-          // O signIn já faz toda a verificação necessária
         }
       }
     );
@@ -151,188 +156,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       subscription.unsubscribe();
     };
-  }, []); // Remover dependência do user para evitar re-criação do listener
+  }, []);
 
-  const loadUserData = async (supabaseUser: SupabaseUser) => {
-    try {
-      
-      // Adicionar timeout para evitar travamento
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Timeout na consulta')), 10000);
-      });
-      
-      const queryPromise = supabase
-        .from('administradores')
-        .select('*')
-        .eq('id', supabaseUser.id)
-        .single();
-      
-      const { data: adminData, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
-
-      if (error) {
-        // Se não encontrar na tabela administradores, criar usuário básico
-        const basicUser: User = {
-          id: supabaseUser.id,
-          name: supabaseUser.email?.split('@')[0] || 'Admin',
-          email: supabaseUser.email || '',
-          role: 'admin'
-        };
-        setUser(basicUser);
-        return;
-      }
-
-      if (adminData) {
-        const userData: User = {
-          id: adminData.id,
-          name: adminData.nome || supabaseUser.email?.split('@')[0] || 'Admin',
-          email: adminData.email || supabaseUser.email || '',
-          role: 'admin',
-          // Informações de pagamento
-          valor_assinatura: adminData.valor_assinatura,
-          status_pagamento: adminData.status_pagamento,
-          data_vencimento: adminData.data_vencimento,
-          mp_preapproval_id: adminData.mp_preapproval_id,
-          mp_payer_email: adminData.mp_payer_email,
-          ultima_cobranca: adminData.ultima_cobranca,
-          // Dados pessoais
-          nome: adminData.nome,
-          sobrenome: adminData.sobrenome,
-          telefone: adminData.telefone,
-          telefone_secundario: adminData.telefone_secundario,
-          avatar_url: adminData.avatar_url,
-          // Dados da empresa
-          nome_empresa: adminData.nome_empresa,
-          tipo_pessoa: adminData.tipo_pessoa,
-          cpf_cnpj: adminData.cpf_cnpj,
-          inscricao_estadual: adminData.inscricao_estadual,
-          // Endereço
-          cep: adminData.cep,
-          endereco: adminData.endereco,
-          numero: adminData.numero,
-          complemento: adminData.complemento,
-          bairro: adminData.bairro,
-          cidade: adminData.cidade,
-          estado: adminData.estado,
-          pais: adminData.pais,
-          // Outros
-          aceite_termos: adminData.aceite_termos,
-          created_at: adminData.created_at
-        };
-        setUser(userData);
-      } else {
-        // Criar usuário básico se não encontrar dados
-        const basicUser: User = {
-          id: supabaseUser.id,
-          name: supabaseUser.email?.split('@')[0] || 'Admin',
-          email: supabaseUser.email || '',
-          role: 'admin'
-        };
-        setUser(basicUser);
-      }
-    } catch (error) {
-      // Em caso de erro, criar usuário básico para não travar
-      const basicUser: User = {
-        id: supabaseUser.id,
-        name: supabaseUser.email?.split('@')[0] || 'Admin',
-        email: supabaseUser.email || '',
-        role: 'admin'
-      };
-      setUser(basicUser);
-    }
-  };
-
-  const signIn = async (email: string, password: string): Promise<{ error?: string }> => {
+  const signIn = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
       setLoading(true);
       
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
-        password,
+        password
       });
 
-      if (error) {
-        let errorMessage = 'Erro ao fazer login';
-        
-        if (error.message.includes('Invalid login credentials')) {
-          errorMessage = 'Email ou senha incorretos';
-        } else if (error.message.includes('Email not confirmed')) {
-          errorMessage = 'Email não confirmado';
-        } else if (error.message.includes('Too many requests')) {
-          errorMessage = 'Muitas tentativas. Tente novamente em alguns minutos';
-        }
-        
-        return { error: errorMessage };
+      if (error) throw error;
+
+      if (!data.user) {
+        throw new Error('Usuário não encontrado');
       }
 
-      if (data.user) {
-        
-        // PRIMEIRO: Verificar status de pagamento ANTES de definir o user
-        const { data: adminData, error: adminError } = await supabase
-          .from('administradores')
-          .select('*')
-          .eq('id', data.user.id)
-          .single();
+      // Carregar e validar dados do admin
+      await loadUserData(data.user.id);
 
-        if (adminError) {
-          // Se não conseguir verificar, permite o login (para não bloquear usuários válidos)
-          await loadUserData(data.user);
-          return {};
-        }
+      return { success: true };
 
-        // Verificar status de pagamento - BLOQUEIA apenas se status for "vencido"
-        if (adminData && adminData.status_pagamento === 'vencido') {
-          // Não fazer logout aqui pois o usuário ainda não foi definido no sistema
-          // O Supabase automaticamente limpa a sessão se não definirmos o user
-          return { 
-            error: 'Acesso bloqueado por falta de pagamento. Para ter acesso, formalize a assinatura.' 
-          };
-        }
-        
-        // Definir o usuário diretamente aqui, sem chamar loadUserData
-        const userData: User = {
-          id: data.user.id,
-          name: adminData?.nome || data.user.email?.split('@')[0] || 'Admin',
-          email: adminData?.email || data.user.email || '',
-          role: 'admin',
-          // Informações de pagamento
-          valor_assinatura: adminData?.valor_assinatura,
-          status_pagamento: adminData?.status_pagamento,
-          data_vencimento: adminData?.data_vencimento,
-          mp_preapproval_id: adminData?.mp_preapproval_id,
-          mp_payer_email: adminData?.mp_payer_email,
-          ultima_cobranca: adminData?.ultima_cobranca,
-          // Dados pessoais
-          nome: adminData?.nome,
-          sobrenome: adminData?.sobrenome,
-          telefone: adminData?.telefone,
-          telefone_secundario: adminData?.telefone_secundario,
-          avatar_url: adminData?.avatar_url,
-          // Dados da empresa
-          nome_empresa: adminData?.nome_empresa,
-          tipo_pessoa: adminData?.tipo_pessoa,
-          cpf_cnpj: adminData?.cpf_cnpj,
-          inscricao_estadual: adminData?.inscricao_estadual,
-          // Endereço
-          cep: adminData?.cep,
-          endereco: adminData?.endereco,
-          numero: adminData?.numero,
-          complemento: adminData?.complemento,
-          bairro: adminData?.bairro,
-          cidade: adminData?.cidade,
-          estado: adminData?.estado,
-          pais: adminData?.pais,
-          // Outros
-          aceite_termos: adminData?.aceite_termos,
-          created_at: adminData?.created_at
-        };
-        
-        setUser(userData);
-        return {};
-      }
-
-      return { error: 'Falha na autenticação' };
-    } catch (error) {
-      return { error: 'Erro inesperado. Tente novamente' };
+    } catch (error: any) {
+      console.error('Erro no login:', error);
+      return {
+        success: false,
+        error: error.message || 'Erro ao fazer login'
+      };
     } finally {
       setLoading(false);
     }
@@ -340,12 +191,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, password: string): Promise<boolean> => {
     const result = await signIn(email, password);
-    return !result.error;
+    return result.success;
   };
 
   const signOut = async () => {
     setLoading(true);
     try {
+      setManualLogout(true);
       const { error } = await supabase.auth.signOut();
       if (error) {
       } else {
@@ -353,6 +205,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(null);
     } catch {
     } finally {
+      setManualLogout(false);
       setLoading(false);
     }
   };
@@ -362,7 +215,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, signIn, signOut, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, signIn, signOut, logout, loading, paymentExpired }}>
       {children}
     </AuthContext.Provider>
   );

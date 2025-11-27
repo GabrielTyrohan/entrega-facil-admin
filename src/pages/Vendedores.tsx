@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Key } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
   DropdownMenu,
@@ -24,6 +24,8 @@ import {
 } from '../hooks/useVendedores';
 import { useTotalEntregasPorAdministrador } from '../hooks/useDashboard';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
+import { toast } from '@/utils/toast';
 
 const Vendedores: React.FC = () => {
   const navigate = useNavigate();
@@ -34,6 +36,11 @@ const Vendedores: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [vendedorParaExcluir, setVendedorParaExcluir] = useState<Vendedor | null>(null);
+  const [resetModal, setResetModal] = useState<{ 
+    visible: boolean; 
+    vendedor?: any; 
+    novaSenha?: string; 
+  }>({ visible: false });
 
   // React Query hooks para dados
   const { data: vendedores = [], isLoading, error } = useVendedores({
@@ -107,6 +114,47 @@ const Vendedores: React.FC = () => {
       await deleteVendedorMutation.mutateAsync({ id: vendedor.id });
     } catch {
       // Error handling without logging sensitive data
+    }
+  };
+
+  const handleResetSenha = async (vendedor: Vendedor) => {
+    if (!window.confirm(`Resetar senha de ${vendedor.nome}?`)) return;
+
+    try {
+      const novaSenha = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      const { data, error } = await supabase.rpc('reset_senha_vendedor', {
+        p_vendedor_id: vendedor.id,
+        p_nova_senha: novaSenha
+      });
+
+      if (error) {
+        if (error.message.includes('Apenas administradores')) {
+          toast.error('Você não tem permissão');
+        } else if (error.message.includes('não encontrado')) {
+          toast.error('Vendedor não encontrado');
+        } else {
+          toast.error('Erro: ' + error.message);
+        }
+        return;
+      }
+
+      if (data?.success) {
+        setResetModal({ visible: true, vendedor, novaSenha });
+        toast.success('Senha resetada com sucesso!');
+      }
+    } catch (error: any) {
+      toast.error('Erro: ' + error.message);
+    }
+  };
+
+
+
+
+  const copiarSenha = () => {
+    if (resetModal.novaSenha) {
+      navigator.clipboard.writeText(resetModal.novaSenha);
+      toast.success('Senha copiada!');
     }
   };
 
@@ -383,34 +431,44 @@ const Vendedores: React.FC = () => {
                       {formatDate(vendedor.created_at)}
                     </td>
                     <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button 
-                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-2 touch-manipulation"
-                            disabled={deleteVendedorMutation.isPending}
-                          >
-                            <MoreHorizontal className="w-4 h-4" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleViewVendedor(vendedor)}>
-                            <Eye className="w-4 h-4 mr-2" />
-                            Visualizar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleEditVendedor(vendedor)}>
-                            <Edit className="w-4 h-4 mr-2" />
-                            Editar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            onClick={() => setVendedorParaExcluir(vendedor)}
-                            className="text-red-600 dark:text-red-400"
-                            disabled={deleteVendedorMutation.isPending}
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            {deleteVendedorMutation.isPending ? 'Excluindo...' : 'Excluir'}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <div className="flex items-center justify-end gap-1">
+                        <button 
+                          onClick={() => handleResetSenha(vendedor)} 
+                          className="p-2 text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded-md transition-colors"
+                          title="Resetar senha"
+                          type="button"
+                        >
+                          <Key className="w-4 h-4" />
+                        </button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button 
+                              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-2 touch-manipulation"
+                              disabled={deleteVendedorMutation.isPending}
+                            >
+                              <MoreHorizontal className="w-4 h-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleViewVendedor(vendedor)}>
+                              <Eye className="w-4 h-4 mr-2" />
+                              Visualizar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleEditVendedor(vendedor)}>
+                              <Edit className="w-4 h-4 mr-2" />
+                              Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => setVendedorParaExcluir(vendedor)}
+                              className="text-red-600 dark:text-red-400"
+                              disabled={deleteVendedorMutation.isPending}
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              {deleteVendedorMutation.isPending ? 'Excluindo...' : 'Excluir'}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -495,6 +553,55 @@ const Vendedores: React.FC = () => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
       />
+
+      {resetModal.visible && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
+                <Key className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Nova Senha Gerada</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{resetModal.vendedor?.nome}</p>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Senha temporária:</p>
+              <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg flex items-center justify-between gap-3">
+                <span className="text-3xl font-mono font-bold tracking-widest text-gray-900 dark:text-white">
+                  {resetModal.novaSenha}
+                </span>
+                <button
+                  onClick={copiarSenha}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors flex-shrink-0"
+                  type="button"
+                >
+                  Copiar
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-3 mb-4">
+              <p className="text-xs text-yellow-800 dark:text-yellow-400 flex items-start gap-2">
+                <span className="text-base">⚠️</span>
+                <span>
+                  Anote esta senha agora! Não poderá ser recuperada depois. Repasse ao vendedor por telefone/WhatsApp.
+                </span>
+              </p>
+            </div>
+
+            <button
+              onClick={() => setResetModal({ visible: false })}
+              className="w-full px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-md font-medium transition-colors"
+              type="button"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
 
       {vendedorParaExcluir && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">

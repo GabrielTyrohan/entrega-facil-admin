@@ -98,8 +98,22 @@ const Entregas: React.FC = () => {
   // Filtrar entregas baseado nos critérios de busca
   const filteredEntregas = useMemo(() => {
     const filtered = entregas.filter((entrega: Entrega) => {
-      const matchesSearch = 
-        entrega.cliente?.nome?.toLowerCase().includes(searchTerm.toLowerCase());
+      const q = searchTerm.trim().toLowerCase();
+      const clienteNomeCompleto = `${entrega.cliente?.nome || ''} ${((entrega.cliente as any)?.sobrenome) || ''}`
+        .trim()
+        .toLowerCase();
+      const clienteTelefone = entrega.cliente?.telefone || '';
+      const vendedorNome = entrega.vendedor?.nome?.toLowerCase() || '';
+      const enderecoStr = formatClienteAddress(entrega).toLowerCase();
+      const entregaId = (entrega.id || '').toLowerCase();
+
+      const matchesSearch =
+        q === '' ||
+        clienteNomeCompleto.includes(q) ||
+        clienteTelefone.includes(searchTerm.trim()) ||
+        vendedorNome.includes(q) ||
+        enderecoStr.includes(q) ||
+        entregaId.includes(q);
       
       const matchesVendedor = selectedVendedor === '' || entrega.vendedor_id === selectedVendedor;
       
@@ -156,7 +170,7 @@ const Entregas: React.FC = () => {
   };
 
   // Monta o endereço completo do cliente com tolerância a variações de capitalização
-  const formatClienteAddress = (entrega: Entrega) => {
+  function formatClienteAddress(entrega: Entrega) {
     const c: any = entrega.cliente || {};
     const rua = c?.endereco ?? entrega.cliente_endereco ?? '';
     const numero = c?.numero;
@@ -180,7 +194,7 @@ const Entregas: React.FC = () => {
     const parts = [...baseParts, cidadeEstado || null].filter(Boolean) as string[];
 
     return parts.length ? parts.join(', ') : 'N/A';
-  };
+  }
 
   const handleViewEntrega = (entrega: Entrega) => {
     

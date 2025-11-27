@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import DOMPurify from 'dompurify';
 import { 
   Calendar, 
   TrendingUp, 
@@ -323,6 +324,17 @@ const Relatorios: React.FC = () => {
   };
 
   // Utilidade: montar HTML fragmentado do relatório do vendedor com estilo que força texto preto
+  // Escapa texto seguro para evitar XSS
+  const escapeText = (value: any): string => {
+    const s = String(value ?? '');
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  };
+
   const buildVendorReportHtml = (vendedor: any) => {
     try {
       const entregasVendedor = Array.isArray(dadosPeriodo.entregas)
@@ -333,14 +345,14 @@ const Relatorios: React.FC = () => {
         ? dadosPeriodo.pagamentos.filter((p: any) => entregasVendedor.some((e: any) => e?.id === p?.entrega_id))
         : [];
 
-      const vendedorNome = String(vendedor?.nome || 'Vendedor');
-      const adminEmail = String(user?.email || 'Administrador');
+      const vendedorNome = escapeText(vendedor?.nome || 'Vendedor');
+      const adminEmail = escapeText(user?.email || 'Administrador');
       const hoje = new Date().toLocaleDateString('pt-BR');
 
       const entregasRows = entregasVendedor.map((e: any) => `
           <tr>
             <td>${new Date(String(e?.data_entrega || '')).toLocaleDateString('pt-BR')}</td>
-            <td>${String((e?.cliente as any)?.nome || e?.cliente_nome || 'N/A')}</td>
+            <td>${escapeText((e?.cliente as any)?.nome || e?.cliente_nome || 'N/A')}</td>
             <td>${formatCurrency(Number(e?.valor) || 0)}</td>
             <td>${e?.pago ? 'Pago' : 'Pendente'}</td>
           </tr>
@@ -348,12 +360,10 @@ const Relatorios: React.FC = () => {
 
       const pagamentosRows = pagamentosVendedor.map((p: any) => {
         // Tentar obter o nome do cliente diretamente do pagamento -> entrega -> cliente
-        const nomeClienteDireto = String(((p?.entregas as any)?.clientes?.nome) || '');
+        const nomeClienteDireto = escapeText(((p?.entregas as any)?.clientes?.nome) || '');
         // Fallback: buscar a entrega correspondente deste pagamento dentro das entregas do vendedor e pegar o nome do cliente
         const entregaMatch = entregasVendedor.find((e: any) => e?.id === p?.entrega_id);
-        const nomeClienteEntrega = String(
-          ((entregaMatch?.cliente as any)?.nome) || entregaMatch?.cliente_nome || ''
-        );
+        const nomeClienteEntrega = escapeText(((entregaMatch?.cliente as any)?.nome) || entregaMatch?.cliente_nome || '');
         const nomeCliente = nomeClienteDireto || nomeClienteEntrega || 'N/A';
 
         return `
@@ -443,7 +453,12 @@ const Relatorios: React.FC = () => {
       console.warn('Não foi possível abrir a janela de impressão.');
       return;
     }
-    printWindow.document.write(htmlDoc);
+    const sanitizedHtml = DOMPurify.sanitize(htmlDoc, {
+      ALLOWED_TAGS: ['html', 'head', 'body', 'meta', 'title', 'style', 'div', 'h1', 'h2', 'h3', 'p', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'span', 'strong', 'br'],
+      ALLOWED_ATTR: ['class', 'style', 'charset'],
+      ALLOW_DATA_ATTR: false
+    });
+    printWindow.document.write(sanitizedHtml);
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
@@ -455,11 +470,18 @@ const Relatorios: React.FC = () => {
     container.className = 'print-area';
     // Força cores neutras para evitar texto branco em fundo branco
     const content = buildVendorReportHtml(vendedor);
-    container.innerHTML = `<style>.print-area, .print-area * { color: #000 !important; background: #fff !important; }</style>${content}`;
+    const htmlContent = `<style>.print-area, .print-area * { color: #000 !important; background: #fff !important; }</style>${content}`;
+    container.innerHTML = DOMPurify.sanitize(htmlContent, {
+      ALLOWED_TAGS: ['html', 'head', 'body', 'meta', 'title', 'style', 'div', 'h1', 'h2', 'h3', 'p', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'span', 'strong', 'br'],
+      ALLOWED_ATTR: ['class', 'style', 'charset'],
+      ALLOW_DATA_ATTR: false
+    });
     document.body.appendChild(container);
     try {
       const html2pdf = await import('html2pdf.js');
-      const safeName = String(vendedor?.nome || 'vendedor').replace(/\s+/g, '-');
+      const safeName = String(vendedor?.nome || 'vendedor')
+        .replace(/\s+/g, '-')
+        .replace(/[^\w.-]/g, '');
       const opt = {
         margin: 1,
         filename: `relatorio-vendedor-${safeName}-${new Date().toISOString().split('T')[0]}.pdf`,

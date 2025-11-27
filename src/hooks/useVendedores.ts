@@ -1,6 +1,7 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import { useSupabaseQuery, useSupabaseMutation, CACHE_KEYS } from '../lib/supabaseCache';
+import { useSupabaseQuery, CACHE_KEYS } from '../lib/supabaseCache';
+import { handleSupabaseError } from '@/utils/supabaseErrorHandler';
 
 export interface Vendedor {
   id: string;
@@ -13,7 +14,7 @@ export interface Vendedor {
   comissao_percentual?: number;
   percentual_minimo?: number;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
 
 // Hook para listar todos os vendedores
@@ -69,48 +70,75 @@ export const useVendedoresByAdmin = (administrador_id: string, options?: { enabl
 };
 
 // Hook para criar vendedor
-export const useCreateVendedor = (options?: {
-  onSuccess?: (vendedor: Vendedor) => void;
-  onError?: (error: any) => void;
-}) => {
-  return useSupabaseMutation('VENDEDORES', 'insert', {
-    onSuccess: options?.onSuccess,
-    onError: options?.onError,
-    // Invalidar cache relacionado (entregas e pagamentos)
-    invalidateRelated: ['ENTREGAS', 'PAGAMENTOS'],
+export const useCreateVendedor = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (vendedor: Omit<Vendedor, 'id'>) => {
+      const { data, error } = await supabase
+        .from('vendedores')
+        .insert(vendedor)
+        .select()
+        .single();
+      
+      if (error) {
+        throw new Error(handleSupabaseError(error));
+      }
+      
+      return data as Vendedor;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.VENDEDORES] });
+    },
+    onError: (error) => {
+      console.error('Erro ao criar vendedor:', error);
+    }
   });
 };
 
 // Hook para atualizar vendedor
-export const useUpdateVendedor = (options?: {
-  onSuccess?: (vendedor: Vendedor) => void;
-  onError?: (error: any) => void;
-}) => {
-  return useSupabaseMutation('VENDEDORES', 'update', {
-    onSuccess: options?.onSuccess,
-    onError: options?.onError,
-    // Invalidar cache relacionado
-    invalidateRelated: ['ENTREGAS', 'PAGAMENTOS'],
+export const useUpdateVendedor = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: Partial<Vendedor> & { id: string }) => {
+      const { data, error } = await supabase
+        .from('vendedores')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) {
+        throw new Error(handleSupabaseError(error));
+      }
+      
+      return data as Vendedor;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.VENDEDORES] });
+    }
   });
 };
 
 // Hook para deletar vendedor
-export const useDeleteVendedor = (options?: {
-  onSuccess?: () => void;
-  onError?: (error: any) => void;
-}) => {
-  return useSupabaseMutation('VENDEDORES', 'delete', {
-    onSuccess: options?.onSuccess,
-    onError: options?.onError,
-    // Invalidar cache relacionado
-    invalidateRelated: ['ENTREGAS', 'PAGAMENTOS'],
-    // Atualização otimista para remoção
-    optimisticUpdate: {
-      updateFn: (oldData: Vendedor[], variables: { id: string }) => {
-        return oldData.filter(vendedor => vendedor.id !== variables.id);
-      },
-      rollbackFn: (oldData: Vendedor[]) => oldData, // Restaurar dados originais
+export const useDeleteVendedor = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const { error } = await supabase
+        .from('vendedores')
+        .delete()
+        .eq('id', id);
+      
+      if (error) {
+        throw new Error(handleSupabaseError(error));
+      }
     },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.VENDEDORES] });
+    }
   });
 };
 

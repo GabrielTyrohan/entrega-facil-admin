@@ -38,7 +38,7 @@ const PaymentStatusAutoChecker: React.FC = () => {
 
         // Verificação por data de vencimento (<= hoje)
         const hojeStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-        const rawVencStr: string | undefined = (adminData as any)?.data_vencimento || (adminData as any)?.data_vendimento;
+const rawVencStr: string | undefined = (adminData as any)?.data_vencimento;
 
         const normalizeDateStr = (value?: string): string | null => {
           if (!value) return null;

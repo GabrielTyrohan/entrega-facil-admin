@@ -1,5 +1,7 @@
-import { useSupabaseQuery, useSupabaseMutation } from '../lib/supabaseCache';
+import { useSupabaseQuery, CACHE_KEYS } from '../lib/supabaseCache';
+import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { handleSupabaseError } from '@/utils/supabaseErrorHandler';
 
 export interface Pagamento {
   id: string;
@@ -128,48 +130,76 @@ export const usePagamentosPorEntrega = (
 };
 
 // Hook para criar pagamento
-export const useCreatePagamento = (options?: {
-  onSuccess?: (pagamento: Pagamento) => void;
-  onError?: (error: any) => void;
-}) => {
-  return useSupabaseMutation('PAGAMENTOS', 'insert', {
-    onSuccess: options?.onSuccess,
-    onError: options?.onError,
-    // Invalidar cache relacionado
-    invalidateRelated: ['ENTREGAS', 'VENDEDORES'],
+export const useCreatePagamento = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (pagamento: Omit<Pagamento, 'id'>) => {
+      const { data, error } = await supabase
+        .from('pagamentos')
+        .insert(pagamento)
+        .select()
+        .single();
+      
+      if (error) {
+        throw new Error(handleSupabaseError(error));
+      }
+      
+      return data as Pagamento;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.VENDEDORES] });
+    }
   });
 };
 
 // Hook para atualizar pagamento
-export const useUpdatePagamento = (options?: {
-  onSuccess?: (pagamento: Pagamento) => void;
-  onError?: (error: any) => void;
-}) => {
-  return useSupabaseMutation('PAGAMENTOS', 'update', {
-    onSuccess: options?.onSuccess,
-    onError: options?.onError,
-    // Invalidar cache relacionado
-    invalidateRelated: ['ENTREGAS'],
+export const useUpdatePagamento = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: Partial<Pagamento> & { id: string }) => {
+      const { data, error } = await supabase
+        .from('pagamentos')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) {
+        throw new Error(handleSupabaseError(error));
+      }
+      
+      return data as Pagamento;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
+    }
   });
 };
 
 // Hook para deletar pagamento
-export const useDeletePagamento = (options?: {
-  onSuccess?: () => void;
-  onError?: (error: any) => void;
-}) => {
-  return useSupabaseMutation('PAGAMENTOS', 'delete', {
-    onSuccess: options?.onSuccess,
-    onError: options?.onError,
-    // Invalidar cache relacionado
-    invalidateRelated: ['ENTREGAS'],
-    // Atualização otimista para remoção
-    optimisticUpdate: {
-      updateFn: (oldData: Pagamento[], variables: { id: string }) => {
-        return oldData.filter(pagamento => pagamento.id !== variables.id);
-      },
-      rollbackFn: (oldData: Pagamento[]) => oldData,
+export const useDeletePagamento = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const { error } = await supabase
+        .from('pagamentos')
+        .delete()
+        .eq('id', id);
+      
+      if (error) {
+        throw new Error(handleSupabaseError(error));
+      }
     },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
+    }
   });
 };
 

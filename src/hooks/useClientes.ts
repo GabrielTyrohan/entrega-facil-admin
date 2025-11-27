@@ -1,6 +1,7 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import { useSupabaseQuery, useSupabaseMutation, CACHE_KEYS } from '../lib/supabaseCache';
+import { useSupabaseQuery, CACHE_KEYS } from '../lib/supabaseCache';
+import { handleSupabaseError } from '@/utils/supabaseErrorHandler';
 
 export interface Cliente {
   id: string;
@@ -124,48 +125,78 @@ export const useClientesPorCidade = (cidade: string, options?: { enabled?: boole
 };
 
 // Hook para criar cliente
-export const useCreateCliente = (options?: {
-  onSuccess?: (cliente: Cliente) => void;
-  onError?: (error: any) => void;
-}) => {
-  return useSupabaseMutation('CLIENTES', 'insert', {
-    onSuccess: options?.onSuccess,
-    onError: options?.onError,
-    // Invalidar cache relacionado (entregas e pagamentos podem ter clientes)
-    invalidateRelated: ['ENTREGAS', 'PAGAMENTOS'],
+export const useCreateCliente = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (cliente: Omit<Cliente, 'id'>) => {
+      const { data, error } = await supabase
+        .from('clientes')
+        .insert(cliente)
+        .select()
+        .single();
+      
+      if (error) {
+        throw new Error(handleSupabaseError(error));
+      }
+      
+      return data as Cliente;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CLIENTES] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] });
+    }
   });
 };
 
 // Hook para atualizar cliente
-export const useUpdateCliente = (options?: {
-  onSuccess?: (cliente: Cliente) => void;
-  onError?: (error: any) => void;
-}) => {
-  return useSupabaseMutation('CLIENTES', 'update', {
-    onSuccess: options?.onSuccess,
-    onError: options?.onError,
-    // Invalidar cache relacionado
-    invalidateRelated: ['ENTREGAS', 'PAGAMENTOS'],
+export const useUpdateCliente = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: Partial<Cliente> & { id: string }) => {
+      const { data, error } = await supabase
+        .from('clientes')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) {
+        throw new Error(handleSupabaseError(error));
+      }
+      
+      return data as Cliente;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CLIENTES] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] });
+    }
   });
 };
 
 // Hook para deletar cliente
-export const useDeleteCliente = (options?: {
-  onSuccess?: () => void;
-  onError?: (error: any) => void;
-}) => {
-  return useSupabaseMutation('CLIENTES', 'delete', {
-    onSuccess: options?.onSuccess,
-    onError: options?.onError,
-    // Invalidar cache relacionado
-    invalidateRelated: ['ENTREGAS', 'CESTAS'],
-    // Atualização otimista para remoção
-    optimisticUpdate: {
-      updateFn: (oldData: Cliente[], variables: { id: string }) => {
-        return oldData.filter(cliente => cliente.id !== variables.id);
-      },
-      rollbackFn: (oldData: Cliente[]) => oldData, // Restaurar dados originais
+export const useDeleteCliente = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const { error } = await supabase
+        .from('clientes')
+        .delete()
+        .eq('id', id);
+      
+      if (error) {
+        throw new Error(handleSupabaseError(error));
+      }
     },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CLIENTES] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CESTAS] });
+    }
   });
 };
 

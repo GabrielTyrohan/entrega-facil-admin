@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Truck, Eye, EyeOff, Clock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
 
 const LoginPage: React.FC = () => {
   const { user, signIn } = useAuth();
@@ -97,7 +96,9 @@ const LoginPage: React.FC = () => {
       return;
     }
 
-    if (!email || !password) {
+    const emailTrimmed = email.trim();
+
+    if (!emailTrimmed || !password) {
       setError('Por favor, preencha todos os campos');
       return;
     }
@@ -106,30 +107,8 @@ const LoginPage: React.FC = () => {
     setError('');
 
     try {
-      // Verificação pré-autenticação: status e data de vencimento do administrador
-      try {
-        const { data: admin, error: adminError } = await supabase
-          .from('administradores')
-          .select('status_pagamento, data_vencimento, data_vendimento')
-          .eq('email', email)
-          .maybeSingle();
-
-        if (!adminError && admin) {
-          const rawExpiration: any = admin.data_vencimento ?? admin.data_vendimento;
-          const exp = rawExpiration ? new Date(String(rawExpiration)) : null;
-          const today = new Date();
-          const normalize = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-          const expired = exp ? normalize(exp) <= normalize(today) : false;
-
-          if (admin.status_pagamento === 'vencido' || expired) {
-            setError('Acesso bloqueado por falta de pagamento');
-            setLoading(false);
-            return;
-          }
-        }
-      } catch {}
-
-      const result = await signIn(email, password);
+      // Autenticação direta; validações de administrador e pagamento ocorrem no signIn (por id)
+      const result = await signIn(emailTrimmed, password);
       
       if (result.error) {
         // Se houve erro no signIn, incrementa tentativas falhadas

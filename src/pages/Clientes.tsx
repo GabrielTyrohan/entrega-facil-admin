@@ -107,10 +107,22 @@ const Clientes: React.FC = () => {
   // Filtrar clientes baseado nos critérios de busca e ordenar por data de cadastro (decrescente)
   const filteredClientes = useMemo(() => {
     const filtered = clientes.filter((cliente: Cliente) => {
-      const matchesSearch = 
-        cliente.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        cliente.telefone?.includes(searchTerm) ||
-        cliente.endereco?.toLowerCase().includes(searchTerm.toLowerCase());
+      const q = searchTerm.trim().toLowerCase();
+      const nomeCompleto = `${cliente.nome} ${cliente.sobrenome || ''}`.trim().toLowerCase();
+      const email = cliente.email?.toLowerCase() || '';
+      const endereco = cliente.endereco?.toLowerCase() || '';
+      const telefone = cliente.telefone || '';
+      const cpf = cliente.cpf || '';
+      const vendedorNome = (vendedores.find((v: Vendedor) => v.id === cliente.vendedor_id)?.nome || '').toLowerCase();
+
+      const matchesSearch =
+        q === '' ||
+        nomeCompleto.includes(q) ||
+        email.includes(q) ||
+        endereco.includes(q) ||
+        telefone.includes(searchTerm.trim()) ||
+        cpf.replace(/\D/g, '').includes(searchTerm.replace(/\D/g, '')) ||
+        vendedorNome.includes(q);
       
       const matchesVendedor = selectedVendedor === '' || cliente.vendedor_id === selectedVendedor;
       
@@ -123,7 +135,7 @@ const Clientes: React.FC = () => {
       const dateB = new Date(b.created_at);
       return dateB.getTime() - dateA.getTime();
     });
-  }, [clientes, searchTerm, selectedVendedor]);
+  }, [clientes, searchTerm, selectedVendedor, vendedores]);
 
   // Lógica de paginação
   const totalPages = Math.ceil(filteredClientes.length / itemsPerPage);
@@ -209,7 +221,7 @@ const Clientes: React.FC = () => {
 
   const handleDeleteCliente = async (cliente: Cliente) => {
     try {
-      await deleteClienteMutation.mutateAsync(cliente.id);
+      await deleteClienteMutation.mutateAsync({ id: cliente.id });
     } catch {
       // Error handling without logging sensitive data
     }

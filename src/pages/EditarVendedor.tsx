@@ -3,7 +3,8 @@ import { ArrowLeft, Save, User, Mail, Phone, Lock, MapPin, Calendar, FileText, C
 import { useNavigate, useParams } from 'react-router-dom';
 import { VendedorService } from '../services/vendedorService';
 import { useAuth } from '../contexts/AuthContext';
-import { Vendedor } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
+import { toast } from '../utils/toast';
 
 interface DadosBancarios {
   banco: string;
@@ -167,37 +168,39 @@ const EditarVendedor: React.FC = () => {
     setLoading(true);
 
     try {
-      if (!id || !user?.id) {
-        alert('Dados inválidos para atualização.');
+      // Se tem senha, validar
+      if (formData.senha && !/^\d{6}$/.test(formData.senha)) {
+        toast.error('Senha deve conter exatamente 6 números');
         return;
       }
 
-      const vendedorService = new VendedorService(user.id);
+      const { data: { session } } = await supabase.auth.getSession();
       
-      // Preparar dados para atualização no formato do Supabase
-      const updateData: Partial<Vendedor> = {
-        nome: formData.nome,
-        email: formData.email,
-        telefone: formData.telefone,
-        endereco: formData.endereco,
-        percentual_minimo: Number(formData.percentualMinimo),
-        ativo: formData.ativo,
-        dados_bancarios: dadosBancarios
-      };
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/update-vendedor`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            vendedor_id: id,
+            ...formData
+          })
+        }
+      );
 
-      // Se uma nova senha foi fornecida, incluir na atualização
-      if (formData.senha && formData.senha.trim()) {
-        // Nota: Em um sistema real, a senha deveria ser hasheada antes de salvar
-        updateData.senha = Number(formData.senha);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erro ao atualizar vendedor');
       }
 
-      await vendedorService.update(id, updateData);
-      
-      alert('Vendedor atualizado com sucesso!');
+      toast.success('Vendedor atualizado com sucesso!');
       navigate('/vendedores');
-    } catch {
-      // Error handling without logging sensitive data
-      alert('Erro ao atualizar vendedor. Tente novamente.');
+    } catch (error: any) {
+      console.error('Erro ao atualizar vendedor:', error);
+      toast.error(error.message);
     } finally {
       setLoading(false);
     }

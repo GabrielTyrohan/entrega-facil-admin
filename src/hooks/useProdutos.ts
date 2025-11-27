@@ -1,7 +1,8 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import { useSupabaseQuery, useSupabaseMutation, CACHE_KEYS } from '../lib/supabaseCache';
+import { useSupabaseQuery, CACHE_KEYS } from '../lib/supabaseCache';
 import { useAuth } from '../contexts/AuthContext';
+import { handleSupabaseError } from '@/utils/supabaseErrorHandler';
 
 export interface Produto {
   id: string;
@@ -88,48 +89,75 @@ export const useProdutosPorCategoria = (categoria: string, options?: { enabled?:
 };
 
 // Hook para criar produto
-export const useCreateProduto = (options?: {
-  onSuccess?: (produto: Produto) => void;
-  onError?: (error: any) => void;
-}) => {
-  return useSupabaseMutation('PRODUTOS', 'insert', {
-    onSuccess: options?.onSuccess,
-    onError: options?.onError,
-    // Invalidar cache relacionado (cestas podem ter produtos)
-    invalidateRelated: ['CESTAS'],
+export const useCreateProduto = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (produto: Omit<Produto, 'id'>) => {
+      const { data, error } = await supabase
+        .from('produtos_cadastrado')
+        .insert(produto)
+        .select()
+        .single();
+      
+      if (error) {
+        throw new Error(handleSupabaseError(error));
+      }
+      
+      return data as Produto;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PRODUTOS] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CESTAS] });
+    }
   });
 };
 
 // Hook para atualizar produto
-export const useUpdateProduto = (options?: {
-  onSuccess?: (produto: Produto) => void;
-  onError?: (error: any) => void;
-}) => {
-  return useSupabaseMutation('PRODUTOS', 'update', {
-    onSuccess: options?.onSuccess,
-    onError: options?.onError,
-    // Invalidar cache relacionado
-    invalidateRelated: ['CESTAS'],
+export const useUpdateProduto = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: Partial<Produto> & { id: string }) => {
+      const { data, error } = await supabase
+        .from('produtos_cadastrado')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) {
+        throw new Error(handleSupabaseError(error));
+      }
+      
+      return data as Produto;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PRODUTOS] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CESTAS] });
+    }
   });
 };
 
 // Hook para deletar produto
-export const useDeleteProduto = (options?: {
-  onSuccess?: () => void;
-  onError?: (error: any) => void;
-}) => {
-  return useSupabaseMutation('PRODUTOS', 'delete', {
-    onSuccess: options?.onSuccess,
-    onError: options?.onError,
-    // Invalidar cache relacionado
-    invalidateRelated: ['CESTAS'],
-    // Atualização otimista para remoção
-    optimisticUpdate: {
-      updateFn: (oldData: Produto[], variables: { id: string }) => {
-        return oldData.filter(produto => produto.id !== variables.id);
-      },
-      rollbackFn: (oldData: Produto[]) => oldData, // Restaurar dados originais
+export const useDeleteProduto = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const { error } = await supabase
+        .from('produtos_cadastrado')
+        .delete()
+        .eq('id', id);
+      
+      if (error) {
+        throw new Error(handleSupabaseError(error));
+      }
     },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PRODUTOS] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CESTAS] });
+    }
   });
 };
 

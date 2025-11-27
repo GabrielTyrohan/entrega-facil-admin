@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { ArrowLeft, Save, User, Mail, Phone, Lock, MapPin, Calendar, FileText, CreditCard } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import * as vendedorService from '../services/vendedorService';
+import { supabase } from '../lib/supabase';
+import { toast } from '../utils/toast';
 
 interface DadosBancarios {
   banco: string;
@@ -129,92 +130,46 @@ const NovoVendedor: React.FC = () => {
     setLoading(true);
 
     try {
-      // Validações básicas
-      if (!formData.nome.trim()) {
-        alert('Nome é obrigatório');
-        setLoading(false);
-        return;
-      }
-      
-      if (!formData.email.trim()) {
-        alert('Email é obrigatório');
-        setLoading(false);
+      // Validar senha
+      if (!/^\d{6}$/.test(formData.senha)) {
+        toast.error('Senha deve conter exatamente 6 números');
         return;
       }
 
-      // Validação de email
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(formData.email.trim())) {
-        alert('Por favor, insira um email válido');
-        setLoading(false);
-        return;
-      }
+      const { data: { session } } = await supabase.auth.getSession();
       
-      if (!formData.senha) {
-        alert('Senha é obrigatória');
-        setLoading(false);
-        return;
-      }
-
-      if (formData.senha.length < 6) {
-        alert('A senha deve ter pelo menos 6 caracteres');
-        setLoading(false);
-        return;
-      }
-      
-      if (!user?.id) {
-        alert('Usuário não autenticado. Faça login novamente.');
-        setLoading(false);
-        return;
-      }
-
-      // Map form data to Vendedor interface structure
-      const vendedorData = {
-        nome: formData.nome.trim(),
-        email: formData.email.trim().toLowerCase(),
-        telefone: formData.telefone || undefined,
-        senha: formData.senha ? parseInt(formData.senha) : undefined, // Converter para número
-        endereco: formData.endereco || undefined,
-        data_inicio: formData.dataInicio || undefined,
-        tipo_vinculo: formData.tipoVinculo || undefined,
-        percentual_minimo: formData.percentualMinimo || undefined,
-        contrato: formData.contrato || undefined,
-        ativo: formData.ativo,
-        status: formData.status,
-        dados_bancarios: Object.keys(dadosBancarios).length > 0 && 
-                        (dadosBancarios.banco || dadosBancarios.agencia || dadosBancarios.conta) 
-                        ? dadosBancarios : undefined,
-        administrador_id: user?.id || ''
-      };
-
-      // Use the vendedorService to create the vendor
-      const result = await vendedorService.VendedorService.createVendedor(vendedorData);
-      
-      if (result) {
-        alert('Vendedor cadastrado com sucesso!');
-        navigate('/vendedores');
-      } else {
-        throw new Error('Falha ao criar vendedor - resultado vazio');
-      }
-    } catch (error) {
-      console.error('Erro detalhado:', error);
-      
-      // Mostrar erro mais específico
-      let errorMessage = 'Erro ao cadastrar vendedor. Tente novamente.';
-      
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      } else if (typeof error === 'object' && error !== null) {
-        // Se for um erro do Supabase
-        const supabaseError = error as Record<string, unknown>;
-        if (supabaseError.message) {
-          errorMessage = supabaseError.message as string;
-        } else if (supabaseError.error_description) {
-          errorMessage = supabaseError.error_description as string;
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-vendedor`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            ...formData,
+            administrador_id: user?.id
+          })
         }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erro ao criar vendedor');
       }
+
+      const result = await response.json();
       
-      alert(errorMessage);
+      // Mostrar senha ao admin
+      toast.success(
+        `Vendedor criado! Senha: ${result.senha_temporaria}`,
+        { duration: 10000 }
+      );
+      
+      navigate('/vendedores');
+    } catch (error: any) {
+      console.error('Erro ao criar vendedor:', error);
+      toast.error(error.message);
     } finally {
       setLoading(false);
     }

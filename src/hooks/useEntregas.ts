@@ -1,6 +1,7 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import { useSupabaseQuery, useSupabaseMutation, CACHE_KEYS } from '../lib/supabaseCache';
+import { useSupabaseQuery, CACHE_KEYS } from '../lib/supabaseCache';
+import { handleSupabaseError } from '@/utils/supabaseErrorHandler';
 
 export interface Entrega {
   id: string;
@@ -183,48 +184,80 @@ export const useEntregasPorCliente = (
 };
 
 // Hook para criar entrega
-export const useCreateEntrega = (options?: {
-  onSuccess?: (entrega: Entrega) => void;
-  onError?: (error: any) => void;
-}) => {
-  return useSupabaseMutation('ENTREGAS', 'insert', {
-    onSuccess: options?.onSuccess,
-    onError: options?.onError,
-    // Invalidar cache relacionado
-    invalidateRelated: ['CLIENTES', 'VENDEDORES', 'PAGAMENTOS'],
+export const useCreateEntrega = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (entrega: Omit<Entrega, 'id'>) => {
+      const { data, error } = await supabase
+        .from('entregas')
+        .insert(entrega)
+        .select()
+        .single();
+      
+      if (error) {
+        throw new Error(handleSupabaseError(error));
+      }
+      
+      return data as Entrega;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CLIENTES] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.VENDEDORES] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] });
+    }
   });
 };
 
 // Hook para atualizar entrega
-export const useUpdateEntrega = (options?: {
-  onSuccess?: (entrega: Entrega) => void;
-  onError?: (error: any) => void;
-}) => {
-  return useSupabaseMutation('ENTREGAS', 'update', {
-    onSuccess: options?.onSuccess,
-    onError: options?.onError,
-    // Invalidar cache relacionado
-    invalidateRelated: ['CLIENTES', 'VENDEDORES', 'PAGAMENTOS'],
+export const useUpdateEntrega = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: Partial<Entrega> & { id: string }) => {
+      const { data, error } = await supabase
+        .from('entregas')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) {
+        throw new Error(handleSupabaseError(error));
+      }
+      
+      return data as Entrega;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CLIENTES] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.VENDEDORES] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] });
+    }
   });
 };
 
 // Hook para deletar entrega
-export const useDeleteEntrega = (options?: {
-  onSuccess?: () => void;
-  onError?: (error: any) => void;
-}) => {
-  return useSupabaseMutation('ENTREGAS', 'delete', {
-    onSuccess: options?.onSuccess,
-    onError: options?.onError,
-    // Invalidar cache relacionado
-    invalidateRelated: ['PAGAMENTOS', 'CESTAS'],
-    // Atualização otimista para remoção
-    optimisticUpdate: {
-      updateFn: (oldData: Entrega[], variables: { id: string }) => {
-        return oldData.filter(entrega => entrega.id !== variables.id);
-      },
-      rollbackFn: (oldData: Entrega[]) => oldData, // Restaurar dados originais
+export const useDeleteEntrega = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const { error } = await supabase
+        .from('entregas')
+        .delete()
+        .eq('id', id);
+      
+      if (error) {
+        throw new Error(handleSupabaseError(error));
+      }
     },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CESTAS] });
+    }
   });
 };
 

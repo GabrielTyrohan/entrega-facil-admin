@@ -12,6 +12,17 @@ dist
 dist-ssr
 *.local
 
+# Build/Release artefacts (Electron)
+release/
+electron-cache/
+release/win-unpacked/
+release/*.exe
+release/*.zip
+electron/*.zip
+
+# Optional: ignore installers and large bundles
+*.asar
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -33,8 +33,9 @@ interface NavigationItem {
 
 const navigation: NavigationItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: Home, group: 'Principal' },
-  { name: 'Vendedores', href: '/vendedores', icon: Users, group: 'Gestão' },
-  { name: 'Clientes', href: '/clientes', icon: UserCheck, group: 'Gestão' },
+  { name: 'Vendedores', href: '/vendedores', icon: Users, group: 'Pessoas' },
+  { name: 'Funcionários', href: '/funcionarios', icon: UserCheck, group: 'Pessoas' },
+  { name: 'Clientes', href: '/clientes', icon: UserCheck, group: 'Pessoas' },
   { name: 'Entregas', href: '/entregas', icon: Truck, group: 'Operacional' },
   { name: 'Pagamentos', href: '/pagamentos', icon: CreditCard, group: 'Financeiro' },
   { name: 'Devedores', href: '/devedores', icon: AlertCircle, group: 'Financeiro' },
@@ -48,7 +49,7 @@ const navigation: NavigationItem[] = [
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     'Principal': true,
-    'Gestão': false,
+    'Pessoas': false,
     'Operacional': false,
     'Financeiro': false,
     'Catálogo': false,

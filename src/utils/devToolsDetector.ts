@@ -106,7 +106,7 @@ export class DevToolsDetector {
         <p style="margin-bottom: 15px;">Ferramentas de desenvolvedor detectadas!</p>
         <p style="margin-bottom: 15px;">Esta aplicação contém informações sensíveis.</p>
         <p style="margin-bottom: 20px;">O acesso não autorizado é monitorado.</p>
-        <button onclick="this.parentElement.parentElement.remove()" 
+        <button id="devtools-warning-dismiss" 
                 style="background: #ff4444; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 16px;">
           Entendi
         </button>
@@ -114,6 +114,14 @@ export class DevToolsDetector {
     `;
     
     document.body.appendChild(warningDiv);
+    const dismissBtn = document.getElementById('devtools-warning-dismiss');
+    if (dismissBtn) {
+      dismissBtn.addEventListener('click', () => {
+        if (warningDiv.parentElement) {
+          warningDiv.remove();
+        }
+      });
+    }
     
     // Auto-remove after 10 seconds
     setTimeout(() => {
