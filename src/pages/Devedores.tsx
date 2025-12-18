@@ -3,6 +3,16 @@ import { Search, Calendar, User, Phone, MapPin, AlertTriangle, Eye } from 'lucid
 import { useAuth } from '../contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { Skeleton } from "@/components/ui/Skeleton";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 interface DevedorData {
   cliente_id: string;
@@ -45,6 +55,8 @@ const Devedores: React.FC = () => {
   const [sortOption, setSortOption] = useState<string>('maior_atraso');
   const [modalAberto, setModalAberto] = useState(false);
   const [clienteSelecionado, setClienteSelecionado] = useState<ClienteDetalhes | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Função para fechar o modal
   const fecharModal = () => {
@@ -374,6 +386,87 @@ const Devedores: React.FC = () => {
     })
   );
 
+  // Função para calcular itens por página baseado no tamanho da tela
+  const calculateItemsPerPage = () => {
+    const height = window.innerHeight;
+    const width = window.innerWidth;
+    
+    // Altura disponível para a tabela (descontando header, filtros, etc.)
+    const availableHeight = height - 400; // ~400px para header, filtros, paginação
+    const rowHeight = 73; // altura aproximada de cada linha da tabela
+    
+    let baseItemsPerPage = Math.floor(availableHeight / rowHeight);
+    
+    // Ajustar baseado na largura da tela para melhor experiência
+    if (width >= 1920) { // 4K ou maior
+      baseItemsPerPage = Math.max(baseItemsPerPage, 15);
+    } else if (width >= 1440) { // Desktop grande
+      baseItemsPerPage = Math.max(baseItemsPerPage, 12);
+    } else if (width >= 1024) { // Desktop padrão
+      baseItemsPerPage = Math.max(baseItemsPerPage, 10);
+    } else { // Tablet/Mobile
+      baseItemsPerPage = Math.max(baseItemsPerPage, 8);
+    }
+    
+    // Garantir um mínimo e máximo razoável
+    return Math.min(Math.max(baseItemsPerPage, 5), 25);
+  };
+
+  // Atualizar itens por página quando a tela redimensionar
+  useEffect(() => {
+    const handleResize = () => {
+      const newItemsPerPage = calculateItemsPerPage();
+      setItemsPerPage(newItemsPerPage);
+      
+      // Ajustar página atual se necessário
+      const maxPage = Math.ceil(devedoresFiltrados.length / newItemsPerPage);
+      if (currentPage > maxPage && maxPage > 0) {
+        setCurrentPage(maxPage);
+      }
+    };
+
+    handleResize(); // Calcular inicial
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [devedoresFiltrados.length, currentPage]);
+
+  // Reset página quando filtro mudar
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedVendedor, sortOption]);
+
+  // Lógica de paginação
+  const totalPages = Math.ceil(devedoresFiltrados.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentDevedores = devedoresFiltrados.slice(startIndex, endIndex);
+
+  // Função para gerar números das páginas
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisiblePages = window.innerWidth >= 768 ? 7 : 5; // Mais páginas em telas maiores
+    
+    if (totalPages <= maxVisiblePages) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      const halfVisible = Math.floor(maxVisiblePages / 2);
+      let startPage = Math.max(1, currentPage - halfVisible);
+      const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+      
+      if (endPage - startPage < maxVisiblePages - 1) {
+        startPage = Math.max(1, endPage - maxVisiblePages + 1);
+      }
+      
+      for (let i = startPage; i <= endPage; i++) {
+        pages.push(i);
+      }
+    }
+    
+    return pages;
+  };
+
   // Calcular totais
   const totalDevido = devedoresFiltrados.reduce((sum, devedor) => {
     return sum + devedor.total_devido;
@@ -399,8 +492,86 @@ const Devedores: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="space-y-6">
+        {/* Header Skeleton */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <div className="flex items-center space-x-4">
+            <div className="text-right">
+              <Skeleton className="h-4 w-24 ml-auto mb-1" />
+              <Skeleton className="h-8 w-32" />
+            </div>
+            <div className="text-right">
+              <Skeleton className="h-4 w-24 ml-auto mb-1" />
+              <Skeleton className="h-8 w-16 ml-auto" />
+            </div>
+          </div>
+        </div>
+
+        {/* Filters Skeleton */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        </div>
+
+        {/* Table Skeleton */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  {[...Array(8)].map((_, i) => (
+                    <th key={i} className="px-6 py-3 text-left">
+                      <Skeleton className="h-4 w-24" />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
+                {[...Array(8)].map((_, i) => (
+                  <tr key={i}>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <Skeleton className="w-4 h-4 mr-2" />
+                        <div className="space-y-1">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-3 w-40" />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Skeleton className="h-4 w-32" />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Skeleton className="h-4 w-24" />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Skeleton className="h-4 w-16" />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Skeleton className="h-4 w-24" />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Skeleton className="h-6 w-16 rounded-full" />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Skeleton className="h-4 w-32" />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Skeleton className="h-8 w-8 rounded-full" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     );
   }
@@ -520,8 +691,12 @@ const Devedores: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {devedoresFiltrados.map((devedor) => (
-                  <tr key={`${devedor.cliente_id}_${devedor.vendedor_id}`} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                {currentDevedores.map((devedor, index) => (
+                  <tr 
+                    key={`${devedor.cliente_id}_${devedor.vendedor_id}`} 
+                    className="hover:bg-gray-50 dark:hover:bg-gray-700 animate-fade-in-up"
+                    style={{ animationDelay: `${index * 75}ms` }}
+                  >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <User className="w-4 h-4 text-gray-400 mr-2" />
@@ -583,183 +758,252 @@ const Devedores: React.FC = () => {
               </tbody>
             </table>
           </div>
-         )}
-       </div>
+        )}
+      </div>
 
-       {/* Modal de Detalhes do Cliente */}
-       {modalAberto && clienteSelecionado && (
-         <div 
-           className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50"
-           onClick={fecharModal}
-         >
-           <div 
-             className="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white dark:bg-gray-800"
-             onClick={(e) => e.stopPropagation()}
-           >
-             <div className="mt-3">
-               {/* Header do Modal */}
-               <div className="flex items-center justify-between mb-6">
-                 <div>
-                   <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-                     Detalhes do Cliente
-                   </h3>
-                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                     {clienteSelecionado.nome} {clienteSelecionado.sobrenome}
-                   </p>
-                 </div>
-                 <button
-                   onClick={fecharModal}
-                   className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                 >
-                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
-                   </svg>
-                 </button>
-               </div>
+      {/* Paginação */}
+      {totalPages > 1 && (
+        <div className="flex justify-center px-4">
+          <Pagination>
+            <PaginationContent className="flex-wrap gap-1">
+              <PaginationItem>
+                <PaginationPrevious 
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (currentPage > 1) setCurrentPage(currentPage - 1);
+                  }}
+                  className={`${currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} touch-manipulation`}
+                  size="default"
+                />
+              </PaginationItem>
+              
+              {getPageNumbers().map((pageNum, index, array) => {
+                const showEllipsisBefore = index === 0 && pageNum > 1;
+                const showEllipsisAfter = index === array.length - 1 && pageNum < totalPages;
+                
+                return (
+                  <React.Fragment key={pageNum}>
+                    {showEllipsisBefore && (
+                      <PaginationItem>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    )}
+                    
+                    <PaginationItem>
+                      <PaginationLink
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setCurrentPage(pageNum);
+                        }}
+                        isActive={currentPage === pageNum}
+                        className="cursor-pointer touch-manipulation"
+                        size="default"
+                      >
+                        {pageNum}
+                      </PaginationLink>
+                    </PaginationItem>
+                    
+                    {showEllipsisAfter && (
+                      <PaginationItem>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+              
+              <PaginationItem>
+                <PaginationNext 
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+                  }}
+                  className={`${currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'} touch-manipulation`}
+                  size="default"
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        </div>
+      )}
 
-               {/* Informações do Cliente */}
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                 <div>
-                   <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Nome Completo</p>
-                   <p className="text-sm text-gray-900 dark:text-white">
-                     {clienteSelecionado.nome} {clienteSelecionado.sobrenome}
-                   </p>
-                 </div>
-                 <div>
-                   <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Telefone</p>
-                   <p className="text-sm text-gray-900 dark:text-white">
-                     {formatarTelefone(clienteSelecionado.telefone)}
-                   </p>
-                 </div>
-                 <div className="md:col-span-2">
-                   <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Endereço</p>
-                   <p className="text-sm text-gray-900 dark:text-white">
-                     {clienteSelecionado.endereco}
-                   </p>
-                 </div>
-               </div>
+      {/* Modal de Detalhes do Cliente */}
+      {modalAberto && clienteSelecionado && (
+        <div 
+          className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50"
+          onClick={fecharModal}
+        >
+          <div 
+            className="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white dark:bg-gray-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mt-3">
+              {/* Header do Modal */}
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                    Detalhes do Cliente
+                  </h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {clienteSelecionado.nome} {clienteSelecionado.sobrenome}
+                  </p>
+                </div>
+                <button
+                  onClick={fecharModal}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                  </svg>
+                </button>
+              </div>
 
-               {/* Histórico de Entregas */}
-               <div>
-                 <h4 className="text-md font-medium text-gray-900 dark:text-white mb-4">
-                   Histórico de Entregas ({clienteSelecionado.entregas.filter(e => e.valor_devido > 0).length} cestas devendo)
-                 </h4>
-                 
-                 <div className="overflow-x-auto">
-                   <table className="w-full text-sm">
-                     <thead className="bg-gray-50 dark:bg-gray-700">
-                       <tr>
-                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
-                           Produto
-                         </th>
-                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
-                           Data Entrega
-                         </th>
-                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
-                           Data Retorno
-                         </th>
-                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
-                           Dias Atraso
-                         </th>
-                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
-                           Valor Total
-                         </th>
-                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
-                           Valor Pago
-                         </th>
-                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
-                           Valor Devido
-                         </th>
-                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
-                           Status
-                         </th>
-                       </tr>
-                     </thead>
-                     <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                       {clienteSelecionado.entregas.map((entrega) => (
-                         <tr key={entrega.id}>
-                           <td className="px-4 py-2 text-gray-900 dark:text-white">
-                             {entrega.produto_nome}
-                           </td>
-                           <td className="px-4 py-2 text-gray-900 dark:text-white">
-                             {formatDate(entrega.data_entrega)}
-                           </td>
-                           <td className="px-4 py-2 text-gray-900 dark:text-white">
-                             {formatDate(entrega.dataRetorno)}
-                           </td>
-                           <td className="px-4 py-2">
-                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                               entrega.valor_pago >= entrega.valor
-                                 ? 'text-green-800 bg-green-100'
-                                 : 'text-red-800 bg-red-100'
-                             }`}>
-                               {entrega.valor_pago >= entrega.valor ? 'Quitado' : `${entrega.dias_atraso} dias`}
-                             </span>
-                           </td>
-                           <td className="px-4 py-2 text-gray-900 dark:text-white">
-                             {formatCurrency(entrega.valor)}
-                           </td>
-                           <td className="px-4 py-2 text-gray-900 dark:text-white">
-                             {formatCurrency(entrega.valor_pago)}
-                           </td>
-                           <td className="px-4 py-2 text-gray-900 dark:text-white">
-                             {formatCurrency(entrega.valor_devido)}
-                           </td>
-                           <td className="px-4 py-2">
-                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                               entrega.valor_pago >= entrega.valor
-                                 ? 'text-green-800 bg-green-100' 
-                                 : entrega.valor_devido > 0 
-                                   ? 'text-red-800 bg-red-100' 
-                                   : 'text-yellow-800 bg-yellow-100'
-                             }`}>
-                               {entrega.valor_pago >= entrega.valor ? 'Pago' : entrega.valor_devido > 0 ? 'Devendo' : 'Parcial'}
-                             </span>
-                           </td>
-                         </tr>
-                       ))}
-                     </tbody>
-                   </table>
-                 </div>
+              {/* Informações do Cliente */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                <div>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Nome Completo</p>
+                  <p className="text-sm text-gray-900 dark:text-white">
+                    {clienteSelecionado.nome} {clienteSelecionado.sobrenome}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Telefone</p>
+                  <p className="text-sm text-gray-900 dark:text-white">
+                    {formatarTelefone(clienteSelecionado.telefone)}
+                  </p>
+                </div>
+                <div className="md:col-span-2">
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Endereço</p>
+                  <p className="text-sm text-gray-900 dark:text-white">
+                    {clienteSelecionado.endereco}
+                  </p>
+                </div>
+              </div>
 
-                 {/* Resumo Financeiro */}
-                 <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-                   <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
-                     <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Total de Entregas</p>
-                     <p className="text-2xl font-bold text-blue-900 dark:text-blue-300">
-                       {formatCurrency(clienteSelecionado.entregas.reduce((sum, e) => sum + e.valor, 0))}
-                     </p>
-                   </div>
-                   <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
-                     <p className="text-sm font-medium text-green-600 dark:text-green-400">Total Pago</p>
-                     <p className="text-2xl font-bold text-green-900 dark:text-green-300">
-                       {formatCurrency(clienteSelecionado.entregas.reduce((sum, e) => sum + e.valor_pago, 0))}
-                     </p>
-                   </div>
-                   <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg">
-                     <p className="text-sm font-medium text-red-600 dark:text-red-400">Total Devido</p>
-                     <p className="text-2xl font-bold text-red-900 dark:text-red-300">
-                       {formatCurrency(clienteSelecionado.entregas.filter(e => e.valor_devido > 0).reduce((sum, e) => sum + e.valor_devido, 0))}
-                     </p>
-                   </div>
-                 </div>
-               </div>
+              {/* Histórico de Entregas */}
+              <div>
+                <h4 className="text-md font-medium text-gray-900 dark:text-white mb-4">
+                  Histórico de Entregas ({clienteSelecionado.entregas.filter(e => e.valor_devido > 0).length} cestas devendo)
+                </h4>
+                
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 dark:bg-gray-700">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
+                          Produto
+                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
+                          Data Entrega
+                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
+                          Data Retorno
+                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
+                          Dias Atraso
+                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
+                          Valor Total
+                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
+                          Valor Pago
+                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
+                          Valor Devido
+                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
+                          Status
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                      {clienteSelecionado.entregas.map((entrega) => (
+                        <tr key={entrega.id}>
+                          <td className="px-4 py-2 text-gray-900 dark:text-white">
+                            {entrega.produto_nome}
+                          </td>
+                          <td className="px-4 py-2 text-gray-900 dark:text-white">
+                            {formatDate(entrega.data_entrega)}
+                          </td>
+                          <td className="px-4 py-2 text-gray-900 dark:text-white">
+                            {formatDate(entrega.dataRetorno)}
+                          </td>
+                          <td className="px-4 py-2">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              entrega.valor_pago >= entrega.valor
+                                ? 'text-green-800 bg-green-100'
+                                : 'text-red-800 bg-red-100'
+                            }`}>
+                              {entrega.valor_pago >= entrega.valor ? 'Quitado' : `${entrega.dias_atraso} dias`}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 text-gray-900 dark:text-white">
+                            {formatCurrency(entrega.valor)}
+                          </td>
+                          <td className="px-4 py-2 text-gray-900 dark:text-white">
+                            {formatCurrency(entrega.valor_pago)}
+                          </td>
+                          <td className="px-4 py-2 text-gray-900 dark:text-white">
+                            {formatCurrency(entrega.valor_devido)}
+                          </td>
+                          <td className="px-4 py-2">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              entrega.valor_pago >= entrega.valor
+                                ? 'text-green-800 bg-green-100' 
+                                : entrega.valor_devido > 0 
+                                  ? 'text-red-800 bg-red-100' 
+                                  : 'text-yellow-800 bg-yellow-100'
+                            }`}>
+                              {entrega.valor_pago >= entrega.valor ? 'Pago' : entrega.valor_devido > 0 ? 'Devendo' : 'Parcial'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
 
-               {/* Footer do Modal */}
-               <div className="mt-6 flex justify-end">
-                 <button
-                   onClick={fecharModal}
-                   className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-400 dark:hover:bg-gray-500"
-                 >
-                   Fechar
-                 </button>
-               </div>
-             </div>
-           </div>
-         </div>
-       )}
-     </div>
-   );
+                {/* Resumo Financeiro */}
+                <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+                    <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Total de Entregas</p>
+                    <p className="text-2xl font-bold text-blue-900 dark:text-blue-300">
+                      {formatCurrency(clienteSelecionado.entregas.reduce((sum, e) => sum + e.valor, 0))}
+                    </p>
+                  </div>
+                  <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
+                    <p className="text-sm font-medium text-green-600 dark:text-green-400">Total Pago</p>
+                    <p className="text-2xl font-bold text-green-900 dark:text-green-300">
+                      {formatCurrency(clienteSelecionado.entregas.reduce((sum, e) => sum + e.valor_pago, 0))}
+                    </p>
+                  </div>
+                  <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg">
+                    <p className="text-sm font-medium text-red-600 dark:text-red-400">Total Devido</p>
+                    <p className="text-2xl font-bold text-red-900 dark:text-red-300">
+                      {formatCurrency(clienteSelecionado.entregas.filter(e => e.valor_devido > 0).reduce((sum, e) => sum + e.valor_devido, 0))}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer do Modal */}
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={fecharModal}
+                  className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-400 dark:hover:bg-gray-500"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default Devedores;

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { TrendingUp, Users, AlertTriangle, Truck, DollarSign } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { Skeleton } from '../components/ui/Skeleton';
 import { 
   useVendedoresAtivos, 
   useEntregasDoMes, 
@@ -9,6 +10,7 @@ import {
   useFaturamentoMensal,
   useTopVendedores
 } from '../hooks/useDashboard';
+import { useCountUp } from '../hooks/useCountUp';
 
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
@@ -49,12 +51,20 @@ const Dashboard: React.FC = () => {
   };
 
   // Hooks para buscar dados
-  const { data: vendedoresAtivos } = useVendedoresAtivos(user?.id || '');
+  const { data: vendedoresAtivos, isLoading: isLoadingVendedores } = useVendedoresAtivos(user?.id || '');
   const entregasDoMes = useEntregasDoMes(user?.id || '');
+  const isLoadingEntregas = entregasDoMes?.currentMonth?.isLoading || entregasDoMes?.previousMonth?.isLoading;
+  
   const faturamentoDoMes = useFaturamentoDoMes(user?.id || '');
-  const { data: valoresEmFalta } = useValoresEmFalta(user?.id || '');
+  const isLoadingFaturamento = faturamentoDoMes?.currentMonth?.isLoading || faturamentoDoMes?.previousMonth?.isLoading;
+
+  const { data: valoresEmFalta, isLoading: isLoadingValoresEmFalta } = useValoresEmFalta(user?.id || '');
+  
   const faturamentoMensal = useFaturamentoMensal(user?.id || '');
+  const isLoadingFaturamentoMensal = faturamentoMensal?.isLoading;
+
   const topVendedores = useTopVendedores(user?.id || '');
+  const isLoadingTopVendedores = topVendedores?.isLoading;
 
   // Calcular totais
   const totalVendedoresAtivos = (vendedoresAtivos as Record<string, unknown>[])?.length || 0;
@@ -67,6 +77,19 @@ const Dashboard: React.FC = () => {
     const valorPago = item.valor_total_pago || 0;
     return sum + Math.max(0, (valorEntrega as number) - (valorPago as number));
   }, 0) || 0;
+
+  // Valores animados
+  const faturamentoAnimado = useCountUp({
+    end: totalFaturamentoAtual,
+    duration: 800,
+    decimals: 2
+  });
+
+  const faltanteAnimado = useCountUp({
+    end: totalValoresEmFalta,
+    duration: 800,
+    decimals: 2
+  });
 
   // Calcular percentuais
   const percentualEntregas = totalEntregasAnterior > 0 
@@ -143,12 +166,22 @@ const Dashboard: React.FC = () => {
 
   const stats = [
     {
-      title: 'Vendedores Ativos',
-      value: totalVendedoresAtivos.toString(),
-      change: '+0%',
+      title: 'Faturamento',
+      value: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(faturamentoAnimado)),
+      change: `${parseFloat(percentualFaturamento) >= 0 ? '+' : ''}${percentualFaturamento}%`,
+      changeType: parseFloat(percentualFaturamento) >= 0 ? 'increase' : 'decrease',
+      icon: DollarSign,
+      color: 'bg-emerald-500',
+      isLoading: isLoadingFaturamento
+    },
+    {
+      title: 'Faltante',
+      value: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(faltanteAnimado)),
+      change: '0%',
       changeType: 'neutral',
-      icon: Users,
-      color: 'bg-blue-500'
+      icon: AlertTriangle,
+      color: 'bg-red-500',
+      isLoading: isLoadingValoresEmFalta
     },
     {
       title: 'Entregas do Mês',
@@ -156,23 +189,17 @@ const Dashboard: React.FC = () => {
       change: `${parseFloat(percentualEntregas) >= 0 ? '+' : ''}${percentualEntregas}%`,
       changeType: parseFloat(percentualEntregas) >= 0 ? 'increase' : 'decrease',
       icon: Truck,
-      color: 'bg-green-500'
+      color: 'bg-green-500',
+      isLoading: isLoadingEntregas
     },
     {
-      title: 'Faturamento',
-      value: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalFaturamentoAtual),
-      change: `${parseFloat(percentualFaturamento) >= 0 ? '+' : ''}${percentualFaturamento}%`,
-      changeType: parseFloat(percentualFaturamento) >= 0 ? 'increase' : 'decrease',
-      icon: DollarSign,
-      color: 'bg-emerald-500'
-    },
-    {
-      title: 'Faltante',
-      value: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalValoresEmFalta),
-      change: '0%',
+      title: 'Vendedores Ativos',
+      value: totalVendedoresAtivos.toString(),
+      change: '+0%',
       changeType: 'neutral',
-      icon: AlertTriangle,
-      color: 'bg-red-500'
+      icon: Users,
+      color: 'bg-blue-500',
+      isLoading: isLoadingVendedores
     }
   ];
 
@@ -194,8 +221,18 @@ const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         {stats.map((stat, index) => (
           <div key={index} className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+            {stat.isLoading ? (
+               <div className="flex items-center justify-between">
+                 <div className="flex-1 min-w-0">
+                    <Skeleton className="h-4 w-24 mb-2" />
+                    <Skeleton className="h-7 w-20 mb-2" />
+                    <Skeleton className="h-4 w-24 mt-2" />
+                 </div>
+                 <Skeleton className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg ml-3 flex-shrink-0" />
+               </div>
+            ) : (
             <div className="flex items-center justify-between">
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 animate-fade-in-up">
                 <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1 truncate">{stat.title}</p>
                 <p className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white break-words">{stat.value}</p>
                 {/* Variação: mostra porcentagem ou um espaçador invisível para manter altura consistente */}
@@ -221,6 +258,7 @@ const Dashboard: React.FC = () => {
                 <stat.icon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </div>
             </div>
+            )}
           </div>
         ))}
       </div>
@@ -231,6 +269,21 @@ const Dashboard: React.FC = () => {
         <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 relative">
           <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-4">Faturamento Mensal</h3>
           
+          {isLoadingFaturamentoMensal ? (
+            <div>
+               <div className="h-48 sm:h-64 flex items-end justify-between space-x-1 sm:space-x-2 relative overflow-x-auto">
+                 {[...Array(12)].map((_, i) => (
+                   <Skeleton key={i} className="flex-1 min-w-[20px] rounded-t-sm" style={{ height: `${[30, 50, 40, 70, 50, 80, 60, 90, 70, 50, 60, 40][i]}%` }} />
+                 ))}
+               </div>
+               <div className="flex justify-between mt-2 overflow-x-auto space-x-1">
+                 {[...Array(12)].map((_, i) => (
+                   <Skeleton key={i} className="h-3 w-6 flex-shrink-0" />
+                 ))}
+               </div>
+            </div>
+          ) : (
+          <>
           {/* Tooltip */}
           {hoveredColumn !== null && (
             <div 
@@ -255,8 +308,11 @@ const Dashboard: React.FC = () => {
             {faturamentoMensalData.map((data: Record<string, unknown>, index: number) => (
               <div 
                 key={index} 
-                className="flex-1 min-w-[20px] bg-blue-500 rounded-t-sm opacity-80 hover:opacity-100 transition-all duration-200 cursor-pointer hover:bg-blue-600 touch-manipulation" 
-                style={{ height: `${data.height}%` }}
+                className="flex-1 min-w-[20px] bg-blue-500 rounded-t-sm opacity-80 hover:opacity-100 transition-all duration-200 cursor-pointer hover:bg-blue-600 touch-manipulation animate-grow-up" 
+                style={{ 
+                  height: `${data.height}%`,
+                  animationDelay: `${index * 100}ms`
+                }}
                 onMouseEnter={(e) => {
                    const rect = e.currentTarget.getBoundingClientRect();
                    const containerRect = e.currentTarget.parentElement?.getBoundingClientRect();
@@ -285,14 +341,36 @@ const Dashboard: React.FC = () => {
               <span key={index} className="flex-shrink-0">{String(data.month || '')}</span>
             ))}
           </div>
+          </>
+          )}
         </div>
 
         {/* Top Vendedores */}
         <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700">
           <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-4">Top Vendedores</h3>
+          {isLoadingTopVendedores ? (
+            <div className="space-y-4">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex items-center justify-between">
+                   <div className="flex items-center min-w-0 flex-1">
+                     <Skeleton className="w-6 h-6 sm:w-8 sm:h-8 rounded-full flex-shrink-0" />
+                     <div className="ml-2 sm:ml-3 min-w-0 flex-1 space-y-2">
+                       <Skeleton className="h-4 w-3/4" />
+                       <Skeleton className="h-3 w-1/2" />
+                     </div>
+                   </div>
+                   <Skeleton className="h-4 w-20 ml-2" />
+                </div>
+              ))}
+            </div>
+          ) : (
           <div className="space-y-3 sm:space-y-4">
             {topVendedoresData.length > 0 ? topVendedoresData.map((seller: { name: string; sales: string; totalValue: string }, index: number) => (
-              <div key={index} className="flex items-center justify-between">
+              <div 
+                key={index} 
+                className="flex items-center justify-between animate-fade-in-up"
+                style={{ animationDelay: `${index * 150}ms` }}
+              >
                 <div className="flex items-center min-w-0 flex-1">
                   <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-white text-xs sm:text-sm font-medium flex-shrink-0 ${
                     index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-gray-400' : index === 2 ? 'bg-orange-600' : 'bg-blue-500'
@@ -312,6 +390,7 @@ const Dashboard: React.FC = () => {
               <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Nenhum vendedor encontrado</p>
             )}
           </div>
+          )}
         </div>
       </div>
     </div>

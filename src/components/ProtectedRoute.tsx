@@ -1,36 +1,42 @@
 import React from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import LoadingScreen from './ui/LoadingScreen';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
-  const { user, loading, paymentExpired } = useAuth();
+  const { user, loading, paymentExpired, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Se não há usuário, redireciona para login imediatamente,
-  // mesmo que esteja em estado de loading (ex.: during logout)
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
+  const handleCancelLoading = async () => {
+    console.log('Cancelando carregamento e fazendo logout...');
+    try {
+      await signOut();
+      console.log('Logout concluído, navegando para login...');
+      navigate('/login', { replace: true });
+    } catch (error) {
+      console.error('Erro ao cancelar:', error);
+      // Força navegação mesmo com erro
+      navigate('/login', { replace: true });
+    }
+  };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="text-center space-y-3">
-          <div>Carregando...</div>
-          <button
-            onClick={() => navigate('/login', { replace: true })}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
-          >
-            Ir para Login
-          </button>
-        </div>
-      </div>
+      <LoadingScreen 
+        onCancel={handleCancelLoading}
+        cancelText="Demorando muito? Voltar para Login"
+      />
     );
+  }
+
+  // Se não há usuário, redireciona para login imediatamente
+  if (!user) {
+    return <Navigate to="/login" replace />;
   }
 
   if (user.role !== 'admin') {

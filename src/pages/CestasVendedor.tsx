@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ShoppingBasket, Plus, Search, Filter, Trash2, Edit, Eye, User, Calendar, AlertCircle, MoreHorizontal, Loader2, X, Package } from 'lucide-react';
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useNavigate } from 'react-router-dom';
 import {
   DropdownMenu,
@@ -8,6 +9,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useCestas, CestaData } from '../hooks/useCestas';
+import { CestaService } from '../services/cestaService';
+import { toast } from '@/utils/toast';
 
 // Usar a interface CestaData do hook
 type Cesta = CestaData;
@@ -25,6 +28,7 @@ const CestasVendedor: React.FC = () => {
   const [selectedCesta, setSelectedCesta] = useState<Cesta | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [cestaParaExcluir, setCestaParaExcluir] = useState<Cesta | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Filtrar cestas
   useEffect(() => {
@@ -43,7 +47,14 @@ const CestasVendedor: React.FC = () => {
       );
     }
 
-    setFilteredCestas(filtered);
+    // Apenas atualiza se o valor realmente mudou para evitar loops infinitos
+    // e "Maximum update depth exceeded"
+    setFilteredCestas(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(filtered)) {
+            return prev;
+        }
+        return filtered;
+    });
   }, [cestas, searchTerm, statusFilter]);
 
   const handleViewCesta = (cesta: Cesta) => {
@@ -56,17 +67,24 @@ const CestasVendedor: React.FC = () => {
   };
 
   const handleDeleteCesta = async () => {
+    if (!cestaParaExcluir) return;
+    setIsDeleting(true);
     try {
-      // Implementar exclusão no Supabase quando disponível
+      await CestaService.deleteCesta(cestaParaExcluir.id);
+      toast.success('Cesta excluída com sucesso!');
+      setCestaParaExcluir(null);
       await refetch();
-    } catch {
-      // Error handling sem expor dados sensíveis
+    } catch (err: any) {
+      const message = err?.message || 'Erro ao excluir a cesta. Tente novamente.';
+      toast.error(message);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
   const solicitarExclusaoCesta = (cesta: Cesta) => {
     if (cesta.status === 'em_uso') {
-      alert('Não é possível excluir uma cesta em uso. Finalize ou retorne a cesta primeiro.');
+      toast.error('Não é possível excluir uma cesta em uso. Finalize ou retorne a cesta primeiro.');
       return;
     }
     setCestaParaExcluir(cesta);
@@ -110,6 +128,79 @@ const CestasVendedor: React.FC = () => {
       year: 'numeric'
     });
   };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-64" />
+            <Skeleton className="h-4 w-96" />
+          </div>
+          <Skeleton className="h-10 w-32 rounded-lg" />
+        </div>
+
+        {/* Filters Skeleton */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0 md:space-x-4">
+            <Skeleton className="h-10 flex-1 max-w-md" />
+            <Skeleton className="h-10 w-40" />
+          </div>
+        </div>
+
+        {/* Table Skeleton */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  {[...Array(6)].map((_, i) => (
+                    <th key={i} className="px-6 py-3 text-left">
+                      <Skeleton className="h-4 w-24" />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {[...Array(8)].map((_, i) => (
+                  <tr key={i}>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <Skeleton className="h-10 w-10 rounded-full mr-4" />
+                        <div className="space-y-1">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-3 w-24" />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <Skeleton className="w-4 h-4 mr-2" />
+                        <Skeleton className="h-4 w-24" />
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Skeleton className="h-4 w-32" />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Skeleton className="h-4 w-24" />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Skeleton className="h-6 w-20 rounded-full" />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Skeleton className="h-8 w-8 ml-auto rounded-lg" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -162,15 +253,7 @@ const CestasVendedor: React.FC = () => {
         </div>
       </div>
 
-      {/* Loading State */}
-      {isLoading && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-8 shadow-sm border border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-            <span className="ml-3 text-gray-600 dark:text-gray-400">Carregando cestas...</span>
-          </div>
-        </div>
-      )}
+      {/* Loading State - Removido (substituído por Skeleton Shine) */}
 
       {/* Error State */}
       {error && (
@@ -223,8 +306,12 @@ const CestasVendedor: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {filteredCestas.map((cesta) => (
-                  <tr key={cesta.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                {filteredCestas.map((cesta, index) => (
+                  <tr 
+                    key={cesta.id} 
+                    className="hover:bg-gray-50 dark:hover:bg-gray-700 animate-fade-in-up"
+                    style={{ animationDelay: `${index * 75}ms` }}
+                  >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-10 w-10">
@@ -503,6 +590,58 @@ const CestasVendedor: React.FC = () => {
         </div>
       )}
 
+      {/* Modal de Confirmação de Exclusão */}
+      {cestaParaExcluir && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-lg w-full">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Confirmar exclusão</h2>
+              <button
+                onClick={() => setCestaParaExcluir(null)}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+              </button>
+            </div>
+
+            {/* Conteúdo */}
+            <div className="p-6 space-y-4">
+              <p className="text-gray-700 dark:text-gray-300">
+                Tem certeza que deseja excluir a cesta
+                <span className="font-semibold"> {cestaParaExcluir.cesta_nome} </span>
+                do vendedor
+                <span className="font-semibold"> {cestaParaExcluir.vendedor_nome}</span>?
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Esta ação removerá a cesta e todos os itens associados. Não é possível desfazer.
+              </p>
+
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  onClick={() => setCestaParaExcluir(null)}
+                  className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDeleteCesta}
+                  disabled={isDeleting}
+                  className="bg-red-600 hover:bg-red-700 disabled:bg-red-600/60 text-white px-4 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
+                >
+                  {isDeleting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                  <span>Excluir</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {cestaParaExcluir && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg w-[90%] max-w-sm p-6">
@@ -537,3 +676,4 @@ const CestasVendedor: React.FC = () => {
 };
 
 export default CestasVendedor;
+

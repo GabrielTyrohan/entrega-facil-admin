@@ -37,7 +37,7 @@ export const useVendedores = (options?: {
     query = query.eq('administrador_id', options.administrador_id);
   }
 
-  return useSupabaseQuery('VENDEDORES', query, {
+  return useSupabaseQuery('VENDEDORES', query, [CACHE_KEYS.VENDEDORES, options?.administrador_id, { ativo: options?.ativo }], {
     enabled: options?.enabled,
   });
 };
@@ -50,7 +50,7 @@ export const useVendedor = (id: string, options?: { enabled?: boolean }) => {
     .eq('id', id)
     .single();
 
-  return useSupabaseQuery('VENDEDORES', query, {
+  return useSupabaseQuery('VENDEDORES', query, [CACHE_KEYS.VENDEDORES, id], {
     enabled: options?.enabled && !!id,
   });
 };
@@ -64,7 +64,7 @@ export const useVendedoresByAdmin = (administrador_id: string, options?: { enabl
     .eq('ativo', true)
     .order('nome');
 
-  return useSupabaseQuery('VENDEDORES', query, {
+  return useSupabaseQuery('VENDEDORES', query, [CACHE_KEYS.VENDEDORES, administrador_id, 'list'], {
     enabled: options?.enabled && !!administrador_id,
   }) as { data: Vendedor[]; isLoading: boolean; error: any };
 };
@@ -156,7 +156,7 @@ export const useEstatisticasVendedores = (
     query = query.eq('administrador_id', administrador_id);
   }
 
-  return useSupabaseQuery('VENDEDORES', query, {
+  return useSupabaseQuery('VENDEDORES', query, [CACHE_KEYS.VENDEDORES, 'stats', administrador_id], {
     enabled: options?.enabled,
   });
 };
@@ -182,7 +182,7 @@ export const useVendedoresComPerformance = (
     query = query.eq('administrador_id', administrador_id || '');
   }
 
-  return useSupabaseQuery('VENDEDORES', query, {
+  return useSupabaseQuery('VENDEDORES', query, [CACHE_KEYS.VENDEDORES, 'performance', administrador_id], {
     enabled: options?.enabled && !!administrador_id,
   });
 };
@@ -225,7 +225,7 @@ export const useVendedoresPaginados = (
   const to = from + limit - 1;
   query = query.range(from, to);
 
-  return useSupabaseQuery('VENDEDORES', query, {
+  return useSupabaseQuery('VENDEDORES', query, [CACHE_KEYS.VENDEDORES, 'paginated', page, limit, options], {
     enabled: options?.enabled && !!options?.administrador_id,
   });
 };

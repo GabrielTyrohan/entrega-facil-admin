@@ -1,5 +1,6 @@
 import { useSupabaseQuery } from '../lib/supabaseCache';
 import { supabase } from '../lib/supabase';
+import { CACHE_KEYS } from '../lib/cache/cacheConfig';
 
 export interface Responsavel {
   id: string;
@@ -17,7 +18,7 @@ export const useResponsaveisPorCliente = (cliente_id: string, options?: { enable
     .select('*')
     .eq('cliente_id', cliente_id);
 
-  return useSupabaseQuery('CLIENTES', query, {
+  return useSupabaseQuery('RESPONSAVEIS', query, [CACHE_KEYS.RESPONSAVEIS, cliente_id], {
     enabled: options?.enabled && !!cliente_id,
   });
 };

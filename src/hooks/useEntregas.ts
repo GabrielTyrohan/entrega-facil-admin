@@ -101,7 +101,7 @@ export const useEntregas = (options?: {
     query = query.lte('data_entrega', options.data_fim);
   }
 
-  return useSupabaseQuery('ENTREGAS', query, {
+  return useSupabaseQuery('ENTREGAS', query, [CACHE_KEYS.ENTREGAS, options?.administrador_id, { status: options?.status, vendedor_id: options?.vendedor_id, data_inicio: options?.data_inicio, data_fim: options?.data_fim }], {
     enabled: options?.enabled,
   });
 };
@@ -124,7 +124,7 @@ export const useEntrega = (id: string, options?: { enabled?: boolean }) => {
     .eq('id', id)
     .single();
 
-  return useSupabaseQuery('ENTREGAS', query, {
+  return useSupabaseQuery('ENTREGAS', query, [CACHE_KEYS.ENTREGAS, id], {
     enabled: options?.enabled && !!id,
   });
 };
@@ -155,7 +155,7 @@ export const useEntregasPorVendedor = (
     query = query.limit(options.limit);
   }
 
-  return useSupabaseQuery('ENTREGAS', query, {
+  return useSupabaseQuery('ENTREGAS', query, [CACHE_KEYS.ENTREGAS, vendedor_id, { status: options?.status, limit: options?.limit }], {
     enabled: options?.enabled && !!vendedor_id,
   });
 };
@@ -178,7 +178,7 @@ export const useEntregasPorCliente = (
     query = query.limit(options.limit);
   }
 
-  return useSupabaseQuery('ENTREGAS', query, {
+  return useSupabaseQuery('ENTREGAS', query, [CACHE_KEYS.ENTREGAS, 'cliente', cliente_id, { limit: options?.limit }], {
     enabled: options?.enabled && !!cliente_id,
   });
 };
@@ -274,7 +274,7 @@ export const useEstatisticasEntregas = (
     query = query.eq('vendedor_id', vendedor_id);
   }
 
-  return useSupabaseQuery('ENTREGAS', query, {
+  return useSupabaseQuery('ENTREGAS', query, [CACHE_KEYS.ENTREGAS, 'stats', vendedor_id], {
     enabled: options?.enabled,
   });
 };
@@ -331,7 +331,7 @@ export const useEntregasPaginadas = (
     query = query.ilike('id', `%${options.search}%`);
   }
 
-  return useSupabaseQuery('ENTREGAS', query, {
+  return useSupabaseQuery('ENTREGAS', query, [CACHE_KEYS.ENTREGAS, 'paginated', page, limit, options], {
     enabled: options?.enabled && !!options?.administrador_id,
   });
 };

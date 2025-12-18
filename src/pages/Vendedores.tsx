@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Key } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
   DropdownMenu,
@@ -22,10 +22,10 @@ import {
   useDeleteVendedor,
   type Vendedor 
 } from '../hooks/useVendedores';
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useTotalEntregasPorAdministrador } from '../hooks/useDashboard';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
-import { toast } from '@/utils/toast';
+
 
 const Vendedores: React.FC = () => {
   const navigate = useNavigate();
@@ -36,11 +36,6 @@ const Vendedores: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [vendedorParaExcluir, setVendedorParaExcluir] = useState<Vendedor | null>(null);
-  const [resetModal, setResetModal] = useState<{ 
-    visible: boolean; 
-    vendedor?: any; 
-    novaSenha?: string; 
-  }>({ visible: false });
 
   // React Query hooks para dados
   const { data: vendedores = [], isLoading, error } = useVendedores({
@@ -117,46 +112,7 @@ const Vendedores: React.FC = () => {
     }
   };
 
-  const handleResetSenha = async (vendedor: Vendedor) => {
-    if (!window.confirm(`Resetar senha de ${vendedor.nome}?`)) return;
 
-    try {
-      const novaSenha = Math.floor(100000 + Math.random() * 900000).toString();
-      
-      const { data, error } = await supabase.rpc('reset_senha_vendedor', {
-        p_vendedor_id: vendedor.id,
-        p_nova_senha: novaSenha
-      });
-
-      if (error) {
-        if (error.message.includes('Apenas administradores')) {
-          toast.error('Você não tem permissão');
-        } else if (error.message.includes('não encontrado')) {
-          toast.error('Vendedor não encontrado');
-        } else {
-          toast.error('Erro: ' + error.message);
-        }
-        return;
-      }
-
-      if (data?.success) {
-        setResetModal({ visible: true, vendedor, novaSenha });
-        toast.success('Senha resetada com sucesso!');
-      }
-    } catch (error: any) {
-      toast.error('Erro: ' + error.message);
-    }
-  };
-
-
-
-
-  const copiarSenha = () => {
-    if (resetModal.novaSenha) {
-      navigator.clipboard.writeText(resetModal.novaSenha);
-      toast.success('Senha copiada!');
-    }
-  };
 
   // Filtrar vendedores baseado no termo de busca e ordenar por total de entregas (decrescente)
   const filteredVendedores = useMemo(() => {
@@ -248,15 +204,80 @@ const Vendedores: React.FC = () => {
   // Estados de loading e error do React Query
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Vendedores</h1>
-            <p className="text-gray-600 dark:text-gray-400">Gerencie sua equipe de vendas</p>
+      <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <Skeleton className="h-10 w-40 rounded-lg" />
+        </div>
+
+        {/* Filters Skeleton */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+          <div className="flex flex-col space-y-3 sm:flex-row sm:space-y-0 sm:space-x-4">
+            <Skeleton className="h-10 flex-1" />
+          </div>
+          <div className="mt-3 sm:mt-4 flex justify-between items-center">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-4 w-24" />
           </div>
         </div>
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+
+        {/* Vendedores Table Skeleton */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px]">
+              <thead className="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  {[...Array(7)].map((_, i) => (
+                    <th key={i} className="px-6 py-3 text-left">
+                      <Skeleton className="h-4 w-24" />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
+                {[...Array(8)].map((_, i) => (
+                  <tr key={i}>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-3">
+                        <Skeleton className="h-8 w-8 rounded-full" />
+                        <div className="space-y-1">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-3 w-20" />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 hidden sm:table-cell">
+                      <div className="space-y-1">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-24" />
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 hidden md:table-cell">
+                      <Skeleton className="h-6 w-16 rounded-full" />
+                    </td>
+                    <td className="px-6 py-4 hidden lg:table-cell">
+                      <Skeleton className="h-5 w-10 rounded-full" />
+                    </td>
+                    <td className="px-6 py-4 hidden lg:table-cell">
+                      <Skeleton className="h-4 w-12" />
+                    </td>
+                    <td className="px-6 py-4 hidden xl:table-cell">
+                      <Skeleton className="h-4 w-24" />
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end gap-2">
+                        <Skeleton className="h-8 w-8 rounded-md" />
+                        <Skeleton className="h-8 w-8 rounded-md" />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     );
@@ -367,8 +388,12 @@ const Vendedores: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                currentVendedores.map((vendedor: Vendedor) => (
-                  <tr key={vendedor.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                currentVendedores.map((vendedor: Vendedor, index) => (
+                  <tr 
+                    key={vendedor.id} 
+                    className="hover:bg-gray-50 dark:hover:bg-gray-700 animate-fade-in-up"
+                    style={{ animationDelay: `${index * 75}ms` }}
+                  >
                     <td className="px-3 sm:px-6 py-3 sm:py-4">
                       <div className="flex items-center">
                         <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
@@ -432,14 +457,7 @@ const Vendedores: React.FC = () => {
                     </td>
                     <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end gap-1">
-                        <button 
-                          onClick={() => handleResetSenha(vendedor)} 
-                          className="p-2 text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded-md transition-colors"
-                          title="Resetar senha"
-                          type="button"
-                        >
-                          <Key className="w-4 h-4" />
-                        </button>
+
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button 
@@ -554,54 +572,7 @@ const Vendedores: React.FC = () => {
         onClose={() => setIsModalOpen(false)}
       />
 
-      {resetModal.visible && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
-                <Key className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Nova Senha Gerada</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{resetModal.vendedor?.nome}</p>
-              </div>
-            </div>
 
-            <div className="mb-4">
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Senha temporária:</p>
-              <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg flex items-center justify-between gap-3">
-                <span className="text-3xl font-mono font-bold tracking-widest text-gray-900 dark:text-white">
-                  {resetModal.novaSenha}
-                </span>
-                <button
-                  onClick={copiarSenha}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors flex-shrink-0"
-                  type="button"
-                >
-                  Copiar
-                </button>
-              </div>
-            </div>
-
-            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-3 mb-4">
-              <p className="text-xs text-yellow-800 dark:text-yellow-400 flex items-start gap-2">
-                <span className="text-base">⚠️</span>
-                <span>
-                  Anote esta senha agora! Não poderá ser recuperada depois. Repasse ao vendedor por telefone/WhatsApp.
-                </span>
-              </p>
-            </div>
-
-            <button
-              onClick={() => setResetModal({ visible: false })}
-              className="w-full px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-md font-medium transition-colors"
-              type="button"
-            >
-              Fechar
-            </button>
-          </div>
-        </div>
-      )}
 
       {vendedorParaExcluir && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -638,3 +609,4 @@ const Vendedores: React.FC = () => {
 };
 
 export default Vendedores;
+

@@ -24,6 +24,7 @@ import {
   useVendedoresByAdmin,
   type Vendedor 
 } from '../hooks/useVendedores';
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useAuth } from '../contexts/AuthContext';
 import ClienteModal from '../components/ui/ClienteModal';
 import EditClienteModal from '../components/ui/EditClienteModal';
@@ -229,17 +230,72 @@ const Clientes: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Clientes</h1>
-            <p className="text-gray-600 dark:text-gray-400">Gerencie seus clientes</p>
+      <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-64" />
           </div>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-8 shadow-sm border border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <span className="ml-3 text-gray-600 dark:text-gray-400">Carregando clientes...</span>
+
+        {/* Filtros Skeleton */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+          <div className="flex flex-col space-y-3 sm:space-y-4 lg:flex-row lg:space-y-0 lg:space-x-4">
+            <Skeleton className="h-10 flex-1" />
+            <Skeleton className="h-10 w-full lg:w-[200px]" />
+          </div>
+          <div className="mt-3 sm:mt-4 flex justify-between items-center">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+        </div>
+
+        {/* Tabela Skeleton */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[800px]">
+              <thead className="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  {[...Array(6)].map((_, i) => (
+                    <th key={i} className="px-6 py-3 text-left">
+                      <Skeleton className="h-4 w-24" />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
+                {[...Array(8)].map((_, i) => (
+                  <tr key={i}>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-3">
+                        <Skeleton className="h-8 w-8 rounded-full" />
+                        <div className="space-y-1">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-3 w-20" />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 hidden sm:table-cell">
+                      <Skeleton className="h-4 w-32" />
+                    </td>
+                    <td className="px-6 py-4 hidden lg:table-cell">
+                      <Skeleton className="h-4 w-48" />
+                    </td>
+                    <td className="px-6 py-4 hidden md:table-cell">
+                      <Skeleton className="h-4 w-24" />
+                    </td>
+                    <td className="px-6 py-4 hidden lg:table-cell">
+                      <Skeleton className="h-4 w-24" />
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end">
+                        <Skeleton className="h-8 w-8 rounded-md" />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -359,8 +415,12 @@ const Clientes: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                currentClientes.map((cliente) => (
-                  <tr key={cliente.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                currentClientes.map((cliente, index) => (
+                  <tr 
+                    key={cliente.id} 
+                    className="hover:bg-gray-50 dark:hover:bg-gray-700 animate-fade-in-up"
+                    style={{ animationDelay: `${index * 75}ms` }}
+                  >
                     <td className="px-3 sm:px-6 py-3 sm:py-4">
                       <div className="flex items-center">
                         <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
@@ -558,3 +618,4 @@ const Clientes: React.FC = () => {
 };
 
 export default Clientes;
+

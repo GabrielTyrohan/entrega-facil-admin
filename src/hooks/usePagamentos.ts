@@ -84,7 +84,7 @@ export const usePagamentos = (options?: {
     query = query.lte('data_pagamento', options.data_fim);
   }
 
-  return useSupabaseQuery('PAGAMENTOS', query, {
+  return useSupabaseQuery('PAGAMENTOS', query, [CACHE_KEYS.PAGAMENTOS, options?.administrador_id, { entrega_id: options?.entrega_id, vendedor_id: options?.vendedor_id, data_inicio: options?.data_inicio, data_fim: options?.data_fim }], {
     enabled: options?.enabled,
   });
 };
@@ -108,7 +108,7 @@ export const usePagamento = (id: string, options?: { enabled?: boolean }) => {
     .eq('id', id)
     .single();
 
-  return useSupabaseQuery('PAGAMENTOS', query, {
+  return useSupabaseQuery('PAGAMENTOS', query, [CACHE_KEYS.PAGAMENTOS, id], {
     enabled: options?.enabled && !!id,
   });
 };
@@ -124,7 +124,7 @@ export const usePagamentosPorEntrega = (
     .eq('entrega_id', entrega_id)
     .order('data_pagamento', { ascending: false });
 
-  return useSupabaseQuery('PAGAMENTOS', query, {
+  return useSupabaseQuery('PAGAMENTOS', query, [CACHE_KEYS.PAGAMENTOS, 'entrega', entrega_id], {
     enabled: options?.enabled && !!entrega_id,
   });
 };
@@ -224,7 +224,7 @@ export const useEstatisticasPagamentos = (
     query = query.eq('entregas.vendedores.administrador_id', administrador_id);
   }
 
-  return useSupabaseQuery('PAGAMENTOS', query, {
+  return useSupabaseQuery('PAGAMENTOS', query, [CACHE_KEYS.PAGAMENTOS, 'stats', administrador_id], {
     enabled: options?.enabled,
   });
 };

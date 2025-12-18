@@ -21,6 +21,7 @@ import {
   useDeleteProduto,
   type Produto 
 } from '../hooks/useProdutos';
+import { Skeleton } from "@/components/ui/Skeleton";
 
 const categorias = [
   'Todas',
@@ -173,7 +174,7 @@ const Produtos: React.FC = () => {
 
   const handleDeleteProduto = async (produto: Produto) => {
     try {
-      await deleteProdutoMutation.mutateAsync(produto.id);
+      await deleteProdutoMutation.mutateAsync({ id: produto.id });
     } catch {
       // Error handling without logging sensitive data
     }
@@ -197,17 +198,80 @@ const Produtos: React.FC = () => {
   // Mostrar loading
   if (isLoading) {
     return (
-      <div className="p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Produtos</h1>
-            <p className="text-gray-600 dark:text-gray-400">Gerencie o catálogo de produtos</p>
+      <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
+        {/* Header Skeleton */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <Skeleton className="h-10 w-32 rounded-lg" />
+        </div>
+
+        {/* Filters Skeleton */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+          <div className="flex flex-col space-y-3 sm:space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0 md:space-x-4">
+            <Skeleton className="h-10 flex-1 max-w-md" />
+            <Skeleton className="h-10 w-48" />
           </div>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-8 shadow-sm border border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <span className="ml-3 text-gray-600 dark:text-gray-400">Carregando produtos...</span>
+
+        {/* Table Skeleton */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <Skeleton className="h-6 w-48" />
+          </div>
+          
+          <div className="px-4 sm:px-6 py-2 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+            <Skeleton className="h-4 w-64" />
+            <Skeleton className="h-4 w-32" />
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[800px]">
+              <thead className="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  {[...Array(7)].map((_, i) => (
+                    <th key={i} className="px-3 sm:px-6 py-3 text-left">
+                      <Skeleton className="h-4 w-24" />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {[...Array(8)].map((_, i) => (
+                  <tr key={i}>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4">
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-40" />
+                        <div className="sm:hidden space-y-1">
+                          <Skeleton className="h-3 w-24" />
+                          <Skeleton className="h-3 w-16" />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 hidden sm:table-cell">
+                      <Skeleton className="h-4 w-16" />
+                    </td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 hidden md:table-cell">
+                      <Skeleton className="h-6 w-24 rounded-full" />
+                    </td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 hidden lg:table-cell">
+                      <Skeleton className="h-4 w-16" />
+                    </td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 hidden lg:table-cell">
+                      <Skeleton className="h-4 w-20" />
+                    </td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 hidden xl:table-cell">
+                      <Skeleton className="h-6 w-24 rounded-full" />
+                    </td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 text-right">
+                      <Skeleton className="h-8 w-8 ml-auto rounded-lg" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -355,8 +419,12 @@ const Produtos: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {currentProdutos.map((produto) => (
-                  <tr key={produto.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                {currentProdutos.map((produto, index) => (
+                  <tr 
+                    key={produto.id} 
+                    className="hover:bg-gray-50 dark:hover:bg-gray-700 animate-fade-in-up"
+                    style={{ animationDelay: `${index * 75}ms` }}
+                  >
                     <td className="px-3 sm:px-6 py-3 sm:py-4">
                       <div className="min-w-0 flex-1">
                         <div className="text-sm font-medium text-gray-900 dark:text-white truncate">
@@ -577,3 +645,4 @@ const Produtos: React.FC = () => {
 };
 
 export default Produtos;
+

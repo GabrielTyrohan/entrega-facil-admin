@@ -2,12 +2,13 @@ import React from 'react';
 import { useSupabaseQuery } from '../lib/supabaseCache';
 import { supabase } from '../lib/supabase';
 import { useQuery } from '@tanstack/react-query';
+import { CACHE_KEYS } from '../lib/cache/cacheConfig';
 
 // Hook para estatísticas do dashboard do administrador
 export const useDashboardStats = (administrador_id: string, options?: { enabled?: boolean }) => {
   const query = supabase.rpc('get_dashboard_stats', { admin_id: administrador_id });
 
-  return useSupabaseQuery('DASHBOARD_STATS', query, {
+  return useSupabaseQuery('DASHBOARD_STATS', query, [CACHE_KEYS.DASHBOARD_STATS, administrador_id], {
     enabled: options?.enabled && !!administrador_id,
   });
 };
@@ -20,7 +21,7 @@ export const useVendedoresAtivos = (administrador_id: string, options?: { enable
     .eq('administrador_id', administrador_id)
     .eq('ativo', true);
 
-  return useSupabaseQuery('VENDEDORES_ATIVOS', query, {
+  return useSupabaseQuery('VENDEDORES_ATIVOS', query, [CACHE_KEYS.VENDEDORES_ATIVOS, administrador_id], {
     enabled: options?.enabled && !!administrador_id,
   });
 };
@@ -54,11 +55,11 @@ export const useEntregasDoMes = (administrador_id: string, options?: { enabled?:
     .gte('data_entrega', previousMonthStart)
     .lte('data_entrega', previousMonthEnd);
 
-  const currentMonth_data = useSupabaseQuery('ENTREGAS_MES_ATUAL', currentMonthQuery, {
+  const currentMonth_data = useSupabaseQuery('ENTREGAS_MES_ATUAL', currentMonthQuery, [CACHE_KEYS.ENTREGAS_MES_ATUAL, administrador_id, currentMonthStart, currentMonthEnd], {
     enabled: options?.enabled && !!administrador_id,
   });
 
-  const previousMonth_data = useSupabaseQuery('ENTREGAS_MES_ANTERIOR', previousMonthQuery, {
+  const previousMonth_data = useSupabaseQuery('ENTREGAS_MES_ANTERIOR', previousMonthQuery, [CACHE_KEYS.ENTREGAS_MES_ANTERIOR, administrador_id, previousMonthStart, previousMonthEnd], {
     enabled: options?.enabled && !!administrador_id,
   });
 
@@ -97,11 +98,11 @@ export const useFaturamentoDoMes = (administrador_id: string, options?: { enable
     .gte('data_pagamento', previousMonthStart)
     .lte('data_pagamento', previousMonthEnd);
 
-  const currentMonth_data = useSupabaseQuery('FATURAMENTO_MES_ATUAL', currentMonthQuery, {
+  const currentMonth_data = useSupabaseQuery('FATURAMENTO_MES_ATUAL', currentMonthQuery, [CACHE_KEYS.FATURAMENTO_MES_ATUAL, administrador_id, currentMonthStart, currentMonthEnd], {
     enabled: options?.enabled && !!administrador_id,
   });
 
-  const previousMonth_data = useSupabaseQuery('FATURAMENTO_MES_ANTERIOR', previousMonthQuery, {
+  const previousMonth_data = useSupabaseQuery('FATURAMENTO_MES_ANTERIOR', previousMonthQuery, [CACHE_KEYS.FATURAMENTO_MES_ANTERIOR, administrador_id, previousMonthStart, previousMonthEnd], {
     enabled: options?.enabled && !!administrador_id,
   });
 
@@ -135,7 +136,7 @@ export const useValoresEmFalta = (administrador_id: string, options?: { enabled?
     .not('dataRetorno', 'is', null)
     .lt('dataRetorno', firstDayOfCurrentMonthString);
 
-  const { data: entregasData, ...queryResult } = useSupabaseQuery('VALORES_EM_FALTA', entregasQuery, {
+  const { data: entregasData, ...queryResult } = useSupabaseQuery('VALORES_EM_FALTA', entregasQuery, [CACHE_KEYS.VALORES_EM_FALTA, administrador_id, firstDayOfCurrentMonthString], {
     enabled: options?.enabled && !!administrador_id,
   });
 
@@ -203,7 +204,7 @@ export const useFaturamentoMensal = (administrador_id: string, options?: { enabl
     .lte('data_pagamento', endDate.toISOString().split('T')[0])
     .order('data_pagamento', { ascending: true });
 
-  return useSupabaseQuery('FATURAMENTO_MENSAL', query, {
+  return useSupabaseQuery('FATURAMENTO_MENSAL', query, [CACHE_KEYS.FATURAMENTO_MENSAL, administrador_id, startDate.toISOString().split('T')[0], endDate.toISOString().split('T')[0]], {
     enabled: options?.enabled && !!administrador_id,
   });
 };
@@ -233,7 +234,7 @@ export const useTopVendedores = (administrador_id: string, options?: { enabled?:
     .gte('data_entrega', new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
     .order('data_entrega', { ascending: false });
 
-  const entregasData = useSupabaseQuery('TOP_VENDEDORES', last60DaysQuery, {
+  const entregasData = useSupabaseQuery('TOP_VENDEDORES', last60DaysQuery, [CACHE_KEYS.TOP_VENDEDORES, administrador_id, 'last60Days'], {
     enabled: options?.enabled && !!administrador_id,
   });
 
@@ -330,7 +331,7 @@ export const usePagamentosMensais = (administrador_id: string, options?: { enabl
     .lte('data_pagamento', endDate)
     .order('data_pagamento', { ascending: true });
 
-  const { data: allData, ...queryResult } = useSupabaseQuery('PAGAMENTOS_MENSAIS', query, {
+  const { data: allData, ...queryResult } = useSupabaseQuery('PAGAMENTOS_MENSAIS', query, [CACHE_KEYS.PAGAMENTOS_MENSAIS, administrador_id], {
     enabled: options?.enabled && !!administrador_id,
   });
 
@@ -388,7 +389,7 @@ export const useVendasMensaisPorVendedor = (administrador_id: string, options?: 
     .gte('data_entrega', firstDayString)
     .lte('data_entrega', lastDayString);
 
-  const { data: entregasData, ...queryResult } = useSupabaseQuery('VENDAS_MENSAIS_VENDEDORES', vendasQuery, {
+  const { data: entregasData, ...queryResult } = useSupabaseQuery('VENDAS_MENSAIS_VENDEDORES', vendasQuery, [CACHE_KEYS.VENDAS_MENSAIS_VENDEDORES, administrador_id], {
     enabled: options?.enabled && !!administrador_id,
   });
 
@@ -428,6 +429,7 @@ export const useTotalVendasPorVendedor = (vendedor_id: string, options?: { enabl
   const { data: entregasData, ...queryResult } = useSupabaseQuery(
     'TOTAL_VENDAS_VENDEDOR', 
     totalVendasQuery, 
+    [CACHE_KEYS.TOTAL_VENDAS_VENDEDOR, vendedor_id],
     {
       enabled: options?.enabled && !!vendedor_id,
     }
@@ -457,6 +459,7 @@ export const useTotalEntregasPorAdministrador = (administrador_id: string, optio
   const { data: entregasData, ...queryResult } = useSupabaseQuery(
     'TOTAL_ENTREGAS_ADMINISTRADOR',
     entregasQuery,
+    [CACHE_KEYS.TOTAL_ENTREGAS_ADMINISTRADOR, administrador_id],
     {
       enabled: options?.enabled && !!administrador_id,
     }

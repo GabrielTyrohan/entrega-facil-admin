@@ -24,6 +24,7 @@ import {
   useVendedoresByAdmin,
   type Vendedor 
 } from '../hooks/useVendedores';
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useAuth } from '../contexts/AuthContext';
 import { EntregaComDetalhes, EntregaService } from '../services/entregaService';
 import EntregaModal from '../components/ui/EntregaModal';
@@ -291,8 +292,74 @@ const Entregas: React.FC = () => {
             <p className="text-gray-600 dark:text-gray-400">Gerencie suas entregas</p>
           </div>
         </div>
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+
+        {/* Filtros Skeleton */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+          <div className="flex flex-col lg:flex-row space-y-4 lg:space-y-0 lg:space-x-4">
+            <Skeleton className="h-10 flex-1" />
+            <Skeleton className="h-10 w-full lg:w-48" />
+          </div>
+          <div className="mt-4 flex justify-between items-center">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+        </div>
+
+        {/* Tabela Entregas Skeleton */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  {[...Array(5)].map((_, i) => (
+                    <th key={i} className="px-6 py-3 text-left">
+                      <Skeleton className="h-4 w-24" />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
+                {[...Array(8)].map((_, i) => (
+                  <tr key={i}>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <Skeleton className="w-8 h-8 rounded-full flex-shrink-0" />
+                        <div className="ml-3 space-y-1">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-3 w-20" />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-start">
+                        <Skeleton className="w-4 h-4 mr-2 flex-shrink-0" />
+                        <div className="space-y-1 w-full">
+                           <Skeleton className="h-4 w-48" />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <Skeleton className="w-4 h-4 mr-2" />
+                        <Skeleton className="h-4 w-32" />
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <Skeleton className="w-4 h-4 mr-2" />
+                        <Skeleton className="h-4 w-24" />
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                       <div className="flex justify-end">
+                         <Skeleton className="h-8 w-8 rounded-md" />
+                       </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     );
@@ -403,8 +470,12 @@ const Entregas: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                currentEntregas.map((entrega) => (
-                  <tr key={entrega.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                currentEntregas.map((entrega, index) => (
+                  <tr 
+                    key={entrega.id} 
+                    className="hover:bg-gray-50 dark:hover:bg-gray-700 animate-fade-in-up"
+                    style={{ animationDelay: `${index * 75}ms` }}
+                  >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
@@ -587,3 +658,4 @@ const Entregas: React.FC = () => {
 };
 
 export default Entregas;
+

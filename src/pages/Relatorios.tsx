@@ -16,12 +16,23 @@ import {
   MoreHorizontal
 } from 'lucide-react';
 import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useAuth } from '../contexts/AuthContext';
+import { useCountUp } from '../hooks/useCountUp';
 import { usePagamentos } from '../hooks/usePagamentos';
 import { useEntregas } from '../hooks/useEntregas';
 import { useVendedores } from '../hooks/useVendedores';
@@ -32,6 +43,13 @@ const Relatorios: React.FC = () => {
   const { user } = useAuth();
   const [selectedPeriod, setSelectedPeriod] = useState('30'); // dias
   const [selectedReport, setSelectedReport] = useState<'vendas' | 'vendedores' | 'entregas' | 'produtos'>('vendas');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
+
+  // Reset page when report type or period changes
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedReport, selectedPeriod]);
 
   // Hooks para buscar dados com administrador_id
   const administrador_id = user?.id;
@@ -248,7 +266,7 @@ const Relatorios: React.FC = () => {
         entregasPagas,
         entregasPendentes,
         vendedorPerformance: vendedorPerformance.sort((a: any, b: any) => (b.totalVendas as number) - (a.totalVendas as number)),
-        produtoVendas: produtoVendas.slice(0, 10) // Top 10
+        produtoVendas: produtoVendas // Removido .slice(0, 10) para permitir paginação completa
       };
     } catch (error) {
       console.error('Erro ao calcular métricas:', error);
@@ -263,6 +281,19 @@ const Relatorios: React.FC = () => {
       };
     }
   }, [dadosPeriodo, vendedores, produtos, entregas, pagamentos]);
+
+  // Valores animados para métricas financeiras (igual ao Dashboard)
+  const totalVendasAnimado = useCountUp({
+    end: metricas.totalVendas,
+    duration: 800,
+    decimals: 2
+  });
+
+  const totalPagamentosAnimado = useCountUp({
+    end: metricas.totalPagamentos,
+    duration: 800,
+    decimals: 2
+  });
 
   // EARLY RETURNS APÓS TODOS OS HOOKS E USEMEMO
   // Se houver erros, mostrar mensagem de erro
@@ -286,10 +317,86 @@ const Relatorios: React.FC = () => {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <span className="ml-2 text-gray-600 dark:text-gray-400">Carregando relatórios...</span>
+        <div className="space-y-4 sm:space-y-6 p-4 sm:p-6 lg:p-8">
+          {/* Header Skeleton */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0">
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-48" />
+              <Skeleton className="h-4 w-64" />
+            </div>
+            <div className="flex flex-wrap justify-center sm:justify-end gap-2 sm:gap-3">
+              <Skeleton className="h-10 w-10 rounded-lg" />
+              <Skeleton className="h-10 w-24 rounded-lg" />
+              <Skeleton className="h-10 w-20 rounded-lg" />
+            </div>
+          </div>
+
+          {/* Filters Skeleton */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+              <div className="flex items-center space-x-2">
+                <Skeleton className="w-4 h-4" />
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="h-9 w-40 rounded-md" />
+              </div>
+              <div className="flex items-center space-x-2">
+                <Skeleton className="w-4 h-4" />
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="h-9 w-40 rounded-md" />
+              </div>
+            </div>
+          </div>
+
+          {/* Metrics Cards Skeleton */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-6">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-3 w-24" />
+                    <Skeleton className="h-6 w-32" />
+                    {i < 2 && <Skeleton className="h-3 w-20" />}
+                  </div>
+                  <Skeleton className="h-10 w-10 rounded-full ml-2" />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Content Skeleton (mimicking Vendas report which is default) */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+            <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700">
+              <Skeleton className="h-6 w-64" />
+            </div>
+            <div className="p-4 sm:p-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                <div>
+                  <Skeleton className="h-6 w-40 mb-4" />
+                  <div className="space-y-4">
+                    {[...Array(5)].map((_, i) => (
+                      <div key={i} className="flex justify-between">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-4 w-24" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Skeleton className="h-6 w-48 mb-4" />
+                  <div className="space-y-4">
+                    {[...Array(2)].map((_, i) => (
+                      <div key={i} className="flex justify-between items-center">
+                        <div className="flex items-center">
+                          <Skeleton className="h-3 w-3 rounded-full mr-2" />
+                          <Skeleton className="h-4 w-20" />
+                        </div>
+                        <Skeleton className="h-4 w-16" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -497,7 +604,122 @@ const Relatorios: React.FC = () => {
     }
   };
 
+  // Função genérica de paginação
+  const getPaginatedData = (data: any[]) => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return {
+      currentItems: data.slice(startIndex, endIndex),
+      totalPages: Math.ceil(data.length / itemsPerPage),
+      startIndex,
+      endIndex,
+      totalItems: data.length
+    };
+  };
 
+  // Componente de paginação
+  const PaginationControl = ({ totalPages }: { totalPages: number }) => {
+    if (totalPages <= 1) return null;
+
+    const getPageNumbers = () => {
+      const pages = [];
+      const maxVisiblePages = window.innerWidth >= 768 ? 7 : 5; // Mais páginas em telas maiores
+      
+      if (totalPages <= maxVisiblePages) {
+        for (let i = 1; i <= totalPages; i++) {
+          pages.push(i);
+        }
+      } else {
+        const halfVisible = Math.floor(maxVisiblePages / 2);
+        let startPage = Math.max(1, currentPage - halfVisible);
+        const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+        
+        if (endPage - startPage < maxVisiblePages - 1) {
+          startPage = Math.max(1, endPage - maxVisiblePages + 1);
+        }
+        
+        for (let i = startPage; i <= endPage; i++) {
+          pages.push(i);
+        }
+      }
+      return pages;
+    };
+
+    return (
+      <div className="py-4 border-t border-gray-200 dark:border-gray-700 flex justify-center px-4">
+        <Pagination>
+          <PaginationContent className="flex-wrap gap-1">
+            <PaginationItem>
+              <PaginationPrevious 
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (currentPage > 1) setCurrentPage(currentPage - 1);
+                }}
+                className={`${currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} touch-manipulation`}
+                size="default"
+              />
+            </PaginationItem>
+            
+            {getPageNumbers().map((pageNum, index, array) => {
+              const showEllipsisBefore = index === 0 && pageNum > 1;
+              const showEllipsisAfter = index === array.length - 1 && pageNum < totalPages;
+              
+              return (
+                <React.Fragment key={pageNum}>
+                  {showEllipsisBefore && (
+                    <PaginationItem>
+                      <PaginationEllipsis />
+                    </PaginationItem>
+                  )}
+                  
+                  <PaginationItem>
+                    <PaginationLink
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setCurrentPage(pageNum);
+                      }}
+                      isActive={currentPage === pageNum}
+                      className="cursor-pointer touch-manipulation"
+                      size="default"
+                    >
+                      {pageNum}
+                    </PaginationLink>
+                  </PaginationItem>
+                  
+                  {showEllipsisAfter && (
+                    <PaginationItem>
+                      <PaginationEllipsis />
+                    </PaginationItem>
+                  )}
+                </React.Fragment>
+              );
+            })}
+
+            <PaginationItem>
+              <PaginationNext 
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+                }}
+                className={`${currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'} touch-manipulation`}
+                size="default"
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      </div>
+    );
+  };
+
+  const { currentItems, totalPages, startIndex, endIndex, totalItems } = getPaginatedData(
+    selectedReport === 'vendedores' ? metricas.vendedorPerformance :
+    selectedReport === 'produtos' ? metricas.produtoVendas :
+    selectedReport === 'entregas' ? dadosPeriodo.entregas :
+    []
+  );
 
   return (
     <>
@@ -647,10 +869,10 @@ const Relatorios: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-6 print-metrics">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 print-metric-card">
             <div className="flex items-center justify-between">
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 animate-fade-in-up">
                 <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 truncate">Total de Vendas</p>
                 <p className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white break-words">
-                  {formatCurrency(metricas.totalVendas)}
+                  {formatCurrency(Number(totalVendasAnimado))}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Valor das entregas</p>
               </div>
@@ -662,10 +884,10 @@ const Relatorios: React.FC = () => {
 
           <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 print-metric-card">
             <div className="flex items-center justify-between">
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 animate-fade-in-up">
                 <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 truncate">Total de Pagamentos</p>
                 <p className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white break-words">
-                  {formatCurrency(metricas.totalPagamentos)}
+                  {formatCurrency(Number(totalPagamentosAnimado))}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Valores recebidos</p>
               </div>
@@ -677,7 +899,7 @@ const Relatorios: React.FC = () => {
 
           <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 print-metric-card">
             <div className="flex items-center justify-between">
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 animate-fade-in-up">
                 <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 truncate">Total de Entregas</p>
                 <p className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">
                   {metricas.totalEntregas}
@@ -691,7 +913,7 @@ const Relatorios: React.FC = () => {
 
           <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 print-metric-card">
             <div className="flex items-center justify-between">
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 animate-fade-in-up">
                 <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 truncate">Entregas Pagas</p>
                 <p className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">
                   {metricas.entregasPagas}
@@ -705,7 +927,7 @@ const Relatorios: React.FC = () => {
 
           <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 print-metric-card">
             <div className="flex items-center justify-between">
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 animate-fade-in-up">
                 <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 truncate">Entregas Pendentes</p>
                 <p className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">
                   {metricas.entregasPendentes}
@@ -795,10 +1017,23 @@ const Relatorios: React.FC = () => {
         {selectedReport === 'vendedores' && (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
             <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white flex items-center">
-                <Users className="w-4 h-4 sm:w-5 sm:h-5 mr-2 no-print" />
-                Performance de Vendedores - Últimos {selectedPeriod} dias
-              </h2>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white flex items-center">
+                  <Users className="w-4 h-4 sm:w-5 sm:h-5 mr-2 no-print" />
+                  Performance de Vendedores - Últimos {selectedPeriod} dias
+                </h2>
+                {totalItems > 0 && (
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs sm:text-sm text-gray-600 dark:text-gray-400 no-print">
+                    <span>
+                      Mostrando {startIndex + 1} a {Math.min(endIndex, totalItems)} de {totalItems} vendedores
+                    </span>
+                    <span className="hidden sm:inline text-gray-300 dark:text-gray-600">|</span>
+                    <span>
+                      {itemsPerPage} por página
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 print-table">
@@ -828,8 +1063,12 @@ const Relatorios: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {metricas.vendedorPerformance.map((vendedor: any) => (
-                    <tr key={vendedor.id}>
+                  {currentItems.map((vendedor: any, index: number) => (
+                    <tr 
+                      key={vendedor.id}
+                      className="animate-fade-in-up"
+                      style={{ animationDelay: `${index * 75}ms` }}
+                    >
                       <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm font-medium text-gray-900 dark:text-white">
                         {String(vendedor.nome || '')}
                       </td>
@@ -873,16 +1112,30 @@ const Relatorios: React.FC = () => {
                 </tbody>
               </table>
             </div>
+            <PaginationControl totalPages={totalPages} />
           </div>
         )}
 
         {selectedReport === 'produtos' && (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
             <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white flex items-center">
-                <Package className="w-4 h-4 sm:w-5 sm:h-5 mr-2 no-print" />
-                Top 10 Produtos - Últimos {selectedPeriod} dias
-              </h2>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white flex items-center">
+                  <Package className="w-4 h-4 sm:w-5 sm:h-5 mr-2 no-print" />
+                  Top 10 Produtos - Últimos {selectedPeriod} dias
+                </h2>
+                {totalItems > 0 && (
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs sm:text-sm text-gray-600 dark:text-gray-400 no-print">
+                    <span>
+                      Mostrando {startIndex + 1} a {Math.min(endIndex, totalItems)} de {totalItems} produtos
+                    </span>
+                    <span className="hidden sm:inline text-gray-300 dark:text-gray-600">|</span>
+                    <span>
+                      {itemsPerPage} por página
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 print-table">
@@ -909,8 +1162,12 @@ const Relatorios: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {metricas.produtoVendas.map((produto: any) => produto && (
-                    <tr key={String(produto.id || '')}>
+                  {currentItems.map((produto: any, index: number) => produto && (
+                    <tr 
+                      key={String(produto.id || '')}
+                      className="animate-fade-in-up"
+                      style={{ animationDelay: `${index * 75}ms` }}
+                    >
                       <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm font-medium text-gray-900 dark:text-white">
                         {String(produto.nome || '')}
                       </td>
@@ -936,16 +1193,30 @@ const Relatorios: React.FC = () => {
                 </tbody>
               </table>
             </div>
+            <PaginationControl totalPages={totalPages} />
           </div>
         )}
 
         {selectedReport === 'entregas' && (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
             <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white flex items-center">
-                <Truck className="w-4 h-4 sm:w-5 sm:h-5 mr-2 no-print" />
-                Relatório de Entregas - Últimos {selectedPeriod} dias
-              </h2>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white flex items-center">
+                  <Truck className="w-4 h-4 sm:w-5 sm:h-5 mr-2 no-print" />
+                  Relatório de Entregas - Últimos {selectedPeriod} dias
+                </h2>
+                {totalItems > 0 && (
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs sm:text-sm text-gray-600 dark:text-gray-400 no-print">
+                    <span>
+                      Mostrando {startIndex + 1} a {Math.min(endIndex, totalItems)} de {totalItems} entregas
+                    </span>
+                    <span className="hidden sm:inline text-gray-300 dark:text-gray-600">|</span>
+                    <span>
+                      {itemsPerPage} por página
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 print-table">
@@ -969,8 +1240,12 @@ const Relatorios: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {dadosPeriodo.entregas.slice(0, 50).map((entrega: Record<string, unknown>) => (
-                    <tr key={String(entrega.id || Math.random())}>
+                  {currentItems.map((entrega: Record<string, unknown>, index: number) => (
+                    <tr 
+                      key={String(entrega.id || Math.random())}
+                      className="animate-fade-in-up"
+                      style={{ animationDelay: `${index * 75}ms` }}
+                    >
                       <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm text-gray-900 dark:text-white">
                         {new Date(entrega.data_entrega as string | number | Date).toLocaleDateString('pt-BR')}
                       </td>
@@ -998,6 +1273,7 @@ const Relatorios: React.FC = () => {
                 </tbody>
               </table>
             </div>
+            <PaginationControl totalPages={totalPages} />
           </div>
         )}
       </div>
@@ -1006,3 +1282,4 @@ const Relatorios: React.FC = () => {
 };
 
 export default Relatorios;
+

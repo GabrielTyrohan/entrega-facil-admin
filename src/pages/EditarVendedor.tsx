@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, User, Mail, Phone, Lock, MapPin, Calendar, FileText, CreditCard, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Save, User, Mail, Phone, MapPin, Calendar, FileText, CreditCard, Key } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { VendedorService } from '../services/vendedorService';
 import { useAuth } from '../contexts/AuthContext';
@@ -22,7 +22,6 @@ const EditarVendedor: React.FC = () => {
     nome: '',
     email: '',
     telefone: '',
-    senha: '',
     endereco: '',
     dataInicio: '',
     tipoVinculo: 'CLT',
@@ -42,7 +41,12 @@ const EditarVendedor: React.FC = () => {
 
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
-  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmResetModal, setShowConfirmResetModal] = useState(false);
+  const [resetModal, setResetModal] = useState<{ 
+    visible: boolean; 
+    vendedor?: any; 
+    novaSenha?: string; 
+  }>({ visible: false });
 
   // Função para formatar telefone com máscara (xx) xxxxx-xxxx
   const formatTelefone = (value: string): string => {
@@ -82,7 +86,6 @@ const EditarVendedor: React.FC = () => {
           nome: vendedor.nome || '',
           email: vendedor.email || '',
           telefone: formatTelefone(vendedor.telefone || ''), // Aplicar máscara ao carregar
-          senha: String(vendedor.senha || ''), // Garantir que seja sempre string
           endereco: vendedor.endereco || '',
           dataInicio: vendedor.created_at ? new Date(vendedor.created_at).toISOString().split('T')[0] : '',
           tipoVinculo: 'CLT', // Valor padrão, pode ser adicionado ao banco se necessário
@@ -163,17 +166,54 @@ const EditarVendedor: React.FC = () => {
     }
   };
 
+  const handleResetSenha = () => {
+    setShowConfirmResetModal(true);
+  };
+
+  const executeResetSenha = async () => {
+    setShowConfirmResetModal(false);
+    if (!id) return;
+
+    try {
+      const novaSenha = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      const { data, error } = await supabase.rpc('reset_senha_vendedor', {
+        p_vendedor_id: id,
+        p_nova_senha: novaSenha
+      });
+
+      if (error) {
+        if (error.message.includes('Apenas administradores')) {
+          toast.error('Você não tem permissão');
+        } else if (error.message.includes('não encontrado')) {
+          toast.error('Vendedor não encontrado');
+        } else {
+          toast.error('Erro: ' + error.message);
+        }
+        return;
+      }
+
+      if (data?.success) {
+        setResetModal({ visible: true, vendedor: { nome: formData.nome }, novaSenha });
+        toast.success('Senha resetada com sucesso!');
+      }
+    } catch (error: any) {
+      toast.error('Erro: ' + error.message);
+    }
+  };
+
+  const copiarSenha = () => {
+    if (resetModal.novaSenha) {
+      navigator.clipboard.writeText(resetModal.novaSenha);
+      toast.success('Senha copiada!');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      // Se tem senha, validar
-      if (formData.senha && !/^\d{6}$/.test(formData.senha)) {
-        toast.error('Senha deve conter exatamente 6 números');
-        return;
-      }
-
       const { data: { session } } = await supabase.auth.getSession();
       
       const response = await fetch(
@@ -301,23 +341,15 @@ const EditarVendedor: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Senha
               </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  name="senha"
-                  value={formData.senha}
-                  onChange={handleInputChange}
-                  className="w-full pl-10 pr-12 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={handleResetSenha}
+                className="w-full flex items-center justify-center space-x-2 px-4 py-2 border border-yellow-300 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 dark:border-yellow-700 dark:bg-yellow-900/20 dark:hover:bg-yellow-900/30 dark:text-yellow-400 rounded-lg transition-colors"
+                title="Gerar nova senha"
+              >
+                <Key className="w-5 h-5" />
+                <span>Gerar Nova Senha</span>
+              </button>
             </div>
             
             <div className="md:col-span-2">
@@ -519,6 +551,83 @@ const EditarVendedor: React.FC = () => {
           </div>
         </div>
       </form>
+
+      {/* Confirmation Modal */}
+      {showConfirmResetModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Confirmar Reset de Senha</h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              Tem certeza que deseja gerar uma nova senha para {formData.nome}? A senha atual será invalidada.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowConfirmResetModal(false)}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                type="button"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={executeResetSenha}
+                className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-colors"
+                type="button"
+              >
+                Gerar Nova Senha
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resetModal.visible && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
+                <Key className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Nova Senha Gerada</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{resetModal.vendedor?.nome}</p>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Senha temporária:</p>
+              <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg flex items-center justify-between gap-3">
+                <span className="text-3xl font-mono font-bold tracking-widest text-gray-900 dark:text-white">
+                  {resetModal.novaSenha}
+                </span>
+                <button
+                  onClick={copiarSenha}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors flex-shrink-0"
+                  type="button"
+                >
+                  Copiar
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-3 mb-4">
+              <p className="text-xs text-yellow-800 dark:text-yellow-400 flex items-start gap-2">
+                <span className="text-base">⚠️</span>
+                <span>
+                  Anote esta senha agora! Não poderá ser recuperada depois. Repasse ao vendedor por telefone/WhatsApp.
+                </span>
+              </p>
+            </div>
+
+            <button
+              onClick={() => setResetModal({ visible: false })}
+              className="w-full px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-md font-medium transition-colors"
+              type="button"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

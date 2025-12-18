@@ -56,7 +56,7 @@ export const useClientes = (options?: {
     query = query.or(orFilter);
   }
 
-  return useSupabaseQuery('CLIENTES', query, {
+  return useSupabaseQuery('CLIENTES', query, [CACHE_KEYS.CLIENTES, 'list', { ativo: options?.ativo, search: options?.search }], {
     enabled: options?.enabled,
   });
 };
@@ -92,7 +92,7 @@ export const useClientesByAdmin = (administradorId: string, options?: {
     query = query.or(orFilter);
   }
 
-  return useSupabaseQuery('CLIENTES', query, {
+  return useSupabaseQuery('CLIENTES', query, [CACHE_KEYS.CLIENTES, administradorId, { ativo: options?.ativo, search: options?.search }], {
     enabled: options?.enabled && !!administradorId,
   });
 };
@@ -105,7 +105,7 @@ export const useCliente = (id: string, options?: { enabled?: boolean }) => {
     .eq('id', id)
     .single();
 
-  return useSupabaseQuery('CLIENTES', query, {
+  return useSupabaseQuery('CLIENTES', query, [CACHE_KEYS.CLIENTES, id], {
     enabled: options?.enabled && !!id,
   });
 };
@@ -119,7 +119,7 @@ export const useClientesPorCidade = (cidade: string, options?: { enabled?: boole
     .eq('ativo', true)
     .order('nome');
 
-  return useSupabaseQuery('CLIENTES', query, {
+  return useSupabaseQuery('CLIENTES', query, [CACHE_KEYS.CLIENTES, 'cidade', cidade], {
     enabled: options?.enabled && !!cidade,
   });
 };
@@ -207,7 +207,7 @@ export const useCidadesClientes = (options?: { enabled?: boolean }) => {
     .select('cidade')
     .eq('ativo', true);
 
-  return useSupabaseQuery('CLIENTES', query, {
+  return useSupabaseQuery('CLIENTES', query, [CACHE_KEYS.CLIENTES, 'cidades'], {
     enabled: options?.enabled,
   });
 };
@@ -218,7 +218,7 @@ export const useEstatisticasClientes = (options?: { enabled?: boolean }) => {
     .from('clientes')
     .select('id, ativo, cidade, created_at');
 
-  return useSupabaseQuery('CLIENTES', query, {
+  return useSupabaseQuery('CLIENTES', query, [CACHE_KEYS.CLIENTES, 'stats'], {
     enabled: options?.enabled,
   });
 };
@@ -266,7 +266,7 @@ export const useClientesPaginados = (
     query = query.or(orFilter);
   }
 
-  return useSupabaseQuery('CLIENTES', query, {
+  return useSupabaseQuery('CLIENTES', query, [CACHE_KEYS.CLIENTES, 'paginated', page, limit, options], {
     enabled: options?.enabled && !!options?.administrador_id,
   });
 };

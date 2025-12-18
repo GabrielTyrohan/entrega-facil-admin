@@ -125,55 +125,86 @@ const NovoVendedor: React.FC = () => {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+ const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setLoading(true);
 
-    try {
-      // Validar senha
-      if (!/^\d{6}$/.test(formData.senha)) {
-        toast.error('Senha deve conter exatamente 6 números');
-        return;
-      }
-
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-vendedor`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session?.access_token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            ...formData,
-            administrador_id: user?.id
-          })
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Erro ao criar vendedor');
-      }
-
-      const result = await response.json();
-      
-      // Mostrar senha ao admin
-      toast.success(
-        `Vendedor criado! Senha: ${result.senha_temporaria}`,
-        { duration: 10000 }
-      );
-      
-      navigate('/vendedores');
-    } catch (error: any) {
-      console.error('Erro ao criar vendedor:', error);
-      toast.error(error.message);
-    } finally {
+  try {
+    // Validar senha (exatamente 6 dígitos)
+    if (!/^\d{6}$/.test(formData.senha)) {
+      toast.error('Senha deve conter exatamente 6 números');
       setLoading(false);
+      return;
     }
-  };
+
+    // Validar campos obrigatórios
+    if (!formData.nome || !formData.email) {
+      toast.error('Preencha todos os campos obrigatórios');
+      setLoading(false);
+      return;
+    }
+
+    // Chama a RPC function que cria o hash no backend
+    const { data, error } = await supabase.rpc('criar_vendedor_com_hash', {
+      p_administrador_id: user?.id,
+      p_nome: formData.nome,
+      p_senha_plain: formData.senha, // Envia senha em texto plano (6 dígitos)
+      p_telefone: formData.telefone || null,
+      p_email: formData.email || null,
+      p_endereco: formData.endereco || null,
+      p_data_inicio: formData.dataInicio || null,
+      p_tipo_vinculo: formData.tipoVinculo || null,
+      p_percentual_minimo: formData.percentualMinimo || 0,
+      p_tipo_cobranca: 'pago_admin',
+      p_valor_assinatura: 100
+    });
+
+    if (error) {
+      console.error('Erro do Supabase:', error);
+      throw new Error(error.message || 'Erro ao criar vendedor');
+    }
+
+    // Verifica o retorno da função
+    const resultado = data as { success: boolean; vendedor_id?: string; erro?: string };
+
+    if (!resultado.success) {
+      throw new Error(resultado.erro || 'Erro desconhecido ao criar vendedor');
+    }
+
+    // Se tiver dados bancários, atualiza o vendedor
+    if (dadosBancarios.banco || dadosBancarios.agencia || dadosBancarios.conta) {
+      const { error: updateError } = await supabase
+        .from('vendedores')
+        .update({
+          dados_bancarios: dadosBancarios
+        })
+        .eq('id', resultado.vendedor_id);
+
+      if (updateError) {
+        console.warn('Erro ao salvar dados bancários:', updateError);
+        // Não impede o sucesso, apenas avisa
+      }
+    }
+
+    // Mostrar senha ao admin com destaque
+    toast.success(
+      `✅ Vendedor criado com sucesso!\n\n🔐 SENHA DE ACESSO: ${formData.senha}\n\n⚠️ Anote esta senha! Ela não poderá ser recuperada.`,
+      { duration: 15000 } // 15 segundos
+    );
+    
+    // Aguarda 2 segundos antes de navegar para dar tempo de copiar a senha
+    setTimeout(() => {
+      navigate('/vendedores');
+    }, 2000);
+
+  } catch (error: any) {
+    console.error('Erro ao criar vendedor:', error);
+    toast.error(`Erro ao criar vendedor: ${error.message}`);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   return (
     <div className="space-y-6">

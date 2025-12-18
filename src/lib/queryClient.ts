@@ -11,7 +11,7 @@ export const queryClient = new QueryClient({
       gcTime: 10 * 60 * 1000, // 10 minutos (anteriormente cacheTime)
       
       // Revalidar quando a janela ganha foco
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
       
       // Revalidar quando a conexão é restaurada
       refetchOnReconnect: true,

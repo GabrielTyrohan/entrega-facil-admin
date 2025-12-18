@@ -1,10 +1,9 @@
 import {
-  useQuery,
   useInsertMutation,
   useUpdateMutation,
   useDeleteMutation,
 } from '@supabase-cache-helpers/postgrest-react-query';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from './supabase';
 
 // Configurações de cache por tabela
@@ -15,6 +14,7 @@ export const CACHE_KEYS = {
   ENTREGAS: 'entregas',
   PAGAMENTOS: 'pagamentos',
   CESTAS: 'cestas',
+  RESPONSAVEIS: 'responsaveis',
   // Dashboard specific cache keys
   DASHBOARD_STATS: 'dashboard_stats',
   VENDEDORES_ATIVOS: 'vendedores_ativos',
@@ -70,6 +70,10 @@ export const CACHE_TIMES = {
   CESTAS: {
     staleTime: 3 * 60 * 1000,  // 3 minutos
     gcTime: 10 * 60 * 1000,    // 10 minutos
+  },
+  RESPONSAVEIS: {
+    staleTime: 5 * 60 * 1000,  // 5 minutos
+    gcTime: 15 * 60 * 1000,    // 15 minutos
   },
   // Dashboard cache times - dados que mudam com frequência
   DASHBOARD_STATS: {
@@ -199,6 +203,7 @@ export const CACHE_TIMES = {
 export const useSupabaseQuery = (
   tableName: keyof typeof CACHE_KEYS,
   queryBuilder: any,
+  queryKey: any[],
   options?: {
     enabled?: boolean;
     staleTime?: number;
@@ -210,25 +215,34 @@ export const useSupabaseQuery = (
   // Verificar se a configuração de cache existe
   if (!cacheConfig) {
     console.warn(`Cache configuration not found for table: ${tableName}`);
-    return useQuery(queryBuilder, {
+    return useQuery({
+      queryKey,
+      queryFn: async () => {
+        const { data, error } = await queryBuilder;
+        if (error) throw error;
+        return data;
+      },
       staleTime: options?.staleTime || 5 * 60 * 1000, // 5 minutos como fallback
       gcTime: options?.gcTime || 15 * 60 * 1000,      // 15 minutos como fallback
       enabled: options?.enabled !== false,
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
       refetchOnReconnect: true,
     });
   }
   
-  return useQuery(
-    queryBuilder,
-    {
-      staleTime: options?.staleTime || cacheConfig.staleTime,
-      gcTime: options?.gcTime || cacheConfig.gcTime,
-      enabled: options?.enabled !== false,
-      refetchOnWindowFocus: true,
-      refetchOnReconnect: true,
-    }
-  );
+  return useQuery({
+    queryKey,
+    queryFn: async () => {
+      const { data, error } = await queryBuilder;
+      if (error) throw error;
+      return data;
+    },
+    staleTime: options?.staleTime || cacheConfig.staleTime,
+    gcTime: options?.gcTime || cacheConfig.gcTime,
+    enabled: options?.enabled !== false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
+  });
 };
 
 // Hook para mutações com invalidação automática de cache e atualizações otimistas
@@ -316,7 +330,7 @@ export const useSupabaseMutation = (
   switch (mutationType) {
     case 'insert':
       return useInsertMutation(
-        supabase.from(CACHE_KEYS[tableName]),
+        supabase.from(CACHE_KEYS[tableName]) as any,
         ['id'],
         null,
         baseOptions
@@ -324,7 +338,7 @@ export const useSupabaseMutation = (
     
     case 'update':
       return useUpdateMutation(
-        supabase.from(CACHE_KEYS[tableName]),
+        supabase.from(CACHE_KEYS[tableName]) as any,
         ['id'],
         null,
         baseOptions
@@ -332,7 +346,7 @@ export const useSupabaseMutation = (
     
     case 'delete':
       return useDeleteMutation(
-        supabase.from(CACHE_KEYS[tableName]),
+        supabase.from(CACHE_KEYS[tableName]) as any,
         ['id'],
         null,
         baseOptions

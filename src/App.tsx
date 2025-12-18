@@ -33,6 +33,46 @@ function App() {
     initializeConsoleOverride();
     initializeDevToolsDetector();
   }, []);
+
+  // Migração para IndexedDB e limpeza de cache antigo do LocalStorage
+  useEffect(() => {
+    try {
+      // Verificação defensiva se localStorage está disponível
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const MIGRATION_KEY = 'migrated-to-idb';
+        const isMigrated = localStorage.getItem(MIGRATION_KEY);
+
+        if (!isMigrated) {
+          console.log('Iniciando migração de cache para IndexedDB...');
+
+          // 1. Limpar chave principal do React Query no localStorage
+          // Isso força o React Query a começar com um cache limpo no IndexedDB
+          localStorage.removeItem('REACT_QUERY_OFFLINE_CACHE');
+
+          // 2. Limpar outras chaves relacionadas ao React Query para evitar conflitos e liberar espaço
+          Object.keys(localStorage).forEach((key) => {
+            if (key.startsWith('REACT_QUERY')) {
+              localStorage.removeItem(key);
+            }
+          });
+
+          // 3. Marcar como migrado para não executar novamente
+          localStorage.setItem(MIGRATION_KEY, 'true');
+          
+          // O cache-buster foi atualizado para 'v2' no arquivo src/lib/cache/indexedDBPersister.ts
+          // Isso garante que qualquer resquício de cache antigo seja invalidado pelo PersistQueryClient
+          
+          console.log('Migração para IndexedDB concluída com sucesso. Cache antigo do localStorage limpo.');
+        } else {
+          // Já migrado, não faz nada
+        }
+      }
+    } catch (error) {
+      console.error('Erro crítico durante migração para IndexedDB:', error);
+      // Não bloqueia a renderização do app mesmo com erro na migração
+    }
+  }, []);
+
   return (
     <ErrorBoundary>
       <ThemeProvider>

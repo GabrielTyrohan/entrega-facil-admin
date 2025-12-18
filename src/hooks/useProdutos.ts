@@ -43,7 +43,7 @@ export const useProdutos = (options?: {
     query = query.eq('categoria', options.categoria);
   }
 
-  return useSupabaseQuery('PRODUTOS', query, {
+  return useSupabaseQuery('PRODUTOS', query, [CACHE_KEYS.PRODUTOS, user?.id, { categoria: options?.categoria }], {
     enabled: options?.enabled && !!user?.id,
   });
 };
@@ -63,7 +63,7 @@ export const useProduto = (id: string, options?: { enabled?: boolean }) => {
     .eq('administrador_id', user.id)
     .single();
 
-  return useSupabaseQuery('PRODUTOS', query, {
+  return useSupabaseQuery('PRODUTOS', query, [CACHE_KEYS.PRODUTOS, id], {
     enabled: options?.enabled && !!id && !!user?.id,
   });
 };
@@ -83,7 +83,7 @@ export const useProdutosPorCategoria = (categoria: string, options?: { enabled?:
     .eq('administrador_id', user.id)
     .order('produto_nome');
 
-  return useSupabaseQuery('PRODUTOS', query, {
+  return useSupabaseQuery('PRODUTOS', query, [CACHE_KEYS.PRODUTOS, user?.id, 'categoria', categoria], {
     enabled: options?.enabled && !!categoria && !!user?.id,
   });
 };
@@ -175,7 +175,7 @@ export const useProdutoCategories = (options?: { enabled?: boolean }) => {
     .eq('administrador_id', user.id)
     .order('categoria');
 
-  return useSupabaseQuery('PRODUTOS', query, {
+  return useSupabaseQuery('PRODUTOS', query, [CACHE_KEYS.PRODUTOS, 'categories', user?.id], {
     enabled: options?.enabled && !!user?.id,
   });
 };
@@ -193,7 +193,7 @@ export const useEstatisticasProdutos = (options?: { enabled?: boolean }) => {
     .select('*')
     .eq('administrador_id', user.id);
 
-  return useSupabaseQuery('PRODUTOS', query, {
+  return useSupabaseQuery('PRODUTOS', query, [CACHE_KEYS.PRODUTOS, 'stats', user?.id], {
     enabled: options?.enabled && !!user?.id,
   });
 };

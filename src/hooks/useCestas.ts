@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { CACHE_KEYS, CACHE_TIMES } from '../lib/supabaseCache';
 
 export interface CestaData {
   id: string;
@@ -29,7 +30,7 @@ export const useCestas = () => {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ['cestas', user?.id],
+    queryKey: [CACHE_KEYS.CESTAS, user?.id],
     queryFn: async (): Promise<CestaData[]> => {
       try {
         if (!user?.id) {
@@ -126,7 +127,6 @@ export const useCestas = () => {
       }
     },
     enabled: !!user?.id,
-    staleTime: 5 * 60 * 1000, // 5 minutos
-    gcTime: 10 * 60 * 1000, // 10 minutos
+    ...CACHE_TIMES.CESTAS,
   });
 };
