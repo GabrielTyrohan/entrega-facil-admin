@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { ValidationService } from '../services/validationService';
 import { CestaService } from '../services/cestaService';
 import { useAuth } from '../contexts/AuthContext';
-import { useVendedores } from '../hooks/useVendedores';
+import { useVendedoresByAdmin } from '../hooks/useVendedores';
 import { useProdutos } from '../hooks/useProdutos';
 
 interface Produto {
@@ -44,9 +44,7 @@ const NovaCesta: React.FC = () => {
   const { user } = useAuth();
   
   // Fetch real data from database
-  const { data: vendedores = [], isLoading: loadingVendedores } = useVendedores({
-    administrador_id: user?.id,
-    ativo: true,
+  const { data: vendedores = [], isLoading: loadingVendedores } = useVendedoresByAdmin(user?.id || '', {
     enabled: !!user?.id
   }) as { data: Vendedor[], isLoading: boolean };
   

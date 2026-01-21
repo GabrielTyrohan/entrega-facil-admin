@@ -131,7 +131,7 @@ const CestasVendedor: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 p-4 sm:p-6">
         {/* Header Skeleton */}
         <div className="flex items-center justify-between">
           <div className="space-y-2">
@@ -203,7 +203,7 @@ const CestasVendedor: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 sm:p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

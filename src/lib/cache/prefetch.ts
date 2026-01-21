@@ -1,113 +1,51 @@
-import { queryClient } from './cacheConfig';
-import { CACHE_KEYS } from './cacheConfig';
-import { supabase } from '../supabase';
-
-// Prefetch dados críticos ao fazer login
-export const prefetchDashboardData = async (vendedorId: string) => {
-  // Carrega dados em paralelo
-  await Promise.all([
-    // Prefetch produtos
-    queryClient.prefetchQuery({
-      queryKey: [CACHE_KEYS.PRODUTOS, vendedorId],
-      queryFn: async () => {
-        const { data } = await supabase
-          .from('produtos')
-          .select('*')
-          .eq('vendedor_id', vendedorId)
-          .eq('ativo', true);
-        return data;
-      },
-    }),
-
-    // Prefetch clientes
-    queryClient.prefetchQuery({
-      queryKey: [CACHE_KEYS.CLIENTES, vendedorId],
-      queryFn: async () => {
-        const { data } = await supabase
-          .from('clientes')
-          .select('*')
-          .eq('vendedor_id', vendedorId)
-          .eq('ativo', true);
-        return data;
-      },
-    }),
-
-    // Prefetch entregas recentes
-    queryClient.prefetchQuery({
-      queryKey: [CACHE_KEYS.ENTREGAS, vendedorId],
-      queryFn: async () => {
-        const { data } = await supabase
-          .from('entregas')
-          .select('*, clientes(nome), produtos(nome)')
-          .eq('vendedor_id', vendedorId)
-          .order('data_entrega', { ascending: false })
-          .limit(50);
-        return data;
-      },
-    }),
-  ]);
-};
+import { QueryClient } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
+import { CACHE_KEYS } from '@/lib/constants/queryKeys';
 
 /**
- * Configura sincronização em tempo real para tabelas críticas.
- * Escuta eventos INSERT, UPDATE e DELETE e invalida o cache correspondente.
- * 
- * @param vendedorId - ID do vendedor atual para filtrar eventos (se aplicável por RLS)
- * @returns Função de cleanup para remover as subscriptions
+ * Realiza o prefetch de dados essenciais para o funcionamento do sistema
+ * logo após o login ou recarga da página, melhorando a percepção de performance.
  */
-export const setupRealtimeSync = (vendedorId: string) => {
-  if (!vendedorId) return () => {};
+export const prefetchEssentialData = async (
+  queryClient: QueryClient,
+  adminId: string
+) => {
+  console.log('🚀 Prefetching dados essenciais...');
 
-  // Mapeamento de tabelas para chaves de cache
-  const tablesToSync = [
-    { table: 'entregas', cacheKey: CACHE_KEYS.ENTREGAS },
-    { table: 'produtos', cacheKey: CACHE_KEYS.PRODUTOS },
-    { table: 'clientes', cacheKey: CACHE_KEYS.CLIENTES },
-    { table: 'pagamentos', cacheKey: CACHE_KEYS.PAGAMENTOS },
-  ];
+  // Prefetch em paralelo (não bloqueia a UI)
+  await Promise.allSettled([
+    // Vendedores (usado em quase toda página)
+    queryClient.prefetchQuery({
+      queryKey: [CACHE_KEYS.VENDEDORES, { adminId, page: 0 }],
+      queryFn: async () => {
+        const { data } = await supabase
+          .from('vendedores')
+          .select('*')
+          .eq('ativo', true)
+          .eq('administrador_id', adminId) // Importante filtrar pelo admin
+          .order('nome')
+          .limit(15);
+        return { vendedores: data || [], total: data?.length || 0 };
+      },
+      staleTime: 5 * 60 * 1000,
+    }),
 
-  const channels: ReturnType<typeof supabase.channel>[] = [];
+    // Produtos (usado em vendas/entregas)
+    queryClient.prefetchQuery({
+      queryKey: [CACHE_KEYS.PRODUTOS, adminId, { categoria: undefined }],
+      queryFn: async () => {
+        const { data } = await supabase
+          .from('produtos_cadastrado')
+          .select('*')
+          .eq('ativo', true)
+          .eq('administrador_id', adminId)
+          .order('produto_nome')
+          .limit(50);
+        return data || [];
+      },
+      staleTime: 10 * 60 * 1000,
+    }),
+  ]);
 
-  // Criar um canal para cada tabela crítica
-  tablesToSync.forEach(({ table, cacheKey }) => {
-    const channel = supabase
-      .channel(`realtime_${table}_${vendedorId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*', // Escuta INSERT, UPDATE e DELETE
-          schema: 'public',
-          table: table,
-          filter: `vendedor_id=eq.${vendedorId}`, // Filtra apenas dados do vendedor atual
-        },
-        (payload) => {
-          console.log(`[Realtime] Alteração detectada em ${table}:`, payload.eventType);
-          
-          // Invalidar cache específico da tabela para forçar recarregamento
-          queryClient.invalidateQueries({
-            queryKey: [cacheKey], // Invalida todas as queries que começam com essa chave
-          });
-
-          // Se for entrega ou pagamento, invalida também as estatísticas do dashboard
-          if (table === 'entregas' || table === 'pagamentos') {
-             queryClient.invalidateQueries({
-              queryKey: [CACHE_KEYS.STATS],
-            });
-          }
-        }
-      )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log(`[Realtime] Sincronização ativa para: ${table}`);
-        }
-      });
-
-    channels.push(channel);
-  });
-
-  // Retornar função de limpeza
-  return () => {
-    console.log('[Realtime] Removendo inscrições...');
-    channels.forEach((channel) => supabase.removeChannel(channel));
-  };
+  console.log('✅ Prefetch concluído');
 };

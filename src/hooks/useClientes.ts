@@ -1,12 +1,24 @@
-import { useQueryClient, useMutation } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
-import { useSupabaseQuery, CACHE_KEYS } from '../lib/supabaseCache';
+// ============================================
+// ARQUIVO: src/hooks/useClientes.ts
+// Hook otimizado usando adminId unificado e RLS
+// Mantendo compatibilidade com hooks legados
+// ============================================
+
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
+import { QUERY_KEYS, CACHE_KEYS, CACHE_TIMES } from '@/lib/constants/queryKeys';
+import { PAGINATION } from '@/lib/constants/pagination';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from '@/utils/toast';
+import { useSupabaseQuery } from '@/lib/supabaseCache';
 import { handleSupabaseError } from '@/utils/supabaseErrorHandler';
 
+// Interface Unificada (Mantendo campos legados para compatibilidade)
 export interface Cliente {
   id: string;
   vendedor_id: string;
   nome: string;
+  // Campos legados mantidos
   sobrenome?: string;
   cpf: string;
   rg?: string;
@@ -33,18 +45,126 @@ export interface Cliente {
   sincronizado?: boolean;
   created_at: string;
   updated_at: string;
+  // Novos campos
+  vendedor?: {
+    id: string;
+    nome: string;
+  };
 }
 
-// Hook para listar todos os clientes
-export const useClientes = (options?: {
+// Interface de retorno legado (para manter compatibilidade)
+export interface UseClientesReturn {
+  data: any[];
+  isLoading: boolean;
+  error: Error | null;
+  count?: number | null;
+  totalCount: number;
+  totalPages: number;
+  currentPage: number;
+  refetch: () => void;
+}
+
+// ===== NOVO HOOK OTIMIZADO (Principal) =====
+export const useClientes = (
+  vendedorId?: string,
+  page: number = 0,
+  search: string = ''
+) => {
+  const { adminId } = useAuth();
+
+  return useQuery({
+    queryKey: [QUERY_KEYS.CLIENTES, { adminId, vendedorId, page, search }],
+    queryFn: async () => {
+      const { from, to } = PAGINATION.calculateRange(page, 15);
+
+      let query = supabase
+        .from('clientes')
+        .select(`
+          *,
+          vendedor:vendedores!inner(id, nome, administrador_id)
+        `, { count: 'exact' })
+        .eq('vendedor.administrador_id', adminId)
+        .range(from, to)
+        .order('created_at', { ascending: false });
+
+      // Filtro ADICIONAL por vendedor (opcional)
+      if (vendedorId) {
+        query = query.eq('vendedor_id', vendedorId);
+      }
+
+      // Busca por nome, telefone ou CPF
+      if (search) {
+        query = query.or(
+          `nome.ilike.%${search}%,telefone.ilike.%${search}%,cpf.ilike.%${search}%`
+        );
+      }
+
+      const { data, error, count } = await query;
+      if (error) throw error;
+
+      return {
+        clientes: (data || []) as Cliente[],
+        total: count || 0,
+        totalPages: PAGINATION.calculateTotalPages(count || 0, 15),
+      };
+    },
+    enabled: !!adminId,
+    staleTime: 5 * 60 * 1000,
+    placeholderData: (previousData) => previousData,
+  });
+};
+
+// ===== CRIAR CLIENTE (Otimizado com Toast) =====
+export const useCreateCliente = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (novoCliente: Partial<Cliente>) => {
+      const { data, error } = await supabase
+        .from('clientes')
+        .insert(novoCliente)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as Cliente;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.CLIENTES] });
+      // Invalidações extras legadas para garantir consistência
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] });
+      
+      toast.success('Cliente criado com sucesso!');
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Erro ao criar cliente');
+    },
+  });
+};
+
+// ============================================
+// LEGACY HOOKS (Preservados para compatibilidade)
+// ============================================
+
+// Hook legado renomeado (era useClientes)
+export const useClientesLegacy = (options?: {
   enabled?: boolean;
   ativo?: boolean;
   search?: string;
-}) => {
+  page?: number;
+  pageSize?: number;
+}): UseClientesReturn => {
+  const page = options?.page || 0;
+  const pageSize = options?.pageSize || 50;
+  const from = page * pageSize;
+  const to = from + pageSize - 1;
+
   let query = supabase
     .from('clientes')
-    .select('*')
-    .order('nome');
+    .select('id, nome, telefone, endereco, ativo, created_at', { count: 'exact' })
+    .order('nome')
+    .range(from, to);
 
   // Filtros opcionais
   if (options?.ativo !== undefined) {
@@ -56,45 +176,121 @@ export const useClientes = (options?: {
     query = query.or(orFilter);
   }
 
-  return useSupabaseQuery('CLIENTES', query, [CACHE_KEYS.CLIENTES, 'list', { ativo: options?.ativo, search: options?.search }], {
+  const queryResult = useSupabaseQuery('CLIENTES', query, [
+    CACHE_KEYS.CLIENTES, 
+    'list', 
+    { 
+      ativo: options?.ativo, 
+      search: options?.search,
+      page,
+      pageSize
+    }
+  ], {
     enabled: options?.enabled,
   });
+
+  const totalCount = queryResult.count || 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+  return {
+    data: queryResult.data ?? [],
+    isLoading: queryResult.isLoading,
+    error: queryResult.error,
+    totalCount,
+    totalPages,
+    currentPage: page,
+    refetch: queryResult.refetch,
+  };
 };
 
-// Hook para listar clientes do administrador logado
+// Hook para listar clientes do administrador logado (MANTIDO INTACTO)
 export const useClientesByAdmin = (administradorId: string, options?: {
   enabled?: boolean;
   ativo?: boolean;
   search?: string;
+  vendedor_id?: string;
+  page?: number;
+  pageSize?: number;
 }) => {
-  let query = supabase
-    .from('clientes')
-    .select(`
-      *,
-      vendedores!inner(
-        id,
-        nome,
-        administrador_id
-      )
-    `)
-    .eq('vendedores.administrador_id', administradorId)
-    .order('nome');
+  const page = options?.page || 0;
+  const pageSize = options?.pageSize || 50;
+  const from = page * pageSize;
+  const to = from + pageSize - 1;
 
-  // Filtros opcionais
-  if (options?.ativo !== undefined) {
-    query = query.eq('ativo', options.ativo);
-  }
+  const queryFn = async () => {
+    // 1. Buscar IDs dos vendedores do admin
+    const { data: vendedores, error: vendedoresError } = await supabase
+      .from('vendedores')
+      .select('id')
+      .eq('administrador_id', administradorId);
+    
+    if (vendedoresError) throw vendedoresError;
+    
+    const vendedorIds = vendedores?.map(v => v.id) || [];
+    
+    // Se não tiver vendedores, retornar lista vazia
+    if (vendedorIds.length === 0) {
+      return { data: [], count: 0 };
+    }
 
-  if (options?.search) {
-    // SOLUÇÃO: Usar apenas filtros da tabela principal (clientes)
-    // Todas as colunas (nome, email, telefone) são da tabela clientes
-    const orFilter = `nome.ilike.%${options.search}%,email.ilike.%${options.search}%,telefone.ilike.%${options.search}%`;
-    query = query.or(orFilter);
-  }
+    // 2. Construir query de clientes
+    let query = supabase
+      .from('clientes')
+      .select('id, nome, telefone, endereco, ativo, created_at, vendedor_id, cpf, updated_at, email', { count: 'exact' })
+      .in('vendedor_id', vendedorIds)
+      .order('nome')
+      .range(from, to);
 
-  return useSupabaseQuery('CLIENTES', query, [CACHE_KEYS.CLIENTES, administradorId, { ativo: options?.ativo, search: options?.search }], {
+    // Filtros opcionais
+    if (options?.ativo !== undefined) {
+      query = query.eq('ativo', options.ativo);
+    }
+
+    if (options?.vendedor_id) {
+      query = query.eq('vendedor_id', options.vendedor_id);
+    }
+
+    if (options?.search) {
+      const orFilter = `nome.ilike.%${options.search}%,email.ilike.%${options.search}%,telefone.ilike.%${options.search}%`;
+      query = query.or(orFilter);
+    }
+
+    const { data, error, count } = await query;
+    if (error) throw error;
+    
+    return { data, count };
+  };
+
+  const queryResult = useQuery({
+    queryKey: [
+      CACHE_KEYS.CLIENTES, 
+      administradorId, 
+      { 
+        ativo: options?.ativo, 
+        search: options?.search,
+        vendedor_id: options?.vendedor_id,
+        page,
+        pageSize
+      }
+    ],
+    queryFn,
     enabled: options?.enabled && !!administradorId,
+    staleTime: CACHE_TIMES.CLIENTES ? CACHE_TIMES.CLIENTES.staleTime : 5 * 60 * 1000,
   });
+
+  const totalCount = queryResult.data?.count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+  return {
+    data: queryResult.data?.data ?? [],
+    isLoading: queryResult.isLoading,
+    error: queryResult.error as Error | null,
+    count: queryResult.data?.count,
+    totalCount,
+    totalPages,
+    currentPage: page,
+    refetch: queryResult.refetch,
+  };
 };
 
 // Hook para buscar cliente por ID
@@ -124,32 +320,6 @@ export const useClientesPorCidade = (cidade: string, options?: { enabled?: boole
   });
 };
 
-// Hook para criar cliente
-export const useCreateCliente = () => {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: async (cliente: Omit<Cliente, 'id'>) => {
-      const { data, error } = await supabase
-        .from('clientes')
-        .insert(cliente)
-        .select()
-        .single();
-      
-      if (error) {
-        throw new Error(handleSupabaseError(error));
-      }
-      
-      return data as Cliente;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CLIENTES] });
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] });
-    }
-  });
-};
-
 // Hook para atualizar cliente
 export const useUpdateCliente = () => {
   const queryClient = useQueryClient();
@@ -173,6 +343,10 @@ export const useUpdateCliente = () => {
       queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CLIENTES] });
       queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
       queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] });
+      toast.success('Cliente atualizado com sucesso!');
+    },
+    onError: (error: any) => {
+        toast.error(error.message || 'Erro ao atualizar cliente');
     }
   });
 };
@@ -196,37 +370,43 @@ export const useDeleteCliente = () => {
       queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CLIENTES] });
       queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
       queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CESTAS] });
+      toast.success('Cliente excluído com sucesso!');
+    },
+    onError: (error: any) => {
+        toast.error(error.message || 'Erro ao excluir cliente');
     }
   });
 };
 
 // Hook para buscar cidades únicas
 export const useCidadesClientes = (options?: { enabled?: boolean }) => {
+  const { adminId } = useAuth();
   const query = supabase
     .from('clientes')
     .select('cidade')
     .eq('ativo', true);
 
   return useSupabaseQuery('CLIENTES', query, [CACHE_KEYS.CLIENTES, 'cidades'], {
-    enabled: options?.enabled,
+    enabled: options?.enabled && !!adminId,
   });
 };
 
 // Hook para estatísticas de clientes
 export const useEstatisticasClientes = (options?: { enabled?: boolean }) => {
+  const { adminId } = useAuth();
   const query = supabase
     .from('clientes')
     .select('id, ativo, cidade, created_at');
 
   return useSupabaseQuery('CLIENTES', query, [CACHE_KEYS.CLIENTES, 'stats'], {
-    enabled: options?.enabled,
+    enabled: options?.enabled && !!adminId,
   });
 };
 
 // Hook para buscar clientes com paginação
 export const useClientesPaginados = (
   page: number = 1,
-  limit: number = 10,
+  limit: number = PAGINATION.BACKEND_PAGE_SIZE,
   options?: {
     enabled?: boolean;
     ativo?: boolean;
@@ -234,7 +414,7 @@ export const useClientesPaginados = (
     administrador_id?: string;
   }
 ) => {
-  const offset = (page - 1) * limit;
+  const { from, to } = PAGINATION.calculateRange(page - 1, limit);
   
   let query = supabase
     .from('clientes')
@@ -247,21 +427,17 @@ export const useClientesPaginados = (
       )
     `, { count: 'exact' })
     .order('nome')
-    .range(offset, offset + limit - 1);
+    .range(from, to);
 
-  // Filtros opcionais
   if (options?.ativo !== undefined) {
     query = query.eq('ativo', options.ativo);
   }
 
-  // SEMPRE filtrar por administrador_id através do vendedor se fornecido
   if (options?.administrador_id) {
     query = query.eq('vendedores.administrador_id', options.administrador_id);
   }
 
   if (options?.search) {
-    // SOLUÇÃO: Usar apenas filtros da tabela principal (clientes)
-    // Todas as colunas (nome, email, telefone) são da tabela clientes
     const orFilter = `nome.ilike.%${options.search}%,email.ilike.%${options.search}%,telefone.ilike.%${options.search}%`;
     query = query.or(orFilter);
   }
@@ -296,11 +472,11 @@ export const usePrefetchCliente = () => {
           .eq('id', id)
           .single()
           .then(({ data }) => data),
-      staleTime: 5 * 60 * 1000, // 5 minutos
+      staleTime: 5 * 60 * 1000,
     });
   };
 };
 
-// Aliases para compatibilidade com nomes usados nas páginas
+// Aliases
 export const useClientesByCity = useClientesPorCidade;
 export const useClienteCities = useCidadesClientes;

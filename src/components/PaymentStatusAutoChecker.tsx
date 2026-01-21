@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
 const PaymentStatusAutoChecker: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, signOut } = useAuth();
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -26,7 +26,7 @@ const PaymentStatusAutoChecker: React.FC = () => {
           .from('administradores')
           .select('status_pagamento, data_vencimento, email, nome, sobrenome')
           .eq('id', user.id)
-          .single();
+          .maybeSingle();
 
         if (error) {
           console.error('Erro ao verificar status de pagamento:', error);
@@ -57,7 +57,7 @@ const rawVencStr: string | undefined = (adminData as any)?.data_vencimento;
 
         if (isStatusVencido || isExpiredByDate) {
           // Faz logout do usuário e ProtectedRoute redireciona para /login
-          await logout();
+          await signOut();
         }
       } catch (error) {
         console.error('Erro na verificação automática de pagamento:', error);
@@ -80,7 +80,7 @@ const rawVencStr: string | undefined = (adminData as any)?.data_vencimento;
       }
       clearTimeout(initialTimeout);
     };
-  }, [user, logout]);
+  }, [user, signOut]);
 
   // Este componente não renderiza nada visível
   return null;

@@ -1,56 +1,61 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Search, MoreHorizontal, Eye, Trash2, Package, Calendar, User, MapPin } from 'lucide-react';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
-import { 
-  useEntregas, 
-  useDeleteEntrega,
-  type Entrega 
-} from '../hooks/useEntregas';
-import { 
-  useVendedoresByAdmin,
-  type Vendedor 
-} from '../hooks/useVendedores';
+import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { useAuth } from '../contexts/AuthContext';
-import { EntregaComDetalhes, EntregaService } from '../services/entregaService';
+import { Calendar, Eye, MapPin, MoreHorizontal, Package, Search, Trash2, User } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
 import EntregaModal from '../components/ui/EntregaModal';
+import { useAuth } from '../contexts/AuthContext';
+import {
+    useDeleteEntrega,
+    useEntregas,
+    type Entrega
+} from '../hooks/useEntregas';
+import {
+    useVendedoresByAdmin,
+    type Vendedor
+} from '../hooks/useVendedores';
+import { EntregaComDetalhes, EntregaService } from '../services/entregaService';
 
 const Entregas: React.FC = () => {
-  const { user } = useAuth();
+  const { adminId } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedVendedor, setSelectedVendedor] = useState<string>('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
   const [selectedEntrega, setSelectedEntrega] = useState<EntregaComDetalhes | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [entregaParaExcluir, setEntregaParaExcluir] = useState<Entrega | null>(null);
-  const entregaService = useMemo(() => new EntregaService(user?.id || ''), [user?.id]);
+  const entregaService = useMemo(() => new EntregaService(adminId || ''), [adminId]);
 
   // React Query hooks para dados
-  const { data: entregasData = [], isLoading, error } = useEntregas({ 
-    enabled: !!user?.id,
-    administrador_id: user?.id
+  const { 
+    data: entregasData = [], 
+    isLoading, 
+    error,
+    totalPages,
+    totalCount 
+  } = useEntregas({ 
+    enabled: !!adminId,
+    page: currentPage,
+    pageSize: itemsPerPage,
+    search: searchTerm || undefined
   });
-  const { data: vendedoresData = [] } = useVendedoresByAdmin(user?.id || '');
+  const { data: vendedoresData = [] } = useVendedoresByAdmin(adminId || '');
   const deleteEntregaMutation = useDeleteEntrega();
 
   // Tipar os dados corretamente
   const entregas = entregasData as Entrega[];
   const vendedores = vendedoresData as Vendedor[];
+
+  // Scroll to top when page changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [currentPage]);
 
   // Função para calcular itens por página baseado no tamanho da tela
   const calculateItemsPerPage = () => {
@@ -96,75 +101,11 @@ const Entregas: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, [entregas.length, currentPage]);
 
-  // Filtrar entregas baseado nos critérios de busca
-  const filteredEntregas = useMemo(() => {
-    const filtered = entregas.filter((entrega: Entrega) => {
-      const q = searchTerm.trim().toLowerCase();
-      const clienteNomeCompleto = `${entrega.cliente?.nome || ''} ${((entrega.cliente as any)?.sobrenome) || ''}`
-        .trim()
-        .toLowerCase();
-      const clienteTelefone = entrega.cliente?.telefone || '';
-      const vendedorNome = entrega.vendedor?.nome?.toLowerCase() || '';
-      const enderecoStr = formatClienteAddress(entrega).toLowerCase();
-      const entregaId = (entrega.id || '').toLowerCase();
+  // Dados já filtrados e paginados pelo hook
+  const currentEntregas = entregas;
 
-      const matchesSearch =
-        q === '' ||
-        clienteNomeCompleto.includes(q) ||
-        clienteTelefone.includes(searchTerm.trim()) ||
-        vendedorNome.includes(q) ||
-        enderecoStr.includes(q) ||
-        entregaId.includes(q);
-      
-      const matchesVendedor = selectedVendedor === '' || entrega.vendedor_id === selectedVendedor;
-      
-      return matchesSearch && matchesVendedor;
-    });
-
-    // Ordenar por data_entrega de forma decrescente (mais recente primeiro)
-    return filtered.sort((a, b) => {
-      const dateA = new Date(a.data_entrega || '');
-      const dateB = new Date(b.data_entrega || '');
-      return dateB.getTime() - dateA.getTime();
-    });
-  }, [entregas, searchTerm, selectedVendedor]);
-
-  // Lógica de paginação
-  const totalPages = Math.ceil(filteredEntregas.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentEntregas = filteredEntregas.slice(startIndex, endIndex);
-
-  // Reset página quando filtro mudar
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, selectedVendedor]);
-
-  // Função para gerar números das páginas
-  const getPageNumbers = () => {
-    const pages = [];
-    const maxVisiblePages = window.innerWidth >= 768 ? 7 : 5; // Mais páginas em telas maiores
-    
-    if (totalPages <= maxVisiblePages) {
-      for (let i = 1; i <= totalPages; i++) {
-        pages.push(i);
-      }
-    } else {
-      const halfVisible = Math.floor(maxVisiblePages / 2);
-      let startPage = Math.max(1, currentPage - halfVisible);
-      const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-      
-      if (endPage - startPage < maxVisiblePages - 1) {
-        startPage = Math.max(1, endPage - maxVisiblePages + 1);
-      }
-      
-      for (let i = startPage; i <= endPage; i++) {
-        pages.push(i);
-      }
-    }
-    
-    return pages;
-  };
+  const startIndex = totalCount > 0 ? currentPage * itemsPerPage + 1 : 0;
+  const endIndex = Math.min((currentPage + 1) * itemsPerPage, totalCount);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pt-BR');
@@ -285,7 +226,7 @@ const Entregas: React.FC = () => {
   // Estados de loading e error do React Query
   if (isLoading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 p-4 sm:p-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Entregas</h1>
@@ -367,7 +308,7 @@ const Entregas: React.FC = () => {
 
   if (error) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 p-4 sm:p-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Entregas</h1>
@@ -390,7 +331,7 @@ const Entregas: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 sm:p-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Entregas</h1>
@@ -429,7 +370,7 @@ const Entregas: React.FC = () => {
         {/* Informações de paginação */}
         <div className="mt-4 flex justify-between items-center text-sm text-gray-600 dark:text-gray-400">
           <span>
-            Mostrando {startIndex + 1} a {Math.min(endIndex, filteredEntregas.length)} de {filteredEntregas.length} entregas
+            Mostrando {startIndex} a {endIndex} de {totalCount} entregas
           </span>
           <span>
             {itemsPerPage} por página
@@ -548,72 +489,15 @@ const Entregas: React.FC = () => {
       </div>
 
       {/* Paginação */}
-      {totalPages > 1 && (
-        <div className="flex justify-center">
-          <Pagination>
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious 
-                  href="#"
-                  size="default"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (currentPage > 1) setCurrentPage(currentPage - 1);
-                  }}
-                  className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                />
-              </PaginationItem>
-              
-              {getPageNumbers().map((pageNum, index, array) => {
-                const showEllipsisBefore = index === 0 && pageNum > 1;
-                const showEllipsisAfter = index === array.length - 1 && pageNum < totalPages;
-                
-                return (
-                  <React.Fragment key={pageNum}>
-                    {showEllipsisBefore && (
-                      <PaginationItem>
-                        <PaginationEllipsis />
-                      </PaginationItem>
-                    )}
-                    
-                    <PaginationItem>
-                      <PaginationLink
-                        href="#"
-                        size="default"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          setCurrentPage(pageNum);
-                        }}
-                        isActive={currentPage === pageNum}
-                        className="cursor-pointer"
-                      >
-                        {pageNum}
-                      </PaginationLink>
-                    </PaginationItem>
-                    
-                    {showEllipsisAfter && (
-                      <PaginationItem>
-                        <PaginationEllipsis />
-                      </PaginationItem>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-              
-              <PaginationItem>
-                <PaginationNext 
-                  href="#"
-                  size="default"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
-                  }}
-                  className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
-        </div>
+      {totalPages > 0 && (
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages || 0}
+          totalCount={totalCount || 0}
+          pageSize={itemsPerPage}
+          onPageChange={setCurrentPage}
+          isLoading={isLoading}
+        />
       )}
 
       {/* Modal de Visualização */}

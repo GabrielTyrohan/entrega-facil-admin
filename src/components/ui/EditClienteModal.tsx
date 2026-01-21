@@ -202,7 +202,7 @@ const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cl
 
       await updateClienteMutation.mutateAsync({
         id: cliente.id,
-        data: dataToUpdate
+        ...dataToUpdate
       });
 
       onClose();

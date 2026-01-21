@@ -1,10 +1,240 @@
+import { useQuery, UseQueryResult } from '@tanstack/react-query';
 import React from 'react';
-import { useSupabaseQuery } from '../lib/supabaseCache';
+import { useAuth } from '../contexts/AuthContext';
+import { CACHE_KEYS, CACHE_TIMES } from '../lib/constants/queryKeys';
 import { supabase } from '../lib/supabase';
-import { useQuery } from '@tanstack/react-query';
-import { CACHE_KEYS } from '../lib/cache/cacheConfig';
+import { useSupabaseQuery } from '../lib/supabaseCache';
+
+export const useDashboard = () => {
+  // Implementação movida para o final do arquivo para acessar os outros hooks
+  const { adminId } = useAuth();
+  
+  // Hooks auxiliares definidos abaixo
+  const summaryQuery = useDashboardSummary(adminId || '', { enabled: !!adminId });
+  const chartsQuery = usePagamentosMensais(adminId || '', { enabled: !!adminId });
+
+  const summary = summaryQuery.data;
+  const chartsData = chartsQuery.data;
+
+  // Cálculos de percentual
+  const calcPercent = (atual: number, anterior: number) => {
+    if (!anterior) return atual > 0 ? 100 : 0;
+    return Math.round(((atual - anterior) / anterior) * 100);
+  };
+
+  const percentualFaturamento = calcPercent(summary?.faturamento_mes_atual || 0, summary?.faturamento_mes_anterior || 0);
+  const percentualEntregas = calcPercent(summary?.entregas_mes_atual || 0, summary?.entregas_mes_anterior || 0);
+
+  // Mapear Top Vendedores para formato da UI
+  const vendedores = summary?.top_vendedores.map(v => ({
+    name: v.nome,
+    sales: `${v.total_entregas} vendas`,
+    totalValue: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v.total_vendido)
+  })) || [];
+
+  return {
+    stats: {
+      faturamentoAtual: summary?.faturamento_mes_atual || 0,
+      valoresEmFalta: summary?.valores_em_falta || 0,
+      entregasAtual: summary?.entregas_mes_atual || 0,
+      vendedoresAtivos: summary?.vendedores_ativos || 0,
+      percentualFaturamento,
+      percentualEntregas,
+    },
+    charts: {
+      faturamentoMensal: chartsData || []
+    },
+    vendedores,
+    isLoading: summaryQuery.isLoading,
+    someLoading: summaryQuery.isLoading || chartsQuery.isLoading
+  };
+};
+
+export interface DashboardSummary {
+  vendedores_ativos: number;
+  entregas_mes_atual: number;
+  entregas_mes_anterior: number;
+  faturamento_mes_atual: number;
+  faturamento_mes_anterior: number;
+  valores_em_falta: number;
+  top_vendedores: {
+    id: string;
+    nome: string;
+    total_entregas: number;
+    total_vendido: number;
+  }[];
+}
+
+// Hook unificado para todas as estatísticas do dashboard
+export const useDashboardSummary = (administrador_id: string, options?: { enabled?: boolean }) => {
+  // TODO: Quando a função RPC estiver criada no banco, descomentar e usar:
+  // const query = supabase.rpc('get_dashboard_summary', { admin_id: administrador_id });
+
+  // Fallback temporário usando queries separadas enquanto RPC não existe
+  const result = useQuery({
+    queryKey: ['DASHBOARD', 'summary', administrador_id],
+    queryFn: async () => {
+      try {
+        // 1. Vendedores Ativos
+        const { data: vendedores, error: errVendedores } = await supabase
+          .from('vendedores')
+          .select('id')
+          .eq('administrador_id', administrador_id)
+          .eq('ativo', true);
+          
+        if (errVendedores) throw errVendedores;
+
+        const vendedores_ativos = vendedores?.length || 0;
+        const vendedorIds = vendedores?.map(v => v.id) || [];
+
+        // 2. Entregas (Mês Atual e Anterior)
+        const now = new Date();
+        const firstDayCurrent = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        const firstDayPrevious = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+        const lastDayPrevious = new Date(now.getFullYear(), now.getMonth(), 0).toISOString();
+
+        const { data: entregasAtuais, error: errEntregasAtuais } = await supabase
+          .from('entregas')
+          .select('valor')
+          .in('vendedor_id', vendedorIds)
+          .gte('data_entrega', firstDayCurrent);
+          
+        if (errEntregasAtuais) throw errEntregasAtuais;
+
+        const { data: entregasAnteriores, error: errEntregasAnteriores } = await supabase
+          .from('entregas')
+          .select('valor')
+          .in('vendedor_id', vendedorIds)
+          .gte('data_entrega', firstDayPrevious)
+          .lte('data_entrega', lastDayPrevious);
+
+        if (errEntregasAnteriores) throw errEntregasAnteriores;
+
+        const entregas_mes_atual = entregasAtuais?.length || 0;
+        const entregas_mes_anterior = entregasAnteriores?.length || 0;
+        const faturamento_mes_atual = entregasAtuais?.reduce((sum, e) => sum + (e.valor || 0), 0) || 0;
+        const faturamento_mes_anterior = entregasAnteriores?.reduce((sum, e) => sum + (e.valor || 0), 0) || 0;
+
+        // 3. Valores em Falta (Geral) - MATCHING DEVEDORES LOGIC
+        // Calculates debts from overdue deliveries (dataRetorno < current month)
+        const firstDayCurrentStr = firstDayCurrent.split('T')[0];
+
+        const { data: entregasDevedoras, error: errEntregasDevedoras } = await supabase
+           .from('entregas')
+           .select(`
+             id,
+             valor,
+             pagamentos (
+               valor
+             ),
+             vendedores!inner (
+               administrador_id
+             )
+           `)
+           .eq('vendedores.administrador_id', administrador_id)
+           .not('dataRetorno', 'is', null)
+           .lt('dataRetorno', firstDayCurrentStr);
+
+        if (errEntregasDevedoras) throw errEntregasDevedoras;
+
+        let valores_em_falta = 0;
+        
+        entregasDevedoras?.forEach((entrega: any) => {
+          const valorTotal = entrega.valor || 0;
+          const valorPago = entrega.pagamentos?.reduce((sum: number, p: any) => sum + (p.valor || 0), 0) || 0;
+          const debito = valorTotal - valorPago;
+          
+          if (debito > 0.01) { // Small epsilon for float comparison
+             valores_em_falta += debito;
+          }
+        });
+
+        // 4. Top Vendedores (Calculado)
+        const { data: dadosVendedores, error: errTopVendedores } = await supabase
+          .from('entregas')
+          .select(`
+            vendedor_id, 
+            valor, 
+            vendedores!inner(id, nome)
+          `)
+          .in('vendedor_id', vendedorIds)
+          .gte('data_entrega', firstDayCurrent);
+
+        if (errTopVendedores) throw errTopVendedores;
+
+        const vendedoresMap = new Map();
+        dadosVendedores?.forEach((e: any) => {
+          // Safe navigation para evitar crash se relacionamento falhar
+          const vid = e.vendedores?.id;
+          if (!vid) return;
+
+          if (!vendedoresMap.has(vid)) {
+            vendedoresMap.set(vid, {
+              id: vid,
+              nome: e.vendedores.nome || 'Vendedor',
+              total_entregas: 0,
+              total_vendido: 0
+            });
+          }
+          const v = vendedoresMap.get(vid);
+          v.total_entregas++;
+          v.total_vendido += (e.valor || 0);
+        });
+
+        const top_vendedores = Array.from(vendedoresMap.values())
+          .sort((a: any, b: any) => b.total_vendido - a.total_vendido)
+          .slice(0, 5); 
+
+        return {
+          vendedores_ativos,
+          entregas_mes_atual,
+          entregas_mes_anterior,
+          faturamento_mes_atual,
+          faturamento_mes_anterior,
+          valores_em_falta,
+          top_vendedores
+        } as DashboardSummary;
+      } catch (error) {
+        console.error('Erro na query do Dashboard:', error);
+        throw error;
+      }
+    },
+    enabled: options?.enabled && !!administrador_id,
+    staleTime: CACHE_TIMES.DASHBOARD_SUMMARY.staleTime,
+    retry: 2,
+    refetchOnWindowFocus: false // Evita refetch excessivo que pode causar race conditions
+  });
+
+  // Se tiver erro ou data null (e não estiver carregando), retornar dados vazios
+  if (result.error || (!result.isLoading && !result.data)) {
+    if (result.error) {
+       console.error('Dashboard Error:', result.error);
+    }
+    return {
+      data: {
+        vendedores_ativos: 0,
+        entregas_mes_atual: 0,
+        entregas_mes_anterior: 0,
+        faturamento_mes_atual: 0,
+        faturamento_mes_anterior: 0,
+        valores_em_falta: 0,
+        top_vendedores: [],
+      },
+      isLoading: false,
+      error: result.error,
+      refetch: result.refetch,
+      status: 'success', // Fallback to success with empty data to avoid crashing UI
+    } as unknown as UseQueryResult<DashboardSummary, Error>;
+  }
+
+  return {
+    ...result,
+    data: result.data as DashboardSummary | undefined,
+  } as UseQueryResult<DashboardSummary, Error>;
+};
 
 // Hook para estatísticas do dashboard do administrador
+// @deprecated Use useDashboardSummary instead
 export const useDashboardStats = (administrador_id: string, options?: { enabled?: boolean }) => {
   const query = supabase.rpc('get_dashboard_stats', { admin_id: administrador_id });
 
@@ -477,4 +707,238 @@ export const useTotalEntregasPorAdministrador = (administrador_id: string, optio
     ...queryResult,
     data: entregasPorVendedor,
   };
+};
+
+export const useClientesAtivos = (adminId: string, options?: { enabled?: boolean }) => {
+  return useQuery({
+    queryKey: ['clientes-ativos', adminId],
+    queryFn: async () => {
+      const { data: vendedores } = await supabase
+        .from('vendedores')
+        .select('id')
+        .eq('administrador_id', adminId)
+        .eq('ativo', true);
+      
+      const vendedorIds = vendedores?.map(v => v.id) || [];
+      
+      const { data } = await supabase
+        .from('clientes')
+        .select('id')
+        .in('vendedor_id', vendedorIds)
+        .eq('ativo', true);
+      
+      return data?.length || 0;
+    },
+    enabled: options?.enabled && !!adminId
+  });
+};
+
+export const useTaxaInadimplencia = (adminId: string, options?: { enabled?: boolean }) => {
+  return useQuery({
+    queryKey: ['taxa-inadimplencia', adminId],
+    queryFn: async () => {
+      const { data: vendedores } = await supabase
+        .from('vendedores')
+        .select('id')
+        .eq('administrador_id', adminId);
+      
+      const vendedorIds = vendedores?.map(v => v.id) || [];
+      
+      const { data: entregas } = await supabase
+        .from('entregas')
+        .select('id, pago, valor')
+        .in('vendedor_id', vendedorIds);
+      
+      const total = entregas?.length || 0;
+      const pendentes = entregas?.filter(e => !e.pago).length || 0;
+      const valorPendente = entregas?.filter(e => !e.pago).reduce((sum, e) => sum + (e.valor || 0), 0) || 0;
+      
+      return {
+        percentual: total > 0 ? ((pendentes / total) * 100) : 0,
+        quantidade: pendentes,
+        valorPendente
+      };
+    },
+    enabled: options?.enabled && !!adminId
+  });
+};
+
+export const useEntregasMensais = (adminId: string, options?: { enabled?: boolean }) => {
+  return useQuery({
+    queryKey: ['entregas-mensais', adminId],
+    queryFn: async () => {
+      const { data: vendedores } = await supabase
+        .from('vendedores')
+        .select('id')
+        .eq('administrador_id', adminId);
+      
+      const vendedorIds = vendedores?.map(v => v.id) || [];
+      
+      const { data: entregas } = await supabase
+        .from('entregas')
+        .select('data_entrega')
+        .in('vendedor_id', vendedorIds);
+      
+      const monthlyData: { [key: string]: number } = {};
+      
+      entregas?.forEach(e => {
+        const date = new Date(e.data_entrega);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        monthlyData[monthKey] = (monthlyData[monthKey] || 0) + 1;
+      });
+      
+      return monthlyData;
+    },
+    enabled: options?.enabled && !!adminId
+  });
+};
+
+
+export const useTopProdutos = (adminId: string, options?: { enabled?: boolean }) => {
+  return useQuery({
+    queryKey: ['top-produtos', adminId],
+    queryFn: async () => {
+      const currentMonth = new Date();
+      currentMonth.setDate(1);
+      currentMonth.setHours(0, 0, 0, 0);
+      
+      const { data: vendedores } = await supabase
+        .from('vendedores')
+        .select('id')
+        .eq('administrador_id', adminId);
+      
+      const vendedorIds = vendedores?.map(v => v.id) || [];
+      
+      // Buscar entregas e seus valores
+      const { data: entregas } = await supabase
+        .from('entregas')
+        .select('produto_id, valor')
+        .in('vendedor_id', vendedorIds)
+        .gte('data_entrega', currentMonth.toISOString())
+        .not('produto_id', 'is', null);
+      
+      if (!entregas || entregas.length === 0) return [];
+
+      // Extrair IDs dos produtos
+      const produtoIds = [...new Set(entregas.map(e => e.produto_id))];
+
+      // Buscar nomes dos produtos manualmente (evita erro de FK inexistente)
+      const { data: produtos } = await supabase
+        .from('produtos_cadastrado')
+        .select('id, produto_nome')
+        .in('id', produtoIds);
+        
+      const produtosMapName = new Map();
+      produtos?.forEach(p => produtosMapName.set(p.id, p.produto_nome));
+      
+      const produtosStats: { [key: string]: { nome: string; quantidade: number; valorTotal: number } } = {};
+      
+      entregas.forEach((e: any) => {
+        const produtoId = e.produto_id;
+        if (!produtoId) return;
+
+        if (!produtosStats[produtoId]) {
+          produtosStats[produtoId] = { 
+            nome: produtosMapName.get(produtoId) || 'Produto desconhecido', 
+            quantidade: 0, 
+            valorTotal: 0 
+          };
+        }
+        produtosStats[produtoId].quantidade += 1;
+        produtosStats[produtoId].valorTotal += (e.valor || 0);
+      });
+      
+      return Object.values(produtosStats)
+        .sort((a, b) => b.quantidade - a.quantidade)
+        .slice(0, 5);
+    },
+    enabled: options?.enabled && !!adminId
+  });
+};
+
+export const useStatusPagamentos = (adminId: string, dias: string = '30', options?: { enabled?: boolean }) => {
+  return useQuery({
+    queryKey: ['status-pagamentos', adminId, dias],
+    queryFn: async () => {
+      const { data: vendedores } = await supabase
+        .from('vendedores')
+        .select('id')
+        .eq('administrador_id', adminId);
+      
+      const vendedorIds = vendedores?.map(v => v.id) || [];
+      
+      let query = supabase
+        .from('entregas')
+        .select('pago, valor')
+        .in('vendedor_id', vendedorIds);
+      
+      if (dias !== 'todos') {
+        const date = new Date();
+        date.setDate(date.getDate() - parseInt(dias));
+        query = query.gte('data_entrega', date.toISOString());
+      }
+      
+      const { data } = await query;
+      
+      const pagas = data?.filter(e => e.pago).length || 0;
+      const pendentes = data?.filter(e => !e.pago).length || 0;
+      const valorPago = data?.filter(e => e.pago).reduce((sum, e) => sum + (e.valor || 0), 0) || 0;
+      const valorPendente = data?.filter(e => !e.pago).reduce((sum, e) => sum + (e.valor || 0), 0) || 0;
+      
+      return [
+        { name: 'Pagas', value: pagas, valorTotal: valorPago, color: '#10b981' },
+        { name: 'Pendentes', value: pendentes, valorTotal: valorPendente, color: '#ef4444' }
+      ];
+    },
+    enabled: options?.enabled && !!adminId
+  });
+};
+
+export const useAlertas = (adminId: string, options?: { enabled?: boolean }) => {
+  return useQuery({
+    queryKey: ['alertas-dashboard', adminId],
+    queryFn: async () => {
+      const alertas: any[] = [];
+      
+      const { data: vendedores } = await supabase
+        .from('vendedores')
+        .select('id, nome, last_sync')
+        .eq('administrador_id', adminId)
+        .eq('ativo', true);
+      
+      const diasSemSync = 7;
+      const dataLimite = new Date();
+      dataLimite.setDate(dataLimite.getDate() - diasSemSync);
+      
+      vendedores?.forEach(v => {
+        if (!v.last_sync || new Date(v.last_sync) < dataLimite) {
+          alertas.push({
+            tipo: 'warning',
+            mensagem: `${v.nome} sem sincronizar há ${diasSemSync}+ dias`,
+            icone: '⚠️'
+          });
+        }
+      });
+      
+      const { data: entregas } = await supabase
+        .from('entregas')
+        .select('id, cliente_id, clientes(nome)')
+        .in('vendedor_id', vendedores?.map(v => v.id) || [])
+        .eq('pago', false)
+        .order('data_entrega', { ascending: true })
+        .limit(3);
+      
+      entregas?.forEach(e => {
+        alertas.push({
+          tipo: 'danger',
+          mensagem: `Cliente ${(e.clientes as any)?.nome} com pagamento pendente`,
+          icone: '💰'
+        });
+      });
+      
+      return alertas.slice(0, 5);
+    },
+    enabled: options?.enabled && !!adminId
+  });
+  
 };

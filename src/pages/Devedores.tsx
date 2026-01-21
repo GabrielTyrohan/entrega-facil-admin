@@ -1,18 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Calendar, User, Phone, MapPin, AlertTriangle, Eye } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
 import { Skeleton } from "@/components/ui/Skeleton";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
+import { Pagination } from "@/components/ui/pagination";
+import { useQuery } from '@tanstack/react-query';
+import { AnimatePresence, motion } from 'framer-motion';
+import { AlertTriangle, Calendar, DollarSign, Eye, MapPin, Phone, Search, User, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { useCreatePagamento } from '../hooks/usePagamentos';
+import { supabase } from '../lib/supabase';
 
 interface DevedorData {
   cliente_id: string;
@@ -49,7 +43,7 @@ interface ClienteDetalhes {
 }
 
 const Devedores: React.FC = () => {
-  const { user } = useAuth();
+  const { user, adminId } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedVendedor, setSelectedVendedor] = useState<string>('');
   const [sortOption, setSortOption] = useState<string>('maior_atraso');
@@ -57,6 +51,15 @@ const Devedores: React.FC = () => {
   const [clienteSelecionado, setClienteSelecionado] = useState<ClienteDetalhes | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  // Estados para modal de pagamento
+  const [pagamentoModalOpen, setPagamentoModalOpen] = useState(false);
+  const [pagamentoEntrega, setPagamentoEntrega] = useState<any>(null);
+  const [valorPagar, setValorPagar] = useState<string>('');
+  const [metodoPagamento, setMetodoPagamento] = useState('Dinheiro');
+  const [isSubmittingPagamento, setIsSubmittingPagamento] = useState(false);
+
+  const createPagamento = useCreatePagamento();
 
   // Função para fechar o modal
   const fecharModal = () => {
@@ -67,19 +70,83 @@ const Devedores: React.FC = () => {
   // useEffect para lidar com a tecla ESC
   useEffect(() => {
     const handleEscKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && modalAberto) {
-        fecharModal();
+      if (event.key === 'Escape') {
+        if (pagamentoModalOpen) {
+          setPagamentoModalOpen(false);
+        } else if (modalAberto) {
+          fecharModal();
+        }
       }
     };
 
-    if (modalAberto) {
+    if (modalAberto || pagamentoModalOpen) {
       document.addEventListener('keydown', handleEscKey);
     }
 
     return () => {
       document.removeEventListener('keydown', handleEscKey);
     };
-  }, [modalAberto]);
+  }, [modalAberto, pagamentoModalOpen]);
+
+  // Funções para pagamento
+  const abrirModalPagamento = (entrega: any) => {
+    setPagamentoEntrega(entrega);
+    setValorPagar(entrega.valor_devido.toFixed(2));
+    setMetodoPagamento('Dinheiro');
+    setPagamentoModalOpen(true);
+  };
+
+  const handleRealizarPagamento = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pagamentoEntrega || !user?.id) return;
+
+    try {
+      setIsSubmittingPagamento(true);
+      
+      const valor = parseFloat(valorPagar);
+      if (isNaN(valor) || valor <= 0) {
+        alert('Valor inválido');
+        return;
+      }
+
+      await createPagamento.mutateAsync({
+        entrega_id: pagamentoEntrega.id,
+        valor: valor,
+        data_pagamento: new Date().toISOString(),
+        forma_pagamento: metodoPagamento,
+      });
+
+      // Atualizar estado local
+      if (clienteSelecionado) {
+        const novasEntregas = clienteSelecionado.entregas.map(ent => {
+          if (ent.id === pagamentoEntrega.id) {
+            const novoValorPago = (ent.valor_pago || 0) + valor;
+            const novoValorDevido = ent.valor - novoValorPago;
+            return {
+              ...ent,
+              valor_pago: novoValorPago,
+              valor_devido: Math.max(0, novoValorDevido),
+              pago: novoValorDevido <= 0.01 // Margem de erro pequena
+            };
+          }
+          return ent;
+        });
+
+        setClienteSelecionado({
+          ...clienteSelecionado,
+          entregas: novasEntregas
+        });
+      }
+
+      setPagamentoModalOpen(false);
+      setPagamentoEntrega(null);
+    } catch (error) {
+      console.error('Erro ao realizar pagamento:', error);
+      alert('Erro ao realizar pagamento. Tente novamente.');
+    } finally {
+      setIsSubmittingPagamento(false);
+    }
+  };
 
   // Função para formatar telefone
   const formatarTelefone = (telefone: string) => {
@@ -123,13 +190,13 @@ const Devedores: React.FC = () => {
       // Buscar pagamentos para cada entrega e filtrar apenas as com valor devido > 0
       const entregasComPagamentos = await Promise.all(
         (entregasCliente || []).map(async (entrega) => {
-          const { data: viewData } = await supabase
-            .from('view_pagamentos_por_entrega')
-            .select('*')
-            .eq('entrega_id', entrega.id)
-            .single();
+          // Buscar pagamentos diretamente da tabela para garantir dados atualizados
+          const { data: pagamentos } = await supabase
+            .from('pagamentos')
+            .select('valor')
+            .eq('entrega_id', entrega.id);
 
-          const valorPago = viewData?.total_pago || 0;
+          const valorPago = pagamentos?.reduce((acc, curr) => acc + curr.valor, 0) || 0;
           const valorDevido = entrega.valor - valorPago;
 
           if (valorDevido <= 0) return null; // Filtrar entregas já pagas
@@ -175,14 +242,26 @@ const Devedores: React.FC = () => {
 
   // Buscar devedores usando abordagem corrigida
   const { data: devedores, isLoading } = useQuery({
-    queryKey: ['devedores', user?.id],
+    queryKey: ['devedores', adminId],
     queryFn: async () => {
-      if (!user?.id) return [];
+      if (!adminId) return [];
 
       // Calcular o primeiro dia do mês atual
       const currentDate = new Date();
       const firstDayOfCurrentMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
       const firstDayOfCurrentMonthString = firstDayOfCurrentMonth.toISOString().split('T')[0];
+
+      // 1. Buscar IDs dos vendedores vinculados ao administrador
+      const { data: vendedoresIdsData, error: vendedoresIdsError } = await supabase
+        .from('vendedores')
+        .select('id')
+        .eq('administrador_id', adminId);
+
+      if (vendedoresIdsError) throw vendedoresIdsError;
+      
+      const vendedorIds = vendedoresIdsData?.map(v => v.id) || [];
+      
+      if (vendedorIds.length === 0) return [];
 
       // Buscar todas as entregas com data de retorno anterior ao mês atual
       const { data: entregasData, error: entregasError } = await supabase
@@ -194,6 +273,7 @@ const Devedores: React.FC = () => {
           mes_cobranca,
           dataRetorno,
           pago,
+          vendedor_id,
           clientes!inner(
             id,
             nome,
@@ -201,7 +281,7 @@ const Devedores: React.FC = () => {
             telefone,
             endereco
           ),
-          vendedores!inner(
+          vendedores(
             id,
             nome,
             administrador_id
@@ -210,7 +290,7 @@ const Devedores: React.FC = () => {
             nome
           )
         `)
-        .eq('vendedores.administrador_id', user.id)
+        .in('vendedor_id', vendedorIds)
         .not('dataRetorno', 'is', null)
         .lt('dataRetorno', firstDayOfCurrentMonthString);
 
@@ -219,15 +299,17 @@ const Devedores: React.FC = () => {
       // Buscar valores pagos para cada entrega
       const entregasComPagamentos = await Promise.all(
         (entregasData || []).map(async (entrega) => {
-          const { data: viewData } = await supabase
-            .from('view_entregas_com_pagamentos')
-            .select('valor_total_pago')
-            .eq('entrega_id', entrega.id)
-            .single();
+          // Buscar pagamentos diretamente da tabela
+          const { data: pagamentos } = await supabase
+            .from('pagamentos')
+            .select('valor')
+            .eq('entrega_id', entrega.id);
+
+          const valorPago = pagamentos?.reduce((acc, curr) => acc + curr.valor, 0) || 0;
 
           return {
             entrega_id: entrega.id,
-            valor_total_pago: viewData?.valor_total_pago || 0,
+            valor_total_pago: valorPago,
             entregas: entrega
           };
         })
@@ -235,26 +317,26 @@ const Devedores: React.FC = () => {
 
       return entregasComPagamentos;
     },
-    enabled: !!user?.id,
+    enabled: !!adminId,
   });
 
   // Buscar vendedores para filtro
   const { data: vendedoresData = [] } = useQuery({
-    queryKey: ['vendedores-filtro', user?.id],
+    queryKey: ['vendedores-filtro', adminId],
     queryFn: async () => {
-      if (!user?.id) return [];
+      if (!adminId) return [];
       
       const { data, error } = await supabase
         .from('vendedores')
         .select('id, nome')
-        .eq('administrador_id', user.id)
+        .eq('administrador_id', adminId)
         .eq('ativo', true)
         .order('nome');
         
       if (error) throw error;
       return data || [];
     },
-    enabled: !!user?.id,
+    enabled: !!adminId,
   });
 
   // Processar dados dos devedores - agrupar por cliente e vendedor
@@ -288,7 +370,7 @@ const Devedores: React.FC = () => {
             cliente_sobrenome: String((entrega.clientes as Record<string, unknown>)?.sobrenome || ''),
             cliente_telefone: String((entrega.clientes as Record<string, unknown>)?.telefone || ''),
             cliente_endereco: String((entrega.clientes as Record<string, unknown>)?.endereco || ''),
-            vendedor_id: String((entrega.vendedores as Record<string, unknown>)?.id || ''),
+            vendedor_id: String((entrega.vendedores as Record<string, unknown>)?.id || entrega.vendedor_id || ''),
             vendedor_nome: String((entrega.vendedores as Record<string, unknown>)?.nome || ''),
             entregas: []
           });
@@ -441,32 +523,6 @@ const Devedores: React.FC = () => {
   const endIndex = startIndex + itemsPerPage;
   const currentDevedores = devedoresFiltrados.slice(startIndex, endIndex);
 
-  // Função para gerar números das páginas
-  const getPageNumbers = () => {
-    const pages = [];
-    const maxVisiblePages = window.innerWidth >= 768 ? 7 : 5; // Mais páginas em telas maiores
-    
-    if (totalPages <= maxVisiblePages) {
-      for (let i = 1; i <= totalPages; i++) {
-        pages.push(i);
-      }
-    } else {
-      const halfVisible = Math.floor(maxVisiblePages / 2);
-      let startPage = Math.max(1, currentPage - halfVisible);
-      const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-      
-      if (endPage - startPage < maxVisiblePages - 1) {
-        startPage = Math.max(1, endPage - maxVisiblePages + 1);
-      }
-      
-      for (let i = startPage; i <= endPage; i++) {
-        pages.push(i);
-      }
-    }
-    
-    return pages;
-  };
-
   // Calcular totais
   const totalDevido = devedoresFiltrados.reduce((sum, devedor) => {
     return sum + devedor.total_devido;
@@ -492,7 +548,7 @@ const Devedores: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 p-4 sm:p-6">
         {/* Header Skeleton */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="space-y-2">
@@ -577,7 +633,7 @@ const Devedores: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 sm:p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -763,84 +819,35 @@ const Devedores: React.FC = () => {
 
       {/* Paginação */}
       {totalPages > 1 && (
-        <div className="flex justify-center px-4">
-          <Pagination>
-            <PaginationContent className="flex-wrap gap-1">
-              <PaginationItem>
-                <PaginationPrevious 
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (currentPage > 1) setCurrentPage(currentPage - 1);
-                  }}
-                  className={`${currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} touch-manipulation`}
-                  size="default"
-                />
-              </PaginationItem>
-              
-              {getPageNumbers().map((pageNum, index, array) => {
-                const showEllipsisBefore = index === 0 && pageNum > 1;
-                const showEllipsisAfter = index === array.length - 1 && pageNum < totalPages;
-                
-                return (
-                  <React.Fragment key={pageNum}>
-                    {showEllipsisBefore && (
-                      <PaginationItem>
-                        <PaginationEllipsis />
-                      </PaginationItem>
-                    )}
-                    
-                    <PaginationItem>
-                      <PaginationLink
-                        href="#"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          setCurrentPage(pageNum);
-                        }}
-                        isActive={currentPage === pageNum}
-                        className="cursor-pointer touch-manipulation"
-                        size="default"
-                      >
-                        {pageNum}
-                      </PaginationLink>
-                    </PaginationItem>
-                    
-                    {showEllipsisAfter && (
-                      <PaginationItem>
-                        <PaginationEllipsis />
-                      </PaginationItem>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-              
-              <PaginationItem>
-                <PaginationNext 
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
-                  }}
-                  className={`${currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'} touch-manipulation`}
-                  size="default"
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
-        </div>
+        <Pagination
+          currentPage={currentPage - 1}
+          totalPages={totalPages}
+          totalCount={devedoresFiltrados.length}
+          pageSize={itemsPerPage}
+          onPageChange={(page) => setCurrentPage(page + 1)}
+        />
       )}
 
       {/* Modal de Detalhes do Cliente */}
-      {modalAberto && clienteSelecionado && (
-        <div 
-          className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50"
-          onClick={fecharModal}
-        >
-          <div 
-            className="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white dark:bg-gray-800"
-            onClick={(e) => e.stopPropagation()}
+      <AnimatePresence>
+        {modalAberto && clienteSelecionado && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 lg:left-64 bg-gray-600 bg-opacity-50 overflow-y-auto z-50"
+            onClick={fecharModal}
           >
-            <div className="mt-3">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ duration: 0.3, type: "spring", damping: 25, stiffness: 300 }}
+              className="relative top-10 mx-auto p-5 border w-[95%] max-w-[95%] shadow-lg rounded-md bg-white dark:bg-gray-800"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mt-3">
               {/* Header do Modal */}
               <div className="flex items-center justify-between mb-6">
                 <div>
@@ -917,6 +924,9 @@ const Devedores: React.FC = () => {
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
                           Status
                         </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
+                          Ação
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -960,6 +970,17 @@ const Devedores: React.FC = () => {
                               {entrega.valor_pago >= entrega.valor ? 'Pago' : entrega.valor_devido > 0 ? 'Devendo' : 'Parcial'}
                             </span>
                           </td>
+                          <td className="px-4 py-2">
+                            {entrega.valor_devido > 0 && (
+                              <button
+                                onClick={() => abrirModalPagamento(entrega)}
+                                className="inline-flex items-center px-2 py-1 border border-transparent text-xs font-medium rounded text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                              >
+                                <DollarSign className="w-3 h-3 mr-1" />
+                                Pagar
+                              </button>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -999,9 +1020,98 @@ const Devedores: React.FC = () => {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
+
+      {/* Modal de Pagamento */}
+      <AnimatePresence>
+      {pagamentoModalOpen && pagamentoEntrega && (
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-[60]"
+          onClick={() => setPagamentoModalOpen(false)}
+        >
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            transition={{ duration: 0.3, type: "spring", damping: 25, stiffness: 300 }}
+            className="relative top-40 mx-auto p-6 border w-full max-w-md shadow-lg rounded-md bg-white dark:bg-gray-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-medium text-gray-900 dark:text-white">Registrar Pagamento</h3>
+              <button onClick={() => setPagamentoModalOpen(false)} className="text-gray-400 hover:text-gray-500">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRealizarPagamento} className="space-y-6">
+              <div>
+                <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-1">Produto</label>
+                <p className="text-lg text-gray-900 dark:text-white">{pagamentoEntrega.produto_nome}</p>
+              </div>
+
+              <div>
+                <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-1">Valor Devido</label>
+                <p className="text-lg font-bold text-red-600">{formatCurrency(pagamentoEntrega.valor_devido)}</p>
+              </div>
+
+              <div>
+                <label htmlFor="valor" className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-1">Valor do Pagamento</label>
+                <div className="mt-1 relative rounded-md shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <span className="text-gray-500 text-lg">R$</span>
+                  </div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    name="valor"
+                    id="valor"
+                    className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 py-3 text-lg border-gray-300 rounded-md dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                    placeholder="0.00"
+                    value={valorPagar}
+                    onChange={(e) => setValorPagar(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="metodo" className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-1">Forma de Pagamento</label>
+                <select
+                  id="metodo"
+                  name="metodo"
+                  className="mt-1 block w-full pl-3 pr-10 py-3 text-lg border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 rounded-md dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                  value={metodoPagamento}
+                  onChange={(e) => setMetodoPagamento(e.target.value)}
+                >
+                  <option value="Dinheiro">Dinheiro</option>
+                  <option value="PIX">PIX</option>
+                  <option value="Cartão de Crédito">Cartão de Crédito</option>
+                  <option value="Cartão de Débito">Cartão de Débito</option>
+                </select>
+              </div>
+
+              <div className="mt-6">
+                <button
+                  type="submit"
+                  disabled={isSubmittingPagamento}
+                  className="inline-flex justify-center w-full rounded-md border border-transparent shadow-sm px-4 py-3 bg-green-600 text-lg font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
+                >
+                  {isSubmittingPagamento ? 'Processando...' : 'Confirmar Pagamento'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </motion.div>
+      )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { X, Mail, Phone, Calendar, DollarSign, TrendingUp } from 'lucide-react';
-import type { Vendedor } from '../../lib/supabase';
+import type { Vendedor } from '../../hooks/useVendedores';
 import { useTotalVendasPorVendedor } from '../../hooks/useDashboard';
 
 interface VendedorModalProps {
@@ -38,7 +38,7 @@ const VendedorModal: React.FC<VendedorModalProps> = ({ vendedor, isOpen, onClose
   if (!isOpen || !vendedor) return null;
 
   // Formatação de telefone
-  const formatPhone = (phone?: string) => {
+  const formatPhone = (phone?: string | null) => {
     if (!phone) return 'N/A';
     const cleaned = phone.replace(/\D/g, '');
     if (cleaned.length === 11) {

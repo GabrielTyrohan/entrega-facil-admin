@@ -2,13 +2,14 @@ import { useSupabaseQuery, CACHE_KEYS } from '../lib/supabaseCache';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { handleSupabaseError } from '@/utils/supabaseErrorHandler';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface Pagamento {
   id: string;
   entrega_id: string;
   valor: number;
   data_pagamento: string;
-  metodo_pagamento: string;
+  forma_pagamento: string;
   observacoes?: string;
   created_at: string;
   updated_at: string;
@@ -44,6 +45,9 @@ export const usePagamentos = (options?: {
   data_fim?: string;
   administrador_id?: string;
 }) => {
+  const { adminId } = useAuth();
+  const targetAdminId = options?.administrador_id || adminId;
+
   let query = supabase
     .from('pagamentos')
     .select(`
@@ -63,8 +67,8 @@ export const usePagamentos = (options?: {
     .order('data_pagamento', { ascending: false });
 
   // Filtro por administrador (obrigatório para segurança)
-  if (options?.administrador_id) {
-    query = query.eq('entregas.vendedores.administrador_id', options.administrador_id);
+  if (targetAdminId) {
+    query = query.eq('entregas.vendedores.administrador_id', targetAdminId);
   }
 
   // Filtros opcionais
@@ -84,8 +88,8 @@ export const usePagamentos = (options?: {
     query = query.lte('data_pagamento', options.data_fim);
   }
 
-  return useSupabaseQuery('PAGAMENTOS', query, [CACHE_KEYS.PAGAMENTOS, options?.administrador_id, { entrega_id: options?.entrega_id, vendedor_id: options?.vendedor_id, data_inicio: options?.data_inicio, data_fim: options?.data_fim }], {
-    enabled: options?.enabled,
+  return useSupabaseQuery('PAGAMENTOS', query, [CACHE_KEYS.PAGAMENTOS, targetAdminId, { entrega_id: options?.entrega_id, vendedor_id: options?.vendedor_id, data_inicio: options?.data_inicio, data_fim: options?.data_fim }], {
+    enabled: options?.enabled && !!targetAdminId,
   });
 };
 
@@ -134,7 +138,7 @@ export const useCreatePagamento = () => {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async (pagamento: Omit<Pagamento, 'id'>) => {
+    mutationFn: async (pagamento: Omit<Pagamento, 'id' | 'created_at' | 'updated_at'>) => {
       const { data, error } = await supabase
         .from('pagamentos')
         .insert(pagamento)
@@ -208,6 +212,7 @@ export const useEstatisticasPagamentos = (
   administrador_id?: string,
   options?: { enabled?: boolean }
 ) => {
+  const { adminId } = useAuth();
   let query = supabase
     .from('pagamentos')
     .select(`
@@ -225,6 +230,6 @@ export const useEstatisticasPagamentos = (
   }
 
   return useSupabaseQuery('PAGAMENTOS', query, [CACHE_KEYS.PAGAMENTOS, 'stats', administrador_id], {
-    enabled: options?.enabled,
+    enabled: options?.enabled && (!!administrador_id || !!adminId),
   });
 };

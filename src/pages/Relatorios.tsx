@@ -1,46 +1,38 @@
-import React, { useState, useMemo } from 'react';
-import DOMPurify from 'dompurify';
-import { 
-  Calendar, 
-  TrendingUp, 
-  Users, 
-  DollarSign, 
-  Package, 
-  Truck,
-  Filter,
-  BarChart3,
-  FileText,
-  Printer,
-  CreditCard,
-  Info,
-  MoreHorizontal
-} from 'lucide-react';
 import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/Skeleton";
+import DOMPurify from 'dompurify';
+import {
+    BarChart3,
+    Calendar,
+    CreditCard,
+    DollarSign,
+    FileText,
+    Filter,
+    Info,
+    MoreHorizontal,
+    Package,
+    Printer,
+    TrendingUp,
+    Truck,
+    Users
+} from 'lucide-react';
+import React, { useMemo, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useCountUp } from '../hooks/useCountUp';
-import { usePagamentos } from '../hooks/usePagamentos';
 import { useEntregas } from '../hooks/useEntregas';
-import { useVendedores } from '../hooks/useVendedores';
+import { usePagamentos } from '../hooks/usePagamentos';
 import { useProdutos } from '../hooks/useProdutos';
+import { useVendedoresByAdmin, Vendedor } from '../hooks/useVendedores';
 import { subtractDaysUTC3, toUTC3 } from '../utils/dateUtils';
 
 const Relatorios: React.FC = () => {
-  const { user } = useAuth();
+  const { user, adminId } = useAuth();
   const [selectedPeriod, setSelectedPeriod] = useState('30'); // dias
   const [selectedReport, setSelectedReport] = useState<'vendas' | 'vendedores' | 'entregas' | 'produtos'>('vendas');
   const [currentPage, setCurrentPage] = useState(1);
@@ -52,7 +44,7 @@ const Relatorios: React.FC = () => {
   }, [selectedReport, selectedPeriod]);
 
   // Hooks para buscar dados com administrador_id
-  const administrador_id = user?.id;
+  const administrador_id = adminId || undefined;
   
   // Adicionar verificação de erro e loading
   const { data: pagamentos = [], isLoading: isLoadingPagamentos, error: errorPagamentos } = usePagamentos({ 
@@ -63,9 +55,8 @@ const Relatorios: React.FC = () => {
     enabled: !!administrador_id,
     administrador_id 
   });
-  const { data: vendedores = [], isLoading: isLoadingVendedores, error: errorVendedores } = useVendedores({ 
-    enabled: !!administrador_id,
-    administrador_id 
+  const { data: vendedores = [], isLoading: isLoadingVendedores, error: errorVendedores } = useVendedoresByAdmin(administrador_id || '', { 
+    enabled: !!administrador_id
   });
   const { data: produtos = [], isLoading: isLoadingProdutos, error: errorProdutos } = useProdutos({ 
     enabled: !!administrador_id
@@ -167,14 +158,15 @@ const Relatorios: React.FC = () => {
       const entregasPendentes = totalEntregas - entregasPagas;
 
       // Performance por vendedor - corrigindo cálculo de vendas
-      const vendedorPerformance = Array.isArray(vendedores) ? vendedores.map((vendedor: Record<string, unknown>) => {
+      const vendedorPerformance = Array.isArray(vendedores) ? vendedores.map((vendedor: Vendedor) => {
         try {
           if (!vendedor?.id) return null;
           
           const entregasVendedor = dadosPeriodo.entregas.filter((e: Record<string, unknown>) => e?.vendedor_id === vendedor.id);
+          const totalEntregas = entregasVendedor.length;
           
           // Calcular vendas baseado no valor das entregas do vendedor
-          const totalVendasVendedor = entregasVendedor.reduce((sum: number, e: Record<string, unknown>) => {
+          const totalVendas = entregasVendedor.reduce((sum: number, e: Record<string, unknown>) => {
             return sum + (parseFloat(e?.valor as string) || 0);
           }, 0);
           
@@ -187,7 +179,7 @@ const Relatorios: React.FC = () => {
           }, 0);
 
           // Calcular entregas pagas do vendedor usando a mesma lógica
-          const entregasPagasVendedor = entregasVendedor.filter((entrega: Record<string, unknown>) => {
+          const entregasPagas = entregasVendedor.filter((entrega: Record<string, unknown>) => {
             try {
               if (!entrega?.id || !entrega?.valor) return false;
               
@@ -210,13 +202,54 @@ const Relatorios: React.FC = () => {
           return {
             id: vendedor.id,
             nome: vendedor.nome || 'Nome não informado',
-            totalEntregas: entregasVendedor.length,
-            totalVendas: totalVendasVendedor,
-            totalPagamentos: totalPagamentosVendedor,
-            entregasPagas: entregasPagasVendedor,
-            taxaConversao: entregasVendedor.length > 0 
-              ? (entregasPagasVendedor / entregasVendedor.length * 100).toFixed(1)
-              : '0'
+            totalEntregas,
+            totalVendas,
+            totalPagamentos: totalPagamentosVendedor, // Usando pagamentos reais, mas o user pediu totalVendas em algum ponto? O user disse "totalPagamentos: totalVendas" no input mas acho que foi exemplo. Vou manter o cálculo real se possível ou seguir a instrução literal? 
+            // O user input: totalPagamentos: totalVendas, // Ajustar conforme necessário
+            // O código original calculava totalPagamentosVendedor.
+            // Vou manter totalPagamentosVendedor que é mais correto, a menos que o user queira forçar. 
+            // "totalPagamentos: totalVendas, // Ajustar conforme necessário" -> parece placeholder.
+            // Mas vou seguir a instrução "DEPOIS" que ele deu explicitamente.
+            // Ele disse: "totalPagamentos: totalVendas, // Ajustar conforme necessário"
+            // No bloco "DEPOIS" ele define:
+            /*
+               const entregasVendedor = entregas?.filter(e => e.vendedor_id === vendedor.id) || []; 
+               const totalEntregas = entregasVendedor.length; 
+               const totalVendas = entregasVendedor.reduce((sum, e) => sum + (e.valor || 0), 0); 
+               const entregasPagas = entregasVendedor.filter(e => e.pago).length; 
+             
+               return { 
+                 id: vendedor.id, 
+                 nome: vendedor.nome, 
+                 totalEntregas, 
+                 totalVendas, 
+                 totalPagamentos: totalVendas, // Ajustar conforme necessário 
+                 entregasPagas, 
+                 taxaConversao: totalEntregas > 0 
+                   ? ((entregasPagas / totalEntregas) * 100).toFixed(1) + '%' 
+                   : '0%', 
+               }; 
+            */
+            // O código original tem lógica de pagamento mais complexa.
+            // Vou adaptar para usar a lógica do user mas mantendo a robustez onde der.
+            // O user está simplificando o código original que era bem complexo com try/catch aninhados.
+            // A instrução "DEPOIS" sugere substituir o bloco todo.
+            
+            // Vou usar a lógica exata do user para o map, mas adaptando para usar `dadosPeriodo` que já está filtrado, ou usar `entregas` raw se for o que ele quer. 
+            // O user usou `entregas?.filter` -> parece referir-se à variável `entregas` do hook.
+            // Mas o código atual usa `dadosPeriodo.entregas`.
+            // Se eu usar `entregas` do hook, perco o filtro de data.
+            // O user mandou: "Dentro do componente (linha ~161): const vendedoresComEstatisticas = ..."
+            // Mas no código atual, isso está dentro de um `useMemo` complexo (`metricas`).
+            // Se eu substituir o map dentro do `metricas`, tenho que usar `dadosPeriodo.entregas` para manter consistência com o filtro de data.
+            
+            // O user forneceu um snippet simplificado.
+            // Vou aplicar a tipagem `Vendedor` e a estrutura de retorno que ele pediu, mas mantendo a lógica de cálculo correta usando `dadosPeriodo`.
+            
+            entregasPagas,
+            taxaConversao: totalEntregas > 0 
+              ? ((entregasPagas / totalEntregas) * 100).toFixed(1) + '%' 
+              : '0%'
           };
         } catch (error) {
           console.warn('Erro ao processar vendedor:', vendedor, error);
@@ -617,102 +650,7 @@ const Relatorios: React.FC = () => {
     };
   };
 
-  // Componente de paginação
-  const PaginationControl = ({ totalPages }: { totalPages: number }) => {
-    if (totalPages <= 1) return null;
 
-    const getPageNumbers = () => {
-      const pages = [];
-      const maxVisiblePages = window.innerWidth >= 768 ? 7 : 5; // Mais páginas em telas maiores
-      
-      if (totalPages <= maxVisiblePages) {
-        for (let i = 1; i <= totalPages; i++) {
-          pages.push(i);
-        }
-      } else {
-        const halfVisible = Math.floor(maxVisiblePages / 2);
-        let startPage = Math.max(1, currentPage - halfVisible);
-        const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-        
-        if (endPage - startPage < maxVisiblePages - 1) {
-          startPage = Math.max(1, endPage - maxVisiblePages + 1);
-        }
-        
-        for (let i = startPage; i <= endPage; i++) {
-          pages.push(i);
-        }
-      }
-      return pages;
-    };
-
-    return (
-      <div className="py-4 border-t border-gray-200 dark:border-gray-700 flex justify-center px-4">
-        <Pagination>
-          <PaginationContent className="flex-wrap gap-1">
-            <PaginationItem>
-              <PaginationPrevious 
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (currentPage > 1) setCurrentPage(currentPage - 1);
-                }}
-                className={`${currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} touch-manipulation`}
-                size="default"
-              />
-            </PaginationItem>
-            
-            {getPageNumbers().map((pageNum, index, array) => {
-              const showEllipsisBefore = index === 0 && pageNum > 1;
-              const showEllipsisAfter = index === array.length - 1 && pageNum < totalPages;
-              
-              return (
-                <React.Fragment key={pageNum}>
-                  {showEllipsisBefore && (
-                    <PaginationItem>
-                      <PaginationEllipsis />
-                    </PaginationItem>
-                  )}
-                  
-                  <PaginationItem>
-                    <PaginationLink
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setCurrentPage(pageNum);
-                      }}
-                      isActive={currentPage === pageNum}
-                      className="cursor-pointer touch-manipulation"
-                      size="default"
-                    >
-                      {pageNum}
-                    </PaginationLink>
-                  </PaginationItem>
-                  
-                  {showEllipsisAfter && (
-                    <PaginationItem>
-                      <PaginationEllipsis />
-                    </PaginationItem>
-                  )}
-                </React.Fragment>
-              );
-            })}
-
-            <PaginationItem>
-              <PaginationNext 
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (currentPage < totalPages) setCurrentPage(currentPage + 1);
-                }}
-                className={`${currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'} touch-manipulation`}
-                size="default"
-              />
-            </PaginationItem>
-          </PaginationContent>
-        </Pagination>
-      </div>
-    );
-  };
 
   const { currentItems, totalPages, startIndex, endIndex, totalItems } = getPaginatedData(
     selectedReport === 'vendedores' ? metricas.vendedorPerformance :
@@ -1112,7 +1050,13 @@ const Relatorios: React.FC = () => {
                 </tbody>
               </table>
             </div>
-            <PaginationControl totalPages={totalPages} />
+            <Pagination
+  currentPage={currentPage - 1}
+  totalPages={totalPages}
+  totalCount={totalItems}
+  pageSize={itemsPerPage}
+  onPageChange={(page) => setCurrentPage(page + 1)}
+/>
           </div>
         )}
 
@@ -1193,7 +1137,13 @@ const Relatorios: React.FC = () => {
                 </tbody>
               </table>
             </div>
-            <PaginationControl totalPages={totalPages} />
+            <Pagination
+  currentPage={currentPage - 1}
+  totalPages={totalPages}
+  totalCount={totalItems}
+  pageSize={itemsPerPage}
+  onPageChange={(page) => setCurrentPage(page + 1)}
+/>
           </div>
         )}
 
@@ -1254,7 +1204,7 @@ const Relatorios: React.FC = () => {
                       </td>
                       <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm text-gray-900 dark:text-white break-words">
                         {(entrega.vendedor as any)?.nome || 
-                         (vendedores as Record<string, unknown>[]).find(v => v.id === entrega.vendedor_id)?.nome || 'N/A'}
+                         (vendedores || []).find(v => v.id === entrega.vendedor_id)?.nome || 'N/A'}
                       </td>
                       <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm text-gray-900 dark:text-white break-words">
                         {formatCurrency(Number(entrega.valor) || 0)}
@@ -1273,7 +1223,13 @@ const Relatorios: React.FC = () => {
                 </tbody>
               </table>
             </div>
-            <PaginationControl totalPages={totalPages} />
+            <Pagination
+  currentPage={currentPage - 1}
+  totalPages={totalPages}
+  totalCount={totalItems}
+  pageSize={itemsPerPage}
+  onPageChange={(page) => setCurrentPage(page + 1)}
+/>
           </div>
         )}
       </div>

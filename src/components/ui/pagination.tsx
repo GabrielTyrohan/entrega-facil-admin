@@ -1,115 +1,105 @@
-import * as React from "react"
-import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react"
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-import { cn } from "@/lib/utils"
-import { ButtonProps, buttonVariants } from "./button"
-
-const Pagination = ({ className, ...props }: React.ComponentProps<"nav">) => (
-  <nav
-    role="navigation"
-    aria-label="pagination"
-    className={cn("mx-auto flex w-full justify-center", className)}
-    {...props}
-  />
-)
-Pagination.displayName = "Pagination"
-
-const PaginationContent = React.forwardRef<
-  HTMLUListElement,
-  React.ComponentProps<"ul">
->(({ className, ...props }, ref) => (
-  <ul
-    ref={ref}
-    className={cn("flex flex-row items-center gap-1", className)}
-    {...props}
-  />
-))
-PaginationContent.displayName = "PaginationContent"
-
-const PaginationItem = React.forwardRef<
-  HTMLLIElement,
-  React.ComponentProps<"li">
->(({ className, ...props }, ref) => (
-  <li ref={ref} className={cn("", className)} {...props} />
-))
-PaginationItem.displayName = "PaginationItem"
-
-type PaginationLinkProps = {
-  isActive?: boolean
-} & Pick<ButtonProps, "size"> &
-  React.ComponentProps<"a">
-
-const PaginationLink = ({
-  className,
-  isActive,
-  size = "icon",
-  ...props
-}: PaginationLinkProps) => (
-  <a
-    aria-current={isActive ? "page" : undefined}
-    className={cn(
-      buttonVariants({
-        variant: isActive ? "outline" : "ghost",
-        size,
-      }),
-      className
-    )}
-    {...props}
-  />
-)
-PaginationLink.displayName = "PaginationLink"
-
-const PaginationPrevious = ({
-  className,
-  ...props
-}: React.ComponentProps<typeof PaginationLink>) => (
-  <PaginationLink
-    aria-label="Go to previous page"
-    className={cn("gap-1 pl-2.5", className)}
-    {...props}
-  >
-    <ChevronLeft className="h-4 w-4" />
-    <span>Anterior</span>
-  </PaginationLink>
-)
-PaginationPrevious.displayName = "PaginationPrevious"
-
-const PaginationNext = ({
-  className,
-  ...props
-}: React.ComponentProps<typeof PaginationLink>) => (
-  <PaginationLink
-    aria-label="Go to next page"
-    className={cn("gap-1 pr-2.5", className)}
-    {...props}
-  >
-    <span>Próximo</span>
-    <ChevronRight className="h-4 w-4" />
-  </PaginationLink>
-)
-PaginationNext.displayName = "PaginationNext"
-
-const PaginationEllipsis = ({
-  className,
-  ...props
-}: React.ComponentProps<"span">) => (
-  <span
-    aria-hidden
-    className={cn("flex h-9 w-9 items-center justify-center", className)}
-    {...props}
-  >
-    <MoreHorizontal className="h-4 w-4" />
-    <span className="sr-only">More pages</span>
-  </span>
-)
-PaginationEllipsis.displayName = "PaginationEllipsis"
-
-export {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
+interface PaginationProps {
+  currentPage: number;
+  totalPages: number;
+  totalCount: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+  isLoading?: boolean;
 }
+
+export const Pagination = ({
+  currentPage,
+  totalPages,
+  totalCount,
+  pageSize,
+  onPageChange,
+  isLoading = false,
+}: PaginationProps) => {
+  const canGoBack = currentPage > 0;
+  const canGoForward = currentPage < totalPages - 1;
+
+  // Calcular range visível
+  const from = currentPage * pageSize + 1;
+  const to = Math.min((currentPage + 1) * pageSize, totalCount);
+
+  if (totalPages <= 1) return null; // Não mostrar se só tem 1 página
+
+  return (
+    <div className="flex items-center justify-between mt-6 px-4 py-3 
+                    bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+      {/* Info de registros */}
+      <div className="text-sm text-gray-700 dark:text-gray-300">
+        Mostrando <span className="font-medium">{from}</span> a{' '}
+        <span className="font-medium">{to}</span> de{' '}
+        <span className="font-medium">{totalCount}</span> registros
+      </div>
+
+      {/* Controles */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={!canGoBack || isLoading}
+          className="flex items-center gap-1 px-3 py-2 text-sm font-medium 
+                     border border-gray-300 dark:border-gray-600 rounded-lg 
+                     hover:bg-gray-50 dark:hover:bg-gray-700 
+                     disabled:opacity-50 disabled:cursor-not-allowed 
+                     transition-colors"
+        >
+          <ChevronLeft className="w-4 h-4" />
+          <span className="hidden sm:inline">Anterior</span>
+        </button>
+
+        {/* Números de página (se houver espaço) */}
+        <div className="hidden md:flex items-center gap-1">
+          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+            // Mostrar até 5 páginas ao redor da atual
+            let pageNum;
+            if (totalPages <= 5) {
+              pageNum = i;
+            } else if (currentPage < 3) {
+              pageNum = i;
+            } else if (currentPage > totalPages - 3) {
+              pageNum = totalPages - 5 + i;
+            } else {
+              pageNum = currentPage - 2 + i;
+            }
+
+            return (
+              <button
+                key={pageNum}
+                onClick={() => onPageChange(pageNum)}
+                className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  pageNum === currentPage
+                    ? 'bg-blue-600 text-white'
+                    : 'border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}
+              >
+                {pageNum + 1}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Indicador mobile */}
+        <span className="md:hidden px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+          Página {currentPage + 1} de {totalPages}
+        </span>
+
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={!canGoForward || isLoading}
+          className="flex items-center gap-1 px-3 py-2 text-sm font-medium 
+                     border border-gray-300 dark:border-gray-600 rounded-lg 
+                     hover:bg-gray-50 dark:hover:bg-gray-700 
+                     disabled:opacity-50 disabled:cursor-not-allowed 
+                     transition-colors"
+        >
+          <span className="hidden sm:inline">Próxima</span>
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+};

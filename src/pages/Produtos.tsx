@@ -7,15 +7,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import ProdutoModal from '@/components/ui/ProdutoModal';
-import { 
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
+import { Pagination } from "@/components/ui/pagination";
 import {
   useProdutos,
   useDeleteProduto,
@@ -133,32 +125,6 @@ const Produtos: React.FC = () => {
   React.useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, selectedCategory]);
-
-  // Função para gerar números das páginas
-  const getPageNumbers = () => {
-    const pages = [];
-    const maxVisiblePages = window.innerWidth >= 768 ? 7 : 5; // Mais páginas em telas maiores
-
-    if (totalPages <= maxVisiblePages) {
-      for (let i = 1; i <= totalPages; i++) {
-        pages.push(i);
-      }
-    } else {
-      const halfVisible = Math.floor(maxVisiblePages / 2);
-      let startPage = Math.max(1, currentPage - halfVisible);
-      const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-
-      if (endPage - startPage < maxVisiblePages - 1) {
-        startPage = Math.max(1, endPage - maxVisiblePages + 1);
-      }
-
-      for (let i = startPage; i <= endPage; i++) {
-        pages.push(i);
-      }
-    }
-
-    return pages;
-  };
 
   const handleViewProduto = (produto: Produto) => {
     setSelectedProduto(produto);
@@ -544,71 +510,13 @@ const Produtos: React.FC = () => {
 
       {/* Paginação */}
       {totalPages > 1 && (
-        <div className="flex justify-center px-4">
-          <Pagination>
-            <PaginationContent className="flex-wrap gap-1">
-              <PaginationItem>
-                <PaginationPrevious
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (currentPage > 1) setCurrentPage(currentPage - 1);
-                  }}
-                  className={`${currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} touch-manipulation`}
-                  size="default"
-                />
-              </PaginationItem>
-
-              {getPageNumbers().map((pageNum, index, array) => {
-                const showEllipsisBefore = index === 0 && pageNum > 1;
-                const showEllipsisAfter = index === array.length - 1 && pageNum < totalPages;
-
-                return (
-                  <React.Fragment key={pageNum}>
-                    {showEllipsisBefore && (
-                      <PaginationItem>
-                        <PaginationEllipsis />
-                      </PaginationItem>
-                    )}
-
-                    <PaginationItem>
-                      <PaginationLink
-                        href="#"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          setCurrentPage(pageNum);
-                        }}
-                        isActive={currentPage === pageNum}
-                        className="cursor-pointer touch-manipulation"
-                        size="default"
-                      >
-                        {pageNum}
-                      </PaginationLink>
-                    </PaginationItem>
-
-                    {showEllipsisAfter && (
-                      <PaginationItem>
-                        <PaginationEllipsis />
-                      </PaginationItem>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-
-              <PaginationItem>
-                <PaginationNext
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
-                  }}
-                  className={`${currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'} touch-manipulation`}
-                  size="default"
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
-        </div>
+        <Pagination
+          currentPage={currentPage - 1}
+          totalPages={totalPages}
+          totalCount={filteredProdutos.length}
+          pageSize={itemsPerPage}
+          onPageChange={(page) => setCurrentPage(page + 1)}
+        />
       )}
 
       {produtoParaExcluir && (
@@ -645,4 +553,3 @@ const Produtos: React.FC = () => {
 };
 
 export default Produtos;
-

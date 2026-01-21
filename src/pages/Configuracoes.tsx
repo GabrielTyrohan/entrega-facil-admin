@@ -6,173 +6,70 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
 const Configuracoes: React.FC = () => {
-  const { user, signOut, loading: authLoading } = useAuth();
+  const { userProfile, isLoading, isAdmin, adminId, signOut } = useAuth();
   const navigate = useNavigate();
+  
+  // Usar userProfile para pegar dados do admin:
+  const adminData = userProfile as any;
+
   const [tipoPessoa, setTipoPessoa] = useState<'fisica' | 'juridica'>(
-    user?.tipo_pessoa === 'juridica' ? 'juridica' : 'fisica'
+    adminData?.tipo_pessoa === 'juridica' ? 'juridica' : 'fisica'
   );
-  const [cpfCnpj, setCpfCnpj] = useState<string>(user?.cpf_cnpj || '');
-  const [cep, setCep] = useState<string>(user?.cep || '');
-  const [estado, setEstado] = useState<string>(user?.estado || '');
-  const [nome, setNome] = useState<string>(user?.nome || '');
-  const [sobrenome, setSobrenome] = useState<string>(user?.sobrenome || '');
-  const [telefone, setTelefone] = useState<string>(user?.telefone || '');
-  const [telefoneSecundario, setTelefoneSecundario] = useState<string>(user?.telefone_secundario || '');
-  const [nomeEmpresa, setNomeEmpresa] = useState<string>(user?.nome_empresa || '');
-  const [endereco, setEndereco] = useState<string>(user?.endereco || '');
-  const [numero, setNumero] = useState<string>(user?.numero || '');
-  const [complemento, setComplemento] = useState<string>(user?.complemento || '');
-  const [bairro, setBairro] = useState<string>(user?.bairro || '');
-  const [cidade, setCidade] = useState<string>(user?.cidade || '');
-  const [pais, setPais] = useState<string>(user?.pais || '');
-  const [isLoading, setIsLoading] = useState(false);
+  const [cpfCnpj, setCpfCnpj] = useState<string>(adminData?.cpf_cnpj || '');
+  const [cep, setCep] = useState<string>(adminData?.cep || '');
+  const [estado, setEstado] = useState<string>(adminData?.estado || '');
+  const [nome, setNome] = useState<string>(adminData?.nome || '');
+  const [sobrenome, setSobrenome] = useState<string>(adminData?.sobrenome || '');
+  const [telefone, setTelefone] = useState<string>(adminData?.telefone || '');
+  const [telefoneSecundario, setTelefoneSecundario] = useState<string>(adminData?.telefone_secundario || '');
+  const [nomeEmpresa, setNomeEmpresa] = useState<string>(adminData?.nome_empresa || '');
+  const [endereco, setEndereco] = useState<string>(adminData?.endereco || '');
+  const [numero, setNumero] = useState<string>(adminData?.numero || '');
+  const [complemento, setComplemento] = useState<string>(adminData?.complemento || '');
+  const [bairro, setBairro] = useState<string>(adminData?.bairro || '');
+  const [cidade, setCidade] = useState<string>(adminData?.cidade || '');
+  const [pais, setPais] = useState<string>(adminData?.pais || '');
+  const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
-  if (authLoading) {
-    return (
-      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-        {/* Header Skeleton */}
-        <div className="flex items-center justify-between">
-          <div className="space-y-2">
-            <Skeleton className="h-8 w-48" />
-            <Skeleton className="h-4 w-64" />
-          </div>
-          <Skeleton className="h-10 w-32 rounded-lg" />
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Dados Pessoais Skeleton */}
-          <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center space-x-3 mb-6">
-              <Skeleton className="h-5 w-5" />
-              <Skeleton className="h-6 w-40" />
-            </div>
-            
-            <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-16" />
-                  <Skeleton className="h-4 w-48" />
-                </div>
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-32" />
-                  <Skeleton className="h-4 w-24" />
-                </div>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="space-y-2">
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-10 w-full rounded-lg" />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Sidebar Skeleton */}
-          <div className="space-y-6">
-            {/* Account Status Skeleton */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-              <div className="flex items-center space-x-3 mb-4">
-                <Skeleton className="h-5 w-5" />
-                <Skeleton className="h-6 w-40" />
-              </div>
-              <div className="space-y-4">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="flex justify-between items-center">
-                    <Skeleton className="h-4 w-24" />
-                    <Skeleton className="h-4 w-20" />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Security Skeleton */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-              <div className="flex items-center space-x-3 mb-4">
-                <Skeleton className="h-5 w-5" />
-                <Skeleton className="h-6 w-32" />
-              </div>
-              <Skeleton className="h-9 w-full rounded-lg" />
-            </div>
-          </div>
-        </div>
-
-        {/* Company Data Skeleton */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-          <div className="flex items-center space-x-3 mb-6">
-            <Skeleton className="h-5 w-5" />
-            <Skeleton className="h-6 w-40" />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="space-y-2">
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-10 w-full rounded-lg" />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Address Skeleton */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-          <div className="flex items-center space-x-3 mb-6">
-            <Skeleton className="h-5 w-5" />
-            <Skeleton className="h-6 w-32" />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className={`space-y-2 ${i === 1 ? 'md:col-span-2' : ''}`}>
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-10 w-full rounded-lg" />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   useEffect(() => {
-    if (user?.tipo_pessoa) {
-      setTipoPessoa(user.tipo_pessoa === 'juridica' ? 'juridica' : 'fisica');
+    if (adminData?.tipo_pessoa) {
+      setTipoPessoa(adminData.tipo_pessoa === 'juridica' ? 'juridica' : 'fisica');
     }
-  }, [user?.tipo_pessoa]);
+  }, [adminData?.tipo_pessoa]);
 
   useEffect(() => {
-    if (user?.cpf_cnpj) {
-      setCpfCnpj(user.cpf_cnpj);
+    if (adminData?.cpf_cnpj) {
+      setCpfCnpj(adminData.cpf_cnpj);
     }
-  }, [user?.cpf_cnpj]);
+  }, [adminData?.cpf_cnpj]);
 
   useEffect(() => {
-    if (user?.cep) {
-      setCep(user.cep);
+    if (adminData?.cep) {
+      setCep(adminData.cep);
     }
-  }, [user?.cep]);
+  }, [adminData?.cep]);
 
   useEffect(() => {
-    if (user?.estado) {
-      setEstado(user.estado);
+    if (adminData?.estado) {
+      setEstado(adminData.estado);
     }
-  }, [user?.estado]);
+  }, [adminData?.estado]);
 
   useEffect(() => {
-    if (!user) return;
-    setNome(user.nome || '');
-    setSobrenome(user.sobrenome || '');
-    setTelefone(user.telefone || '');
-    setTelefoneSecundario(user.telefone_secundario || '');
-    setNomeEmpresa(user.nome_empresa || '');
-    setEndereco(user.endereco || '');
-    setNumero(user.numero || '');
-    setComplemento(user.complemento || '');
-    setBairro(user.bairro || '');
-    setCidade(user.cidade || '');
-    setPais(user.pais || '');
-  }, [user]);
+    if (!adminData) return;
+    setNome(adminData.nome || '');
+    setSobrenome(adminData.sobrenome || '');
+    setTelefone(adminData.telefone || '');
+    setTelefoneSecundario(adminData.telefone_secundario || '');
+    setNomeEmpresa(adminData.nome_empresa || '');
+    setEndereco(adminData.endereco || '');
+    setNumero(adminData.numero || '');
+    setComplemento(adminData.complemento || '');
+    setBairro(adminData.bairro || '');
+    setCidade(adminData.cidade || '');
+    setPais(adminData.pais || '');
+  }, [adminData]);
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'Não informado';
@@ -196,8 +93,6 @@ const Configuracoes: React.FC = () => {
     }
     return cleaned;
   };
-
-
 
   const formatCPF = (cpf: string) => {
     return cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
@@ -269,27 +164,27 @@ const Configuracoes: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!user) {
+    if (!adminId) {
       setMessage({ type: 'error', text: 'Usuário não encontrado.' });
       return;
     }
 
     const hasChanges = 
-      tipoPessoa !== (user.tipo_pessoa || '') ||
-      cpfCnpj !== (user.cpf_cnpj || '') ||
-      cep !== (user.cep || '') ||
-      estado !== (user.estado || '') ||
-      nome !== (user.nome || '') ||
-      sobrenome !== (user.sobrenome || '') ||
-      telefone !== (user.telefone || '') ||
-      telefoneSecundario !== (user.telefone_secundario || '') ||
-      nomeEmpresa !== (user.nome_empresa || '') ||
-      endereco !== (user.endereco || '') ||
-      numero !== (user.numero || '') ||
-      complemento !== (user.complemento || '') ||
-      bairro !== (user.bairro || '') ||
-      cidade !== (user.cidade || '') ||
-      pais !== (user.pais || '');
+      tipoPessoa !== (adminData?.tipo_pessoa || '') ||
+      cpfCnpj !== (adminData?.cpf_cnpj || '') ||
+      cep !== (adminData?.cep || '') ||
+      estado !== (adminData?.estado || '') ||
+      nome !== (adminData?.nome || '') ||
+      sobrenome !== (adminData?.sobrenome || '') ||
+      telefone !== (adminData?.telefone || '') ||
+      telefoneSecundario !== (adminData?.telefone_secundario || '') ||
+      nomeEmpresa !== (adminData?.nome_empresa || '') ||
+      endereco !== (adminData?.endereco || '') ||
+      numero !== (adminData?.numero || '') ||
+      complemento !== (adminData?.complemento || '') ||
+      bairro !== (adminData?.bairro || '') ||
+      cidade !== (adminData?.cidade || '') ||
+      pais !== (adminData?.pais || '');
 
     if (!hasChanges) {
       setMessage({ type: 'info', text: 'Nenhuma alteração foi detectada. Não é necessário salvar.' });
@@ -297,7 +192,7 @@ const Configuracoes: React.FC = () => {
       return;
     }
 
-    setIsLoading(true);
+    setIsSaving(true);
     setMessage(null);
 
     try {
@@ -321,7 +216,7 @@ const Configuracoes: React.FC = () => {
           pais,
           updated_at: new Date().toISOString()
         })
-        .eq('id', user.id);
+        .eq('id', adminId);
 
       if (error) {
         throw error;
@@ -333,9 +228,34 @@ const Configuracoes: React.FC = () => {
       console.error('Erro ao salvar:', error);
       setMessage({ type: 'error', text: 'Erro ao salvar os dados. Tente novamente.' });
     } finally {
-      setIsLoading(false);
+      setIsSaving(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="p-6 space-y-6">
+        <Skeleton className="h-8 w-64" />
+        <div className="space-y-4">
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="p-6">
+        <div className="bg-red-50 dark:bg-red-900/30 p-4 rounded-lg">
+          <p className="text-red-700 dark:text-red-400">
+            Você não tem permissão para acessar esta página
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -360,11 +280,11 @@ const Configuracoes: React.FC = () => {
           
           <button
             onClick={handleSave}
-            disabled={isLoading}
+            disabled={isSaving}
             className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <Save className="w-4 h-4" />
-            <span>{isLoading ? 'Salvando...' : 'Salvar Alterações'}</span>
+            <span>{isSaving ? 'Salvando...' : 'Salvar Alterações'}</span>
           </button>
         </div>
       </div>
@@ -382,11 +302,11 @@ const Configuracoes: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Email:</span>
-                <p className="text-gray-900 dark:text-white">{user?.email || 'Não informado'}</p>
+                <p className="text-gray-900 dark:text-white">{userProfile?.email || 'Não informado'}</p>
               </div>
               <div>
                 <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Data de Cadastro:</span>
-                <p className="text-gray-900 dark:text-white">{formatDate(user?.created_at)}</p>
+                <p className="text-gray-900 dark:text-white">{formatDate(adminData?.created_at)}</p>
               </div>
             </div>
           </div>
@@ -453,25 +373,25 @@ const Configuracoes: React.FC = () => {
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Status do Pagamento</span>
                 <span className="text-sm font-medium text-green-600 dark:text-green-400">
-                  {user?.status_pagamento || 'Ativo'}
+                  {adminData?.status_pagamento || 'Ativo'}
                 </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Valor da Assinatura</span>
                 <span className="text-sm font-medium text-gray-900 dark:text-white">
-                  {formatCurrency(user?.valor_assinatura) || 'R$ 0,00'}
+                  {formatCurrency(adminData?.valor_assinatura) || 'R$ 0,00'}
                 </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Data de Vencimento</span>
                 <span className="text-sm text-gray-900 dark:text-white">
-                  {formatDate(user?.data_vencimento) || 'Não informado'}
+                  {formatDate(adminData?.data_vencimento) || 'Não informado'}
                 </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600 dark:text-gray-400">Última Cobrança</span>
                 <span className="text-sm text-gray-900 dark:text-white">
-                  {formatDate(user?.ultima_cobranca) || 'Não informado'}
+                  {formatDate(adminData?.ultima_cobranca) || 'Não informado'}
                 </span>
               </div>
             </div>

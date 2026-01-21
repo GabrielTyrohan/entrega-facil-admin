@@ -62,8 +62,8 @@ export const applyCurrencyMask = (value: string): string => {
  * @returns Valor numérico
  */
 export const currencyMaskToNumber = (maskedValue: string): number => {
-  // Remove símbolos de moeda e espaços
-  const cleanValue = maskedValue.replace(/[R$\s]/g, '');
+  // Remove símbolos de moeda, espaços e pontos de milhar
+  const cleanValue = maskedValue.replace(/[R$\s.]/g, '');
   
   // Substitui vírgula por ponto
   const normalizedValue = cleanValue.replace(',', '.');

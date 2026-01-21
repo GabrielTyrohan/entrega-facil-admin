@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -7,15 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
+import { Pagination } from "@/components/ui/pagination";
 import VendedorModal from '@/components/ui/VendedorModal';
 import { 
   useVendedores, 
@@ -33,65 +25,24 @@ const Vendedores: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedVendedor, setSelectedVendedor] = useState<Vendedor | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [currentPage, setCurrentPage] = useState(0);
   const [vendedorParaExcluir, setVendedorParaExcluir] = useState<Vendedor | null>(null);
 
   // React Query hooks para dados
-  const { data: vendedores = [], isLoading, error } = useVendedores({
-    administrador_id: user?.id || '',
-    enabled: !!user?.id
-  }) as { data: Vendedor[]; isLoading: boolean; error: unknown };
+  // CORREÇÃO: Usar isLoading ao invés de loading e passar currentPage
+  const { data, isLoading, error } = useVendedores(currentPage);
+  
+  // Acessar os dados corretamente:
+  const vendedores = data?.vendedores || [];
+  const totalPages = data?.totalPages || 1;
+  const total = data?.total || 0;
+
   const deleteVendedorMutation = useDeleteVendedor();
   
   // Hook para total de entregas por vendedor
   const { data: entregasPorVendedor = {}, isLoading: isLoadingEntregas } = useTotalEntregasPorAdministrador(user?.id || '', {
     enabled: !!user?.id
   });
-
-  // Função para calcular itens por página baseado no tamanho da tela
-  const calculateItemsPerPage = () => {
-    const height = window.innerHeight;
-    const width = window.innerWidth;
-    
-    // Altura disponível para a tabela (descontando header, filtros, etc.)
-    const availableHeight = height - 400; // ~400px para header, filtros, paginação
-    const rowHeight = 73; // altura aproximada de cada linha da tabela
-    
-    let baseItemsPerPage = Math.floor(availableHeight / rowHeight);
-    
-    // Ajustar baseado na largura da tela para melhor experiência
-    if (width >= 1920) { // 4K ou maior
-      baseItemsPerPage = Math.max(baseItemsPerPage, 15);
-    } else if (width >= 1440) { // Desktop grande
-      baseItemsPerPage = Math.max(baseItemsPerPage, 12);
-    } else if (width >= 1024) { // Desktop padrão
-      baseItemsPerPage = Math.max(baseItemsPerPage, 10);
-    } else { // Tablet/Mobile
-      baseItemsPerPage = Math.max(baseItemsPerPage, 8);
-    }
-    
-    // Garantir um mínimo e máximo razoável
-    return Math.min(Math.max(baseItemsPerPage, 5), 25);
-  };
-
-  // Atualizar itens por página quando a tela redimensionar
-  React.useEffect(() => {
-    const handleResize = () => {
-      const newItemsPerPage = calculateItemsPerPage();
-      setItemsPerPage(newItemsPerPage);
-      
-      // Ajustar página atual se necessário
-      const maxPage = Math.ceil(vendedores.length / newItemsPerPage);
-      if (currentPage > maxPage && maxPage > 0) {
-        setCurrentPage(maxPage);
-      }
-    };
-
-    handleResize(); // Calcular inicial
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [vendedores.length, currentPage]);
 
   // Handlers para as ações do dropdown
   const handleViewVendedor = (vendedor: Vendedor) => {
@@ -112,72 +63,12 @@ const Vendedores: React.FC = () => {
     }
   };
 
-
-
-  // Filtrar vendedores baseado no termo de busca e ordenar por total de entregas (decrescente)
-  const filteredVendedores = useMemo(() => {
-    const filtered = vendedores.filter((vendedor: Vendedor) =>
-      vendedor.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      vendedor.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      vendedor.telefone?.includes(searchTerm)
-    );
-
-    // Ordenar por total de entregas de forma decrescente (maior número primeiro)
-    return filtered.sort((a: Vendedor, b: Vendedor) => {
-      const entregasA = entregasPorVendedor[a.id] || 0;
-      const entregasB = entregasPorVendedor[b.id] || 0;
-      
-      // Primeiro critério: total de entregas (decrescente)
-      if (entregasA !== entregasB) {
-        return entregasB - entregasA;
-      }
-      
-      // Segundo critério: status ativo (ativos primeiro)
-      if (a.ativo !== b.ativo) {
-        return a.ativo ? -1 : 1;
-      }
-      
-      // Terceiro critério: nome alfabético
-      return a.nome.localeCompare(b.nome, 'pt-BR');
-    });
-  }, [vendedores, searchTerm, entregasPorVendedor]);
-
-  // Lógica de paginação
-  const totalPages = Math.ceil(filteredVendedores.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentVendedores = filteredVendedores.slice(startIndex, endIndex);
-
-  // Reset página quando filtro mudar
-  React.useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm]);
-
-  // Função para gerar números das páginas
-  const getPageNumbers = () => {
-    const pages = [];
-    const maxVisiblePages = window.innerWidth >= 768 ? 7 : 5; // Mais páginas em telas maiores
-    
-    if (totalPages <= maxVisiblePages) {
-      for (let i = 1; i <= totalPages; i++) {
-        pages.push(i);
-      }
-    } else {
-      const halfVisible = Math.floor(maxVisiblePages / 2);
-      let startPage = Math.max(1, currentPage - halfVisible);
-      const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-      
-      if (endPage - startPage < maxVisiblePages - 1) {
-        startPage = Math.max(1, endPage - maxVisiblePages + 1);
-      }
-      
-      for (let i = startPage; i <= endPage; i++) {
-        pages.push(i);
-      }
-    }
-    
-    return pages;
-  };
+  // Filtragem local apenas na página atual (já que a paginação é no servidor)
+  const currentVendedores = vendedores.filter((vendedor: Vendedor) =>
+    vendedor.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    vendedor.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    vendedor.telefone?.includes(searchTerm)
+  );
 
   // Formatação de data
   const formatDate = (dateString: string) => {
@@ -185,12 +76,12 @@ const Vendedores: React.FC = () => {
   };
 
   // Formatação de percentual
-  const formatPercentual = (percentual?: number) => {
+  const formatPercentual = (percentual?: number | null) => {
     return percentual ? `${percentual}%` : 'N/A';
   };
 
   // Formatação de telefone
-  const formatPhone = (phone?: string) => {
+  const formatPhone = (phone?: string | null) => {
     if (!phone) return 'N/A';
     const cleaned = phone.replace(/\D/g, '');
     if (cleaned.length === 11) {
@@ -341,10 +232,10 @@ const Vendedores: React.FC = () => {
         {/* Informações de paginação */}
         <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
           <span>
-            Mostrando {startIndex + 1} a {Math.min(endIndex, filteredVendedores.length)} de {filteredVendedores.length} vendedores
+            Mostrando {currentVendedores.length} de {total} vendedores
           </span>
           <span>
-            {itemsPerPage} por página
+            Página {currentPage + 1} de {totalPages}
           </span>
         </div>
       </div>
@@ -498,71 +389,13 @@ const Vendedores: React.FC = () => {
 
       {/* Paginação */}
       {totalPages > 1 && (
-        <div className="flex justify-center px-4">
-          <Pagination>
-            <PaginationContent className="flex-wrap gap-1">
-              <PaginationItem>
-                <PaginationPrevious 
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (currentPage > 1) setCurrentPage(currentPage - 1);
-                  }}
-                  className={`${currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} touch-manipulation`}
-                  size="default"
-                />
-              </PaginationItem>
-              
-              {getPageNumbers().map((pageNum, index, array) => {
-                const showEllipsisBefore = index === 0 && pageNum > 1;
-                const showEllipsisAfter = index === array.length - 1 && pageNum < totalPages;
-                
-                return (
-                  <React.Fragment key={pageNum}>
-                    {showEllipsisBefore && (
-                      <PaginationItem>
-                        <PaginationEllipsis />
-                      </PaginationItem>
-                    )}
-                    
-                    <PaginationItem>
-                      <PaginationLink
-                        href="#"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          setCurrentPage(pageNum);
-                        }}
-                        isActive={currentPage === pageNum}
-                        className="cursor-pointer touch-manipulation"
-                        size="default"
-                      >
-                        {pageNum}
-                      </PaginationLink>
-                    </PaginationItem>
-                    
-                    {showEllipsisAfter && (
-                      <PaginationItem>
-                        <PaginationEllipsis />
-                      </PaginationItem>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-              
-              <PaginationItem>
-                <PaginationNext 
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
-                  }}
-                  className={`${currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'} touch-manipulation`}
-                  size="default"
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
-        </div>
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalCount={total}
+          pageSize={15}
+          onPageChange={setCurrentPage}
+        />
       )}
       
       {/* Modal de Visualização */}
@@ -609,4 +442,3 @@ const Vendedores: React.FC = () => {
 };
 
 export default Vendedores;
-

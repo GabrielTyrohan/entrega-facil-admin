@@ -3,204 +3,16 @@ import {
   useUpdateMutation,
   useDeleteMutation,
 } from '@supabase-cache-helpers/postgrest-react-query';
-import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { useQueryClient, useQuery, UseQueryResult } from '@tanstack/react-query';
 import { supabase } from './supabase';
+import { CACHE_KEYS, CACHE_TIMES } from './constants/queryKeys';
 
-// Configurações de cache por tabela
-export const CACHE_KEYS = {
-  PRODUTOS: 'produtos',
-  CLIENTES: 'clientes', 
-  VENDEDORES: 'vendedores',
-  ENTREGAS: 'entregas',
-  PAGAMENTOS: 'pagamentos',
-  CESTAS: 'cestas',
-  RESPONSAVEIS: 'responsaveis',
-  // Dashboard specific cache keys
-  DASHBOARD_STATS: 'dashboard_stats',
-  VENDEDORES_ATIVOS: 'vendedores_ativos',
-  ENTREGAS_DO_MES: 'entregas_do_mes',
-  ENTREGAS_MES_ATUAL: 'entregas_mes_atual',
-  ENTREGAS_MES_ANTERIOR: 'entregas_mes_anterior',
-  FATURAMENTO_DO_MES: 'faturamento_do_mes',
-  FATURAMENTO_MES_ATUAL: 'faturamento_mes_atual',
-  FATURAMENTO_MES_ANTERIOR: 'faturamento_mes_anterior',
-  VALORES_EM_FALTA: 'valores_em_falta',
-  FATURAMENTO_MENSAL: 'faturamento_mensal',
-  PAGAMENTOS_MENSAIS: 'pagamentos_mensais',
-  TOP_VENDEDORES: 'top_vendedores',
-  // Devedores specific cache keys
-  DEVEDORES: 'devedores',
-  VENDEDORES_FILTRO: 'vendedores_filtro',
-  // Vendas mensais por vendedor
-  VENDAS_MENSAIS_VENDEDORES: 'vendas_mensais_vendedores',
-  // Total de vendas por vendedor
-  TOTAL_VENDAS_VENDEDOR: 'total_vendas_vendedor',
-  // Total de entregas por administrador
-  TOTAL_ENTREGAS_ADMINISTRADOR: 'total_entregas_administrador',
-  SUPORTE_SOLICITACOES: 'suporte_solicitacoes',
-  SUPORTE_MENSAGENS: 'suporte_mensagens',
-  SISTEMA_STATUS: 'sistema_status',
-} as const;
-
-// Tempos de cache específicos por tipo de dados
-export const CACHE_TIMES = {
-  // Dados que mudam raramente
-  PRODUTOS: {
-    staleTime: 10 * 60 * 1000, // 10 minutos
-    gcTime: 30 * 60 * 1000,    // 30 minutos
-  },
-  // Dados que mudam com frequência média
-  CLIENTES: {
-    staleTime: 5 * 60 * 1000,  // 5 minutos
-    gcTime: 15 * 60 * 1000,    // 15 minutos
-  },
-  VENDEDORES: {
-    staleTime: 5 * 60 * 1000,  // 5 minutos
-    gcTime: 15 * 60 * 1000,    // 15 minutos
-  },
-  // Dados que mudam frequentemente
-  ENTREGAS: {
-    staleTime: 2 * 60 * 1000,  // 2 minutos
-    gcTime: 10 * 60 * 1000,    // 10 minutos
-  },
-  PAGAMENTOS: {
-    staleTime: 2 * 60 * 1000,  // 2 minutos
-    gcTime: 10 * 60 * 1000,    // 10 minutos
-  },
-  CESTAS: {
-    staleTime: 3 * 60 * 1000,  // 3 minutos
-    gcTime: 10 * 60 * 1000,    // 10 minutos
-  },
-  RESPONSAVEIS: {
-    staleTime: 5 * 60 * 1000,  // 5 minutos
-    gcTime: 15 * 60 * 1000,    // 15 minutos
-  },
-  // Dashboard cache times - dados que mudam com frequência
-  DASHBOARD_STATS: {
-    staleTime: 1 * 60 * 1000,  // 1 minuto
-    gcTime: 5 * 60 * 1000,     // 5 minutos
-  },
-  VENDEDORES_ATIVOS: {
-    staleTime: 5 * 60 * 1000,  // 5 minutos
-    gcTime: 15 * 60 * 1000,    // 15 minutos
-  },
-  ENTREGAS_DO_MES: {
-    staleTime: 2 * 60 * 1000,  // 2 minutos
-    gcTime: 10 * 60 * 1000,    // 10 minutos
-  },
-  ENTREGAS_MES_ATUAL: {
-    staleTime: 2 * 60 * 1000,  // 2 minutos
-    gcTime: 10 * 60 * 1000,    // 10 minutos
-  },
-  ENTREGAS_MES_ANTERIOR: {
-    staleTime: 10 * 60 * 1000, // 10 minutos (dados históricos)
-    gcTime: 30 * 60 * 1000,    // 30 minutos
-  },
-  FATURAMENTO_DO_MES: {
-    staleTime: 2 * 60 * 1000,  // 2 minutos
-    gcTime: 10 * 60 * 1000,    // 10 minutos
-  },
-  FATURAMENTO_MES_ATUAL: {
-    staleTime: 2 * 60 * 1000,  // 2 minutos
-    gcTime: 10 * 60 * 1000,    // 10 minutos
-  },
-  FATURAMENTO_MES_ANTERIOR: {
-    staleTime: 10 * 60 * 1000, // 10 minutos (dados históricos)
-    gcTime: 30 * 60 * 1000,    // 30 minutos
-  },
-  VALORES_EM_FALTA: {
-    staleTime: 3 * 60 * 1000,  // 3 minutos
-    gcTime: 10 * 60 * 1000,    // 10 minutos
-  },
-  FATURAMENTO_MENSAL: {
-    staleTime: 15 * 60 * 1000, // 15 minutos (dados históricos)
-    gcTime: 60 * 60 * 1000,    // 1 hora
-  },
-  PAGAMENTOS_MENSAIS: {
-    staleTime: 15 * 60 * 1000, // 15 minutos (dados históricos)
-    gcTime: 60 * 60 * 1000,    // 1 hora
-  },
-  TOP_VENDEDORES: {
-    staleTime: 5 * 60 * 1000,  // 5 minutos
-    gcTime: 15 * 60 * 1000,    // 15 minutos
-  },
-  TOP_VENDEDORES_ATUAL: {
-    staleTime: 0, // Sem cache para debug
-    gcTime: 0,    // Sem cache para debug
-  },
-  TOP_VENDEDORES_ANTERIOR: {
-    staleTime: 0, // Sem cache para debug
-    gcTime: 0,    // Sem cache para debug
-  },
-  TOP_VENDEDORES_ENTREGAS_ATUAL: {
-    staleTime: 0, // Sem cache para debug
-    gcTime: 0,    // Sem cache para debug
-  },
-  TOP_VENDEDORES_ENTREGAS_ANTERIOR: {
-    staleTime: 0, // Sem cache para debug
-    gcTime: 0,    // Sem cache para debug
-  },
-  LATEST_PAYMENT: {
-    staleTime: 5 * 60 * 1000,  // 5 minutos
-    gcTime: 15 * 60 * 1000,    // 15 minutos
-  },
-  LATEST_ENTREGA: {
-    staleTime: 5 * 60 * 1000,  // 5 minutos
-    gcTime: 15 * 60 * 1000,    // 15 minutos
-  },
-  ATIVIDADES_ENTREGAS: {
-    staleTime: 1 * 60 * 1000,  // 1 minuto
-    gcTime: 5 * 60 * 1000,     // 5 minutos
-  },
-  ATIVIDADES_PAGAMENTOS: {
-    staleTime: 1 * 60 * 1000,  // 1 minuto
-    gcTime: 5 * 60 * 1000,     // 5 minutos
-  },
-  ATIVIDADES_PRODUTOS: {
-    staleTime: 2 * 60 * 1000,  // 2 minutos
-    gcTime: 10 * 60 * 1000,    // 10 minutos
-  },
-  ATIVIDADES_VENDEDORES: {
-    staleTime: 5 * 60 * 1000,  // 5 minutos
-    gcTime: 15 * 60 * 1000,    // 15 minutos
-  },
-  // Devedores cache times
-  DEVEDORES: {
-    staleTime: 3 * 60 * 1000,  // 3 minutos
-    gcTime: 10 * 60 * 1000,    // 10 minutos
-  },
-  VENDEDORES_FILTRO: {
-    staleTime: 5 * 60 * 1000,  // 5 minutos
-    gcTime: 15 * 60 * 1000,    // 15 minutos
-  },
-  VENDAS_MENSAIS_VENDEDORES: {
-    staleTime: 3 * 60 * 1000,  // 3 minutos
-    gcTime: 10 * 60 * 1000,    // 10 minutos
-  },
-  TOTAL_VENDAS_VENDEDOR: {
-    staleTime: 3 * 60 * 1000,  // 3 minutos
-    gcTime: 10 * 60 * 1000,    // 10 minutos
-  },
-  TOTAL_ENTREGAS_ADMINISTRADOR: {
-    staleTime: 3 * 60 * 1000,  // 3 minutos
-    gcTime: 10 * 60 * 1000,    // 10 minutos
-  },
-  SUPORTE_SOLICITACOES: {
-    staleTime: 3 * 60 * 1000,  // 3 minutos
-    gcTime: 10 * 60 * 1000,    // 10 minutos
-  },
-  SUPORTE_MENSAGENS: {
-    staleTime: 2 * 60 * 1000,  // 2 minutos
-    gcTime: 10 * 60 * 1000,    // 10 minutos
-  },
-  SISTEMA_STATUS: {
-    staleTime: 5 * 60 * 1000,  // 5 minutos
-    gcTime: 15 * 60 * 1000,    // 15 minutos
-  },
-} as const;
+// Re-export constants for backward compatibility if needed, 
+// but preferred usage is direct import from constants
+export { CACHE_KEYS, CACHE_TIMES };
 
 // Hook genérico para queries com cache otimizado
-export const useSupabaseQuery = (
+export const useSupabaseQuery = <TData = any>(
   tableName: keyof typeof CACHE_KEYS,
   queryBuilder: any,
   queryKey: any[],
@@ -209,40 +21,36 @@ export const useSupabaseQuery = (
     staleTime?: number;
     gcTime?: number;
   }
-) => {
-  const cacheConfig = CACHE_TIMES[tableName];
+): UseQueryResult<TData, Error> & { count?: number | null } => {
+  const cacheConfig = CACHE_TIMES[tableName as keyof typeof CACHE_TIMES];
   
-  // Verificar se a configuração de cache existe
-  if (!cacheConfig) {
-    console.warn(`Cache configuration not found for table: ${tableName}`);
-    return useQuery({
-      queryKey,
-      queryFn: async () => {
-        const { data, error } = await queryBuilder;
-        if (error) throw error;
-        return data;
-      },
-      staleTime: options?.staleTime || 5 * 60 * 1000, // 5 minutos como fallback
-      gcTime: options?.gcTime || 15 * 60 * 1000,      // 15 minutos como fallback
-      enabled: options?.enabled !== false,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: true,
-    });
-  }
-  
-  return useQuery({
+  // Função helper para executar a query
+  const queryFn = async () => {
+    const { data, error, count } = await queryBuilder;
+    if (error) throw error;
+    return { 
+      data, 
+      count: count ?? null 
+    };
+  };
+
+  const queryOptions = {
     queryKey,
-    queryFn: async () => {
-      const { data, error } = await queryBuilder;
-      if (error) throw error;
-      return data;
-    },
-    staleTime: options?.staleTime || cacheConfig.staleTime,
-    gcTime: options?.gcTime || cacheConfig.gcTime,
+    queryFn,
     enabled: options?.enabled !== false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
-  });
+    staleTime: options?.staleTime || (cacheConfig ? cacheConfig.staleTime : 5 * 60 * 1000),
+    gcTime: options?.gcTime || (cacheConfig ? cacheConfig.gcTime : 30 * 60 * 1000),
+  };
+  
+  const queryResult = useQuery(queryOptions);
+
+  return {
+    ...queryResult,
+    data: (queryResult.data as any)?.data as TData,
+    count: (queryResult.data as any)?.count,
+  } as UseQueryResult<TData, Error> & { count?: number | null };
 };
 
 // Hook para mutações com invalidação automática de cache e atualizações otimistas
@@ -382,12 +190,12 @@ export const prefetchRelatedData = async (
   tableName: keyof typeof CACHE_KEYS,
   queryFn: () => Promise<any>
 ) => {
-  const cacheConfig = CACHE_TIMES[tableName];
+  const cacheConfig = CACHE_TIMES[tableName as keyof typeof CACHE_TIMES];
   
   await queryClient.prefetchQuery({
     queryKey: [CACHE_KEYS[tableName]],
     queryFn,
-    staleTime: cacheConfig.staleTime,
+    staleTime: cacheConfig?.staleTime || 5 * 60 * 1000,
   });
 };
 

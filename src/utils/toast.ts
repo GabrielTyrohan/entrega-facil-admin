@@ -22,5 +22,17 @@ export const toast = {
     } catch {
       alert(message);
     }
+  },
+  info: (message: string, options?: { duration?: number }) => {
+    try {
+      const globalToast = (window as any).toast;
+      if (globalToast?.info) {
+        globalToast.info(message, options);
+      } else {
+        alert(message);
+      }
+    } catch {
+      alert(message);
+    }
   }
 };

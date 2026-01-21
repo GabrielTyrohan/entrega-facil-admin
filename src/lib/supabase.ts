@@ -45,18 +45,18 @@ export interface Vendedor {
   administrador_id: string
   nome: string
   senha?: number  // Alterado de string para number
-  telefone?: string
-  percentual_minimo?: number
-  last_sync?: string
-  token?: string
+  telefone?: string | null
+  percentual_minimo?: number | null
+  last_sync?: string | null
+  token?: string | null
   ativo?: boolean
   created_at: string
-  email?: string
-  endereco?: string
-  data_inicio?: string
-  tipo_vinculo?: string
-  contrato?: string
-  contrato_arquivo_url?: string
+  email?: string | null
+  endereco?: string | null
+  data_inicio?: string | null
+  tipo_vinculo?: string | null
+  contrato?: string | null
+  contrato_arquivo_url?: string | null
   status?: boolean
   dados_bancarios?: any
 }

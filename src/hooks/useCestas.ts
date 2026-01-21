@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 import { CACHE_KEYS, CACHE_TIMES } from '../lib/supabaseCache';
 
 export interface CestaData {
@@ -27,14 +27,14 @@ export interface CestaData {
 }
 
 export const useCestas = () => {
-  const { user } = useAuth();
+  const { user, adminId } = useAuth();
 
   return useQuery({
-    queryKey: [CACHE_KEYS.CESTAS, user?.id],
+    queryKey: [CACHE_KEYS.CESTAS, adminId],
     queryFn: async (): Promise<CestaData[]> => {
       try {
-        if (!user?.id) {
-          throw new Error('Usuário não autenticado');
+        if (!adminId) {
+          return [];
         }
 
         // Buscar cestas (produtos que são cestas) com informações do vendedor
@@ -53,7 +53,7 @@ export const useCestas = () => {
               administrador_id
             )
           `)
-          .eq('vendedores.administrador_id', user.id)
+          .eq('vendedores.administrador_id', adminId)
           .order('created_at', { ascending: false });
 
         if (cestasError) {
@@ -100,33 +100,64 @@ export const useCestas = () => {
               quantidade: item.quantidade
             })) || [];
 
-            // Calcular totais
-            // total_itens = quantidade de itens únicos (não quantidade total)
-            const total_itens = itens.length;
-            // valor_total = preço da tabela produtos (coluna preco)
-            const valor_total = cesta.preco;
-
             return {
               id: cesta.id,
               vendedor_id: cesta.vendedor_id,
-              vendedor_nome: (cesta.vendedores as any)?.nome || 'Vendedor não encontrado',
+              vendedor_nome: Array.isArray(cesta.vendedores) 
+                ? cesta.vendedores[0]?.nome || 'Desconhecido' 
+                : (cesta.vendedores as any)?.nome || 'Desconhecido',
               cesta_nome: cesta.nome,
               data_montagem: cesta.created_at,
-              status: cesta.ativo ? 'entregue' as const : 'retornada' as const,
-              total_itens,
-              valor_total,
+              status: cesta.ativo ? 'em_uso' : 'retornada', // Mapeamento simplificado
+              total_itens: itens.length,
+              valor_total: cesta.preco,
               itens
-            };
+            } as CestaData;
           })
         );
 
-        // Filtrar cestas que falharam ao carregar
-        return cestasComItens.filter(cesta => cesta !== null) as CestaData[];
-      } catch (error: any) {
+        return cestasComItens.filter(Boolean) as CestaData[];
+      } catch (error) {
+        console.error('Erro no useCestas:', error);
         throw error;
       }
     },
     enabled: !!user?.id,
-    ...CACHE_TIMES.CESTAS,
+    staleTime: CACHE_TIMES.CESTAS.staleTime,
+    gcTime: CACHE_TIMES.CESTAS.gcTime
+  });
+};
+
+export const useListaCestas = () => {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ['lista-cestas-simples', user?.id],
+    queryFn: async () => {
+      if (!user?.id) throw new Error('Usuário não autenticado');
+
+      const { data, error } = await supabase
+        .from('produtos')
+        .select(`
+          id,
+          nome,
+          preco,
+          vendedores!inner (
+            administrador_id
+          )
+        `)
+        .eq('vendedores.administrador_id', user.id)
+        .eq('ativo', true)
+        .order('nome');
+
+      if (error) throw error;
+      
+      return data.map(item => ({
+        id: item.id,
+        nome: item.nome,
+        preco: item.preco
+      }));
+    },
+    enabled: !!user?.id
   });
 };

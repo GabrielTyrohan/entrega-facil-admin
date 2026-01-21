@@ -1,311 +1,208 @@
-import React, { useState, useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
-import { Truck, Eye, EyeOff, Clock } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
+// ============================================ 
+// ARQUIVO: src/pages/LoginPage.tsx 
+// PARTE 1: Imports, Estados e Lógica 
+// ============================================ 
 
-const LoginPage: React.FC = () => {
-  const { user, signIn } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+import { useAuth } from '@/contexts/AuthContext';
+import { AlertCircle, Eye, EyeOff, LogIn } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+
+const LoginPage = () => { 
+  // Estados 
+  const [email, setEmail] = useState(''); 
+  const [password, setPassword] = useState(''); 
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  
-  // Estados para controle de segurança
-  const [failedAttempts, setFailedAttempts] = useState(0);
-  const [isBlocked, setIsBlocked] = useState(false);
-  const [blockTimeRemaining, setBlockTimeRemaining] = useState(0);
-  const [totalBlocks, setTotalBlocks] = useState(0); // Contador de quantos bloqueios já ocorreram
+  const [isLoading, setIsLoading] = useState(false); 
+  const [error, setError] = useState(''); 
+  const [isBlocked, setIsBlocked] = useState(false); 
+  const [blockTimeRemaining, setBlockTimeRemaining] = useState(0); 
 
-  // Carrega dados do localStorage ao inicializar
-  useEffect(() => {
-    const savedFailedAttempts = localStorage.getItem('loginFailedAttempts');
-    const savedBlockEndTime = localStorage.getItem('loginBlockEndTime');
-    const savedTotalBlocks = localStorage.getItem('loginTotalBlocks');
+  const { signIn, user } = useAuth(); 
+  const navigate = useNavigate(); 
+  const location = useLocation(); 
 
-    if (savedFailedAttempts) {
-      setFailedAttempts(parseInt(savedFailedAttempts));
-    }
+  // ===== VERIFICAR BLOQUEIO AO CARREGAR ===== 
+  useEffect(() => { 
+    const blockEndTime = localStorage.getItem('loginBlockEndTime'); 
+    if (blockEndTime) { 
+      const remaining = parseInt(blockEndTime) - Date.now(); 
+      if (remaining > 0) { 
+        setIsBlocked(true); 
+        setBlockTimeRemaining(Math.ceil(remaining / 1000)); 
+      } else { 
+        localStorage.removeItem('loginBlockEndTime'); 
+        localStorage.removeItem('loginFailedAttempts'); 
+      } 
+    } 
+  }, []); 
 
-    if (savedTotalBlocks) {
-      setTotalBlocks(parseInt(savedTotalBlocks));
-    }
+  // ===== COUNTDOWN DO BLOQUEIO ===== 
+  useEffect(() => { 
+    if (!isBlocked || blockTimeRemaining <= 0) return; 
 
-    if (savedBlockEndTime) {
-      const blockEndTime = parseInt(savedBlockEndTime);
-      const currentTime = Date.now();
-      
-      if (currentTime < blockEndTime) {
-        setIsBlocked(true);
-        setBlockTimeRemaining(Math.ceil((blockEndTime - currentTime) / 1000));
-      } else {
-        // Limpa dados expirados
-        localStorage.removeItem('loginBlockEndTime');
-      }
-    }
-  }, []);
+    const timer = setInterval(() => { 
+      setBlockTimeRemaining((prev) => { 
+        if (prev <= 1) { 
+          setIsBlocked(false); 
+          localStorage.removeItem('loginBlockEndTime'); 
+          localStorage.removeItem('loginFailedAttempts'); 
+          return 0; 
+        } 
+        return prev - 1; 
+      }); 
+    }, 1000); 
 
-  // Timer para contagem regressiva do bloqueio
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    
-    if (isBlocked && blockTimeRemaining > 0) {
-      interval = setInterval(() => {
-        setBlockTimeRemaining((prev) => {
-          if (prev <= 1) {
-            setIsBlocked(false);
-            // Reset das tentativas quando o bloqueio expira
-            setFailedAttempts(0);
-            localStorage.removeItem('loginBlockEndTime');
-            localStorage.setItem('loginFailedAttempts', '0');
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
+    return () => clearInterval(timer); 
+  }, [isBlocked, blockTimeRemaining]); 
 
-    return () => {
-      if (interval) {
-        clearInterval(interval);
-      }
-    };
-  }, [isBlocked, blockTimeRemaining]);
+  // ===== REDIRECIONAR SE JÁ LOGADO ===== 
+  useEffect(() => { 
+    if (user) { 
+      const from = (location.state as any)?.from?.pathname || '/'; 
+      navigate(from, { replace: true }); 
+    } 
+  }, [user, navigate, location]); 
 
-  // Função para formatar tempo restante
-  const formatTimeRemaining = (seconds: number): string => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    
-    if (minutes > 0) {
-      return `${minutes}m ${remainingSeconds}s`;
-    }
-    return `${remainingSeconds}s`;
-  };
+  // ===== SUBMIT ===== 
+  const handleSubmit = async (e: React.FormEvent) => { 
+    e.preventDefault(); 
+    setError(''); 
 
-  if (user) {
-    return <Navigate to="/dashboard" replace />;
-  }
+    if (isBlocked) { 
+      setError(`Aguarde ${blockTimeRemaining}s antes de tentar novamente`); 
+      return; 
+    } 
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Verifica se está bloqueado
-    if (isBlocked) {
-      setError(`Muitas tentativas falhadas. Aguarde ${formatTimeRemaining(blockTimeRemaining)} para tentar novamente.`);
-      return;
-    }
+    setIsLoading(true); 
 
-    const emailTrimmed = email.trim();
+    try { 
+      await signIn(email, password); 
+      localStorage.removeItem('loginFailedAttempts'); 
+      localStorage.removeItem('loginBlockEndTime'); 
+    } catch (err: any) { 
+      const currentAttempts = parseInt( 
+        localStorage.getItem('loginFailedAttempts') || '0' 
+      ); 
+      const newAttempts = currentAttempts + 1; 
+      localStorage.setItem('loginFailedAttempts', newAttempts.toString()); 
 
-    if (!emailTrimmed || !password) {
-      setError('Por favor, preencha todos os campos');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-
-    try {
-      // Autenticação direta; validações de administrador e pagamento ocorrem no signIn (por id)
-      const result = await signIn(emailTrimmed, password);
-      
-      if (result.error) {
-        // Se houve erro no signIn, incrementa tentativas falhadas
-        const newFailedAttempts = failedAttempts + 1;
-        setFailedAttempts(newFailedAttempts);
-        localStorage.setItem('loginFailedAttempts', newFailedAttempts.toString());
-
-        if (newFailedAttempts >= 5 && (newFailedAttempts % 5) === 0) {
-          // Só bloqueia quando completar exatamente 5, 10, 15, 20... tentativas
-          const newTotalBlocks = totalBlocks + 1;
-          const newBlockDuration = 30 * Math.pow(2, newTotalBlocks - 1); // 30, 60, 120, 240...
-          
-          setTotalBlocks(newTotalBlocks);
-          setIsBlocked(true);
-          setBlockTimeRemaining(newBlockDuration);
-          
-          const blockEndTime = Date.now() + (newBlockDuration * 1000);
-          localStorage.setItem('loginBlockEndTime', blockEndTime.toString());
-          localStorage.setItem('loginBlockDuration', newBlockDuration.toString());
-          localStorage.setItem('loginTotalBlocks', newTotalBlocks.toString());
-          
-          setError(`Muitas tentativas falhadas. Aguarde ${formatTimeRemaining(newBlockDuration)} para tentar novamente.`);
-        } else {
-          const remainingAttempts = 5 - (newFailedAttempts % 5);
-          // Só mostrar mensagem de erro a partir da 3ª tentativa
-          if (newFailedAttempts >= 3) {
-            // Usar a mensagem de erro do AuthContext, mas adicionar informação sobre tentativas restantes
-            if (result.error.includes('Email ou senha incorretos')) {
-              setError(`Email ou senha incorretos. ${remainingAttempts} tentativa(s) restante(s) antes do bloqueio.`);
-            } else {
-              // Para outros tipos de erro (pagamento, etc), mostrar a mensagem original
-              setError(result.error);
-            }
-          }
-        }
-        return;
-      }
-      
-      // Reset dos dados de segurança em caso de sucesso
-      setFailedAttempts(0);
-      setTotalBlocks(0);
-      localStorage.removeItem('loginFailedAttempts');
-      localStorage.removeItem('loginBlockEndTime');
-      localStorage.removeItem('loginBlockDuration');
-      localStorage.removeItem('loginTotalBlocks');
-      
-    } catch (error: any) {
-      // Fallback para erros inesperados
-      const newFailedAttempts = failedAttempts + 1;
-      setFailedAttempts(newFailedAttempts);
-      localStorage.setItem('loginFailedAttempts', newFailedAttempts.toString());
-
-      if (newFailedAttempts >= 5 && (newFailedAttempts % 5) === 0) {
-        // Só bloqueia quando completar exatamente 5, 10, 15, 20... tentativas
-        const newTotalBlocks = totalBlocks + 1;
-       const newBlockDuration = 30 * Math.pow(2, newTotalBlocks - 1); // 30, 60, 120, 240...
-       
-       setTotalBlocks(newTotalBlocks);
-       setIsBlocked(true);
-       setBlockTimeRemaining(newBlockDuration);
-       
-       const blockEndTime = Date.now() + (newBlockDuration * 1000);
-       localStorage.setItem('loginBlockEndTime', blockEndTime.toString());
-       localStorage.setItem('loginBlockDuration', newBlockDuration.toString());
-       localStorage.setItem('loginTotalBlocks', newTotalBlocks.toString());
-        
-        setError(`Muitas tentativas falhadas. Aguarde ${formatTimeRemaining(newBlockDuration)} para tentar novamente.`);
-      } else {
-        const remainingAttempts = 5 - (newFailedAttempts % 5);
-        // Só mostrar mensagem de erro a partir da 3ª tentativa
-        if (newFailedAttempts >= 3) {
-          setError(`Email ou senha incorretos. ${remainingAttempts} tentativa(s) restante(s) antes do bloqueio.`);
-        }
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+      if (newAttempts >= 5) { 
+        const blockDuration = Math.min(30 * Math.pow(2, newAttempts - 5), 300); 
+        const blockEndTime = Date.now() + blockDuration * 1000; 
+        localStorage.setItem('loginBlockEndTime', blockEndTime.toString()); 
+        setIsBlocked(true); 
+        setBlockTimeRemaining(blockDuration); 
+        setError(`Muitas tentativas falhas. Bloqueado por ${blockDuration}s`); 
+      } else { 
+        setError(err.message || 'Erro ao fazer login'); 
+      } 
+    } finally { 
+      setIsLoading(false); 
+    } 
+  }; 
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center px-4">
-      <div className="max-w-md w-full">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-8">
-          <div className="text-center mb-8">
-            <div className="mx-auto w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mb-4">
-              <Truck className="w-8 h-8 text-white" />
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
+      
+      {/* Card de Login */}
+      <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-lg w-full max-w-md border border-gray-200 dark:border-gray-700">
+        <div className="text-center mb-8">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+            Bem-vindo
+          </h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">
+            Entre com suas credenciais para acessar o sistema
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Erro */}
+          {error && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+              <span className="text-sm text-red-700 dark:text-red-400">{error}</span>
             </div>
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Entrega Fácil</h2>
-            <p className="text-gray-600 dark:text-gray-400 mt-2">Painel Administrativo</p>
+          )}
+
+          {/* Email */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              E-mail
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              disabled={isBlocked}
+              className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 transition-colors"
+              placeholder="seu@email.com"
+            />
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Email
-              </label>
+          {/* Senha */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              Senha
+            </label>
+            <div className="relative">
               <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={isBlocked}
-                className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white ${
-                  isBlocked ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-                placeholder="Email"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 required
+                disabled={isBlocked}
+                className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 transition-colors pr-10"
+                placeholder="••••••••"
               />
-            </div>
-
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Senha
-              </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={isBlocked}
-                  className={`w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white ${
-                    isBlocked ? 'opacity-50 cursor-not-allowed' : ''
-                  }`}
-                  placeholder="••••••"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  disabled={isBlocked}
-                  className={`absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 ${
-                    isBlocked ? 'opacity-50 cursor-not-allowed' : ''
-                  }`}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            {/* Indicador de bloqueio */}
-            {isBlocked && (
-              <div className="flex items-center justify-center p-3 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700 rounded-lg">
-                <Clock className="w-4 h-4 text-red-600 dark:text-red-400 mr-2" />
-                <span className="text-sm text-red-700 dark:text-red-300">
-                  Bloqueado por {formatTimeRemaining(blockTimeRemaining)}
-                </span>
-              </div>
-            )}
-
-            {/* Indicador de tentativas restantes */}
-            {!isBlocked && failedAttempts >= 3 && failedAttempts < 5 && (
-              <div className="flex items-center justify-center p-3 bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 rounded-lg">
-                <span className="text-sm text-yellow-700 dark:text-yellow-300">
-                  {5 - (failedAttempts % 5)} tentativa(s) restante(s) antes do bloqueio
-                </span>
-              </div>
-            )}
-
-            {error && (
-              <div className={`text-sm text-center p-3 rounded-lg ${
-                error.includes('Acesso bloqueado por falta de pagamento') 
-                  ? 'text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700' 
-                  : 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20'
-              }`}>
-                {error.includes('Acesso bloqueado por falta de pagamento') ? (
-                  <div>
-                    <div className="font-semibold mb-1">🚫 Acesso Bloqueado</div>
-                    <div>{error}</div>
-                  </div>
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 focus:outline-none"
+              >
+                {showPassword ? (
+                  <EyeOff className="h-5 w-5" />
                 ) : (
-                  error
+                  <Eye className="h-5 w-5" />
                 )}
-              </div>
-            )}
+              </button>
+            </div>
+          </div>
 
-            <button
-              type="submit"
-              disabled={loading || isBlocked}
-              className={`w-full py-2 px-4 rounded-lg font-medium transition-colors ${
-                isBlocked 
-                  ? 'bg-gray-400 cursor-not-allowed text-gray-600' 
-                  : 'bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white'
-              }`}
-            >
-              {isBlocked 
-                ? `Bloqueado (${formatTimeRemaining(blockTimeRemaining)})` 
-                : loading 
-                  ? 'Entrando...' 
-                  : 'Entrar'
-              }
-            </button>
-          </form>
-        </div>
+          {/* Botão */}
+          <button
+            type="submit"
+            disabled={isLoading || isBlocked}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 transition-colors shadow-sm"
+          >
+            {isLoading ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Entrando...
+              </>
+            ) : isBlocked ? (
+              `Bloqueado (${blockTimeRemaining}s)`
+            ) : (
+              <>
+                <LogIn className="w-5 h-5" />
+                Entrar
+              </>
+            )}
+          </button>
+        </form>
+
+        {/* Footer */}
+        <p className="text-xs text-center text-gray-500 dark:text-gray-400 mt-6">
+          Detecção automática de tipo de acesso
+          <br />
+          <span className="text-blue-600 dark:text-blue-400 font-medium">
+            (Admin ou Funcionário)
+          </span>
+        </p>
       </div>
     </div>
-  );
-};
-
-export default LoginPage;
+  ); 
+ }; 
+ 
+ export default LoginPage;

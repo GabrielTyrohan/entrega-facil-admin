@@ -21,9 +21,10 @@ export const useProdutos = (options?: {
   enabled?: boolean;
   categoria?: string;
 }) => {
-  const { user } = useAuth();
+  const { user, adminId } = useAuth();
+  const targetId = adminId || user?.id;
   
-  if (!user?.id) {
+  if (!targetId) {
     return { 
       data: [], 
       isLoading: false, 
@@ -35,7 +36,7 @@ export const useProdutos = (options?: {
   let query = supabase
     .from('produtos_cadastrado')
     .select('*')
-    .eq('administrador_id', user.id)
+    .eq('administrador_id', targetId)
     .order('produto_nome');
 
   // Filtros opcionais
@@ -43,16 +44,17 @@ export const useProdutos = (options?: {
     query = query.eq('categoria', options.categoria);
   }
 
-  return useSupabaseQuery('PRODUTOS', query, [CACHE_KEYS.PRODUTOS, user?.id, { categoria: options?.categoria }], {
-    enabled: options?.enabled && !!user?.id,
+  return useSupabaseQuery('PRODUTOS', query, [CACHE_KEYS.PRODUTOS, targetId, { categoria: options?.categoria }], {
+    enabled: options?.enabled && !!targetId,
   });
 };
 
 // Hook para buscar produto por ID
 export const useProduto = (id: string, options?: { enabled?: boolean }) => {
-  const { user } = useAuth();
+  const { user, adminId } = useAuth();
+  const targetId = adminId || user?.id;
   
-  if (!user?.id || !id) {
+  if (!targetId || !id) {
     return { data: null, isLoading: false, error: null };
   }
 
@@ -60,19 +62,20 @@ export const useProduto = (id: string, options?: { enabled?: boolean }) => {
     .from('produtos_cadastrado')
     .select('*')
     .eq('id', id)
-    .eq('administrador_id', user.id)
+    .eq('administrador_id', targetId)
     .single();
 
   return useSupabaseQuery('PRODUTOS', query, [CACHE_KEYS.PRODUTOS, id], {
-    enabled: options?.enabled && !!id && !!user?.id,
+    enabled: options?.enabled && !!id && !!targetId,
   });
 };
 
 // Hook para buscar produtos por categoria
 export const useProdutosPorCategoria = (categoria: string, options?: { enabled?: boolean }) => {
-  const { user } = useAuth();
+  const { user, adminId } = useAuth();
+  const targetId = adminId || user?.id;
   
-  if (!user?.id || !categoria) {
+  if (!targetId || !categoria) {
     return { data: [], isLoading: false, error: null };
   }
 
@@ -80,11 +83,11 @@ export const useProdutosPorCategoria = (categoria: string, options?: { enabled?:
     .from('produtos_cadastrado')
     .select('*')
     .eq('categoria', categoria)
-    .eq('administrador_id', user.id)
+    .eq('administrador_id', targetId)
     .order('produto_nome');
 
-  return useSupabaseQuery('PRODUTOS', query, [CACHE_KEYS.PRODUTOS, user?.id, 'categoria', categoria], {
-    enabled: options?.enabled && !!categoria && !!user?.id,
+  return useSupabaseQuery('PRODUTOS', query, [CACHE_KEYS.PRODUTOS, targetId, 'categoria', categoria], {
+    enabled: options?.enabled && !!categoria && !!targetId,
   });
 };
 

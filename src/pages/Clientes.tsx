@@ -1,44 +1,37 @@
-import React, { useState, useMemo } from 'react';
-import { Search, MoreHorizontal, Eye, Edit, Trash2 } from 'lucide-react';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
-import { 
-  useClientesByAdmin, 
-  useDeleteCliente,
-  type Cliente 
-} from '../hooks/useClientes';
-import { 
-  useVendedoresByAdmin,
-  type Vendedor 
-} from '../hooks/useVendedores';
+import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { useAuth } from '../contexts/AuthContext';
+import { PAGINATION } from '@/lib/constants/pagination';
+import { Edit, Eye, MoreHorizontal, Search, Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
 import ClienteModal from '../components/ui/ClienteModal';
 import EditClienteModal from '../components/ui/EditClienteModal';
+import { useAuth } from '../contexts/AuthContext';
+import {
+    useClientesByAdmin,
+    useDeleteCliente,
+    type Cliente
+} from '../hooks/useClientes';
+import {
+    useVendedoresByAdmin,
+    type Vendedor
+} from '../hooks/useVendedores';
 
 const Clientes: React.FC = () => {
-  const { user } = useAuth();
+  const { adminId } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedVendedor, setSelectedVendedor] = useState<string>('');
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(0);
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [clienteToEdit, setClienteToEdit] = useState<Cliente | null>(null);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const itemsPerPage = PAGINATION.BACKEND_PAGE_SIZE;
   const [clienteParaExcluir, setClienteParaExcluir] = useState<Cliente | null>(null);
 
   // Usar hooks de cache para buscar dados
@@ -46,134 +39,41 @@ const Clientes: React.FC = () => {
     data: clientesData = [], 
     isLoading, 
     error,
-    refetch 
-  } = useClientesByAdmin(user?.id || '');
+    refetch,
+    totalPages,
+    totalCount
+  } = useClientesByAdmin(adminId || '', {
+    enabled: !!adminId,
+    page: currentPage,
+    pageSize: itemsPerPage,
+    search: searchTerm || undefined,
+    vendedor_id: selectedVendedor || undefined
+  });
 
   // Buscar vendedores do admin
   const { 
     data: vendedoresData = [] 
-  } = useVendedoresByAdmin(user?.id || '');
+  } = useVendedoresByAdmin(adminId || '');
 
   // Tipar os dados corretamente
   const clientes = clientesData as Cliente[];
   const vendedores = vendedoresData as Vendedor[];
-
-  // Hook para deletar cliente
-  const deleteClienteMutation = useDeleteCliente();
-
-  // Função para calcular itens por página baseado no tamanho da tela
-  const calculateItemsPerPage = () => {
-    const height = window.innerHeight;
-    const width = window.innerWidth;
-    
-    // Altura disponível para a tabela (descontando header, filtros, etc.)
-    const availableHeight = height - 400; // ~400px para header, filtros, paginação
-    const rowHeight = 73; // altura aproximada de cada linha da tabela
-    
-    let baseItemsPerPage = Math.floor(availableHeight / rowHeight);
-    
-    // Ajustar baseado na largura da tela para melhor experiência
-    if (width >= 1920) { // 4K ou maior
-      baseItemsPerPage = Math.max(baseItemsPerPage, 15);
-    } else if (width >= 1440) { // Desktop grande
-      baseItemsPerPage = Math.max(baseItemsPerPage, 12);
-    } else if (width >= 1024) { // Desktop padrão
-      baseItemsPerPage = Math.max(baseItemsPerPage, 10);
-    } else { // Tablet/Mobile
-      baseItemsPerPage = Math.max(baseItemsPerPage, 8);
-    }
-    
-    // Garantir um mínimo e máximo razoável
-    return Math.min(Math.max(baseItemsPerPage, 5), 25);
-  };
-
-  // Atualizar itens por página quando a tela redimensionar
+  
+  // Scroll to top
   React.useEffect(() => {
-    const handleResize = () => {
-      const newItemsPerPage = calculateItemsPerPage();
-      setItemsPerPage(newItemsPerPage);
-      
-      // Ajustar página atual se necessário
-      const maxPage = Math.ceil(clientes.length / newItemsPerPage);
-      if (currentPage > maxPage && maxPage > 0) {
-        setCurrentPage(maxPage);
-      }
-    };
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [currentPage]);
 
-    handleResize(); // Calcular inicial
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [clientes.length, currentPage]);
-
-  // Filtrar clientes baseado nos critérios de busca e ordenar por data de cadastro (decrescente)
-  const filteredClientes = useMemo(() => {
-    const filtered = clientes.filter((cliente: Cliente) => {
-      const q = searchTerm.trim().toLowerCase();
-      const nomeCompleto = `${cliente.nome} ${cliente.sobrenome || ''}`.trim().toLowerCase();
-      const email = cliente.email?.toLowerCase() || '';
-      const endereco = cliente.endereco?.toLowerCase() || '';
-      const telefone = cliente.telefone || '';
-      const cpf = cliente.cpf || '';
-      const vendedorNome = (vendedores.find((v: Vendedor) => v.id === cliente.vendedor_id)?.nome || '').toLowerCase();
-
-      const matchesSearch =
-        q === '' ||
-        nomeCompleto.includes(q) ||
-        email.includes(q) ||
-        endereco.includes(q) ||
-        telefone.includes(searchTerm.trim()) ||
-        cpf.replace(/\D/g, '').includes(searchTerm.replace(/\D/g, '')) ||
-        vendedorNome.includes(q);
-      
-      const matchesVendedor = selectedVendedor === '' || cliente.vendedor_id === selectedVendedor;
-      
-      return matchesSearch && matchesVendedor;
-    });
-
-    // Ordenar por data de cadastro (created_at) de forma decrescente (mais recente primeiro)
-    return filtered.sort((a: Cliente, b: Cliente) => {
-      const dateA = new Date(a.created_at);
-      const dateB = new Date(b.created_at);
-      return dateB.getTime() - dateA.getTime();
-    });
-  }, [clientes, searchTerm, selectedVendedor, vendedores]);
-
-  // Lógica de paginação
-  const totalPages = Math.ceil(filteredClientes.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentClientes = filteredClientes.slice(startIndex, endIndex);
-
-  // Reset página quando filtro mudar
+  // Reset page
   React.useEffect(() => {
-    setCurrentPage(1);
+    setCurrentPage(0);
   }, [searchTerm, selectedVendedor]);
 
-  // Função para gerar números das páginas
-  const getPageNumbers = () => {
-    const pages = [];
-    const maxVisiblePages = window.innerWidth >= 768 ? 7 : 5; // Mais páginas em telas maiores
-    
-    if (totalPages <= maxVisiblePages) {
-      for (let i = 1; i <= totalPages; i++) {
-        pages.push(i);
-      }
-    } else {
-      const halfVisible = Math.floor(maxVisiblePages / 2);
-      let startPage = Math.max(1, currentPage - halfVisible);
-      const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-      
-      if (endPage - startPage < maxVisiblePages - 1) {
-        startPage = Math.max(1, endPage - maxVisiblePages + 1);
-      }
-      
-      for (let i = startPage; i <= endPage; i++) {
-        pages.push(i);
-      }
-    }
-    
-    return pages;
-  };
+  // Dados já filtrados e paginados pelo hook
+  const currentClientes = clientes; 
+  
+  // Hook para deletar cliente
+  const deleteClienteMutation = useDeleteCliente();
 
   // Funções auxiliares
   const getVendedorNome = (vendedorId: string) => {
@@ -371,7 +271,7 @@ const Clientes: React.FC = () => {
         {/* Informações de paginação */}
         <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
           <span>
-            Mostrando {startIndex + 1} a {Math.min(endIndex, filteredClientes.length)} de {filteredClientes.length} clientes
+             {totalCount !== undefined ? `${totalCount} clientes encontrados` : 'Carregando...'}
           </span>
           <span>
             {itemsPerPage} por página
@@ -380,7 +280,7 @@ const Clientes: React.FC = () => {
       </div>
 
       {/* Tabela de Clientes */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[800px]">
             <thead className="bg-gray-50 dark:bg-gray-700">
@@ -496,73 +396,18 @@ const Clientes: React.FC = () => {
       </div>
 
       {/* Paginação */}
-      {totalPages > 1 && (
-        <div className="flex justify-center px-4">
-          <Pagination>
-            <PaginationContent className="flex-wrap gap-1">
-              <PaginationItem>
-                <PaginationPrevious 
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (currentPage > 1) setCurrentPage(currentPage - 1);
-                  }}
-                  className={`${currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} touch-manipulation`}
-                  size="default"
-                />
-              </PaginationItem>
-              
-              {getPageNumbers().map((pageNum, index, array) => {
-                const showEllipsisBefore = index === 0 && pageNum > 1;
-                const showEllipsisAfter = index === array.length - 1 && pageNum < totalPages;
-                
-                return (
-                  <React.Fragment key={pageNum}>
-                    {showEllipsisBefore && (
-                      <PaginationItem>
-                        <PaginationEllipsis />
-                      </PaginationItem>
-                    )}
-                    
-                    <PaginationItem>
-                      <PaginationLink
-                        href="#"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          setCurrentPage(pageNum);
-                        }}
-                        isActive={currentPage === pageNum}
-                        className="cursor-pointer touch-manipulation"
-                        size="default"
-                      >
-                        {pageNum}
-                      </PaginationLink>
-                    </PaginationItem>
-                    
-                    {showEllipsisAfter && (
-                      <PaginationItem>
-                        <PaginationEllipsis />
-                      </PaginationItem>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-              
-              <PaginationItem>
-                <PaginationNext 
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
-                  }}
-                  className={`${currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'} touch-manipulation`}
-                  size="default"
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
-        </div>
-      )}
+      <div className="flex justify-center px-4">
+        {totalPages > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages || 0}
+            totalCount={totalCount || 0}
+            pageSize={itemsPerPage}
+            onPageChange={setCurrentPage}
+            isLoading={isLoading}
+          />
+        )}
+      </div>
 
       {/* Modal de visualização do cliente */}
       <ClienteModal

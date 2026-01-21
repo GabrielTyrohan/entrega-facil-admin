@@ -1,6 +1,6 @@
 import { useSupabaseQuery } from '../lib/supabaseCache';
 import { supabase } from '../lib/supabase';
-import { CACHE_KEYS } from '../lib/cache/cacheConfig';
+import { CACHE_KEYS } from '../lib/constants/queryKeys';
 
 export interface Responsavel {
   id: string;

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Menu, Moon, Sun } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -6,12 +6,28 @@ import { useTheme } from '../../contexts/ThemeContext';
 
 interface HeaderProps {
   onMenuClick: () => void;
+  onLogout?: () => void | Promise<void>;
 }
 
-const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
-  const { user, signOut } = useAuth();
+const Header: React.FC<HeaderProps> = ({ onMenuClick, onLogout }) => {
+  const { userProfile, userType, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   // Função para obter saudação baseada no horário
   const getGreeting = () => {
@@ -42,7 +58,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
           <div className="hidden lg:block ml-4">
             <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">{getGreeting()}</h4>
             <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
-              {user?.nome_empresa || 'Entrega Fácil'}
+              {(userProfile as any)?.nome_empresa || ''}
             </h1>
           </div>
         </div>
@@ -58,40 +74,56 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
           </button>
 
           {/* User menu */}
-          <div className="relative group">
-            <button className="flex items-center space-x-2 p-2 rounded-md text-gray-700 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-700 transition-colors touch-manipulation">
+          <div className="relative" ref={menuRef}>
+            <button 
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="flex items-center space-x-2 p-2 rounded-md text-gray-700 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-700 transition-colors touch-manipulation"
+            >
               <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 text-white font-medium">
-                {user?.nome ? user.nome.charAt(0).toUpperCase() : user?.name?.charAt(0).toUpperCase() || 'A'}
+                {userProfile?.nome?.charAt(0).toUpperCase() || 'U'}
               </div>
               <div className="hidden sm:block text-left min-w-0">
                 <p className="text-sm font-medium truncate max-w-24 lg:max-w-none">
-                  {user?.nome && user?.sobrenome 
-                    ? `${user.nome} ${user.sobrenome}` 
-                    : user?.name || 'Administrador'
-                  }
+                  {userProfile?.nome || 'Usuário'}
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">{user?.email}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{userProfile?.email}</p>
               </div>
             </button>
 
             {/* Dropdown menu */}
-            <div className="absolute right-0 w-48 mt-2 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-              <div className="py-1">
-                <div className="sm:hidden px-4 py-2 border-b border-gray-200 dark:border-gray-700">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{user?.nome ? `${user.nome} ${user.sobrenome || ''}`.trim() : 'Administrador'}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Administrador</p>
+            {isMenuOpen && (
+              <div className="absolute right-0 w-48 mt-2 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 z-50">
+                <div className="py-1">
+                  <div className="sm:hidden px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                    <span className="block text-sm font-medium text-gray-900 dark:text-white truncate">
+                      {userProfile?.nome || 'Usuário'}
+                    </span>
+                    <span className="block text-xs text-gray-500 dark:text-gray-400">
+                      {userProfile?.email}
+                    </span>
+                  </div>
+                  <div className="hidden sm:block px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {userType === 'admin' ? 'Administrador' : 'Funcionário'}
+                    </p>
+                  </div>
+                  <button 
+                    onClick={async () => {
+                      setIsMenuOpen(false);
+                      if (onLogout) {
+                        await onLogout();
+                      } else {
+                        await signOut();
+                        navigate('/login');
+                      }
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    Sair
+                  </button>
                 </div>
-                <button 
-                  onClick={async () => {
-                    await signOut();
-                    navigate('/login');
-                  }}
-                  className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                >
-                  Sair
-                </button>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>

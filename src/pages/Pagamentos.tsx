@@ -1,22 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { Search, DollarSign, Calendar, User, CreditCard } from 'lucide-react';
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
-import { PagamentoService, PagamentoComDetalhes } from '../services/pagamentoService';
-import { VendedorService } from '../services/vendedorService';
-import { useAuth } from '../contexts/AuthContext';
+import { Pagination } from '@/components/ui/pagination';
 import { Skeleton } from "@/components/ui/Skeleton";
+import { PAGINATION } from '@/lib/constants/pagination';
+import { Calendar, CreditCard, DollarSign, Search, User } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import type { Vendedor } from '../lib/supabase';
+import { PagamentoComDetalhes, PagamentoService } from '../services/pagamentoService';
+import { VendedorService } from '../services/vendedorService';
 
 const Pagamentos: React.FC = () => {
-  const { user } = useAuth();
+  const { adminId } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedVendedor, setSelectedVendedor] = useState<string>('');
   const [pagamentos, setPagamentos] = useState<PagamentoComDetalhes[]>([]);
@@ -24,75 +17,31 @@ const Pagamentos: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Estados para paginação
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
-
-  // Função para calcular itens por página baseado no tamanho da tela
-  const calculateItemsPerPage = () => {
-    const height = window.innerHeight;
-    const width = window.innerWidth;
-    
-    // Altura disponível para a tabela (descontando header, filtros, etc.)
-    const availableHeight = height - 400; // ~400px para header, filtros, paginação
-    const rowHeight = 73; // altura aproximada de cada linha da tabela
-    
-    let baseItemsPerPage = Math.floor(availableHeight / rowHeight);
-    
-    // Ajustar baseado na largura da tela para melhor experiência
-    if (width >= 1920) { // 4K ou maior
-      baseItemsPerPage = Math.max(baseItemsPerPage, 15);
-    } else if (width >= 1440) { // Desktop grande
-      baseItemsPerPage = Math.max(baseItemsPerPage, 12);
-    } else if (width >= 1024) { // Desktop padrão
-      baseItemsPerPage = Math.max(baseItemsPerPage, 10);
-    } else { // Tablet/Mobile
-      baseItemsPerPage = Math.max(baseItemsPerPage, 8);
-    }
-    
-    // Garantir um mínimo e máximo razoável
-    return Math.min(Math.max(baseItemsPerPage, 5), 25);
-  };
-
-  // Atualizar itens por página quando a tela redimensionar
-  useEffect(() => {
-    const handleResize = () => {
-      const newItemsPerPage = calculateItemsPerPage();
-      setItemsPerPage(newItemsPerPage);
-      
-      // Ajustar página atual se necessário
-      const maxPage = Math.ceil(pagamentos.length / newItemsPerPage);
-      if (currentPage > maxPage && maxPage > 0) {
-        setCurrentPage(maxPage);
-      }
-    };
-
-    handleResize(); // Calcular inicial
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [pagamentos.length, currentPage]);
+  // Estados para paginação (0-based)
+  const [currentPage, setCurrentPage] = useState(0);
+  const itemsPerPage = PAGINATION.FRONTEND_PAGE_SIZE;
 
   // Carregar dados iniciais
   useEffect(() => {
-    if (user?.id) {
+    if (adminId) {
       loadData();
     }
-  }, [user?.id]);
+  }, [adminId]);
 
   const loadData = async () => {
-    if (!user?.id) return;
+    if (!adminId) return;
 
     try {
       setLoading(true);
       setError(null);
       
       // Criar instância do serviço
-      const pagamentoService = new PagamentoService(user.id);
+      const pagamentoService = new PagamentoService(adminId);
       
       // Carregar pagamentos e vendedores em paralelo
       const [pagamentosData, vendedoresData] = await Promise.all([
         pagamentoService.getPagamentosByAdmin(),
-        VendedorService.getVendedoresByAdmin(user.id)
+        VendedorService.getVendedoresByAdmin(adminId)
       ]);
       
       setPagamentos(pagamentosData);
@@ -104,59 +53,41 @@ const Pagamentos: React.FC = () => {
     }
   };
 
-  // Filtrar pagamentos baseado nos critérios de busca
-  const filteredPagamentos = pagamentos.filter(pagamento => {
-    const q = searchTerm.trim().toLowerCase();
-    const matchesSearch =
-      q === '' ||
-      pagamento.cliente_nome?.toLowerCase().includes(q) ||
-      pagamento.forma_pagamento?.toLowerCase().includes(q) ||
-      pagamento.vendedor_nome?.toLowerCase().includes(q) ||
-      pagamento.produto_nome?.toLowerCase().includes(q) ||
-      String(pagamento.entrega_id || '').toLowerCase().includes(q) ||
-      (pagamento.cliente_telefone || '').includes(searchTerm.trim());
-    
-    const matchesVendedor = selectedVendedor === '' || pagamento.vendedor_id === selectedVendedor;
-    
-    return matchesSearch && matchesVendedor;
-  });
+  // PAGINAÇÃO NO FRONTEND
+  const paginatedData = useMemo(() => {
+    // Filtrar pagamentos baseado nos critérios de busca
+    const filtered = pagamentos.filter(pagamento => {
+      const q = searchTerm.trim().toLowerCase();
+      const matchesSearch =
+        q === '' ||
+        pagamento.cliente_nome?.toLowerCase().includes(q) ||
+        pagamento.forma_pagamento?.toLowerCase().includes(q) ||
+        pagamento.vendedor_nome?.toLowerCase().includes(q) ||
+        pagamento.produto_nome?.toLowerCase().includes(q) ||
+        String(pagamento.entrega_id || '').toLowerCase().includes(q) ||
+        (pagamento.cliente_telefone || '').includes(searchTerm.trim());
+      
+      const matchesVendedor = selectedVendedor === '' || pagamento.vendedor_id === selectedVendedor;
+      
+      return matchesSearch && matchesVendedor;
+    });
 
-  // Lógica de paginação
-  const totalPages = Math.ceil(filteredPagamentos.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentPagamentos = filteredPagamentos.slice(startIndex, endIndex);
+    const { start, end } = PAGINATION.calculateSlice(currentPage, itemsPerPage);
+    const items = filtered.slice(start, end);
+
+    return {
+      items,
+      total: filtered.length,
+      totalPages: PAGINATION.calculateTotalPages(filtered.length, itemsPerPage),
+      start, // export start/end for display
+      end
+    };
+  }, [pagamentos, searchTerm, selectedVendedor, currentPage, itemsPerPage]);
 
   // Reset página quando filtro mudar
   useEffect(() => {
-    setCurrentPage(1);
+    setCurrentPage(0);
   }, [searchTerm, selectedVendedor]);
-
-  // Função para gerar números das páginas
-  const getPageNumbers = () => {
-    const pages = [];
-    const maxVisiblePages = window.innerWidth >= 768 ? 7 : 5; // Mais páginas em telas maiores
-    
-    if (totalPages <= maxVisiblePages) {
-      for (let i = 1; i <= totalPages; i++) {
-        pages.push(i);
-      }
-    } else {
-      const halfVisible = Math.floor(maxVisiblePages / 2);
-      let startPage = Math.max(1, currentPage - halfVisible);
-      const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-      
-      if (endPage - startPage < maxVisiblePages - 1) {
-        startPage = Math.max(1, endPage - maxVisiblePages + 1);
-      }
-      
-      for (let i = startPage; i <= endPage; i++) {
-        pages.push(i);
-      }
-    }
-    
-    return pages;
-  };
 
   // Funções auxiliares
   const getVendedorNome = (vendedorId: string) => {
@@ -189,7 +120,7 @@ const Pagamentos: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 p-4 sm:p-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Pagamentos</h1>
@@ -288,7 +219,7 @@ const Pagamentos: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 sm:p-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Pagamentos</h1>
@@ -324,15 +255,7 @@ const Pagamentos: React.FC = () => {
           </select>
         </div>
         
-        {/* Informações de paginação */}
-        <div className="mt-4 flex justify-between items-center text-sm text-gray-600 dark:text-gray-400">
-          <span>
-            Mostrando {startIndex + 1} a {Math.min(endIndex, filteredPagamentos.length)} de {filteredPagamentos.length} pagamentos
-          </span>
-          <span>
-            {itemsPerPage} por página
-          </span>
-        </div>
+
       </div>
 
       {/* Tabela de Pagamentos */}
@@ -359,17 +282,17 @@ const Pagamentos: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
-              {currentPagamentos.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center">
-                    <div className="text-gray-500 dark:text-gray-400">
-                      {searchTerm || selectedVendedor ? 'Nenhum pagamento encontrado com os critérios de busca.' : 'Nenhum pagamento cadastrado ainda.'}
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                currentPagamentos.map((pagamento, index) => (
-                  <tr 
+                {paginatedData.items.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-12 text-center">
+                      <div className="text-gray-500 dark:text-gray-400">
+                        {searchTerm || selectedVendedor ? 'Nenhum pagamento encontrado com os critérios de busca.' : 'Nenhum pagamento cadastrado ainda.'}
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedData.items.map((pagamento, index) => (
+                    <tr 
                     key={pagamento.id} 
                     className="hover:bg-gray-50 dark:hover:bg-gray-700 animate-fade-in-up"
                     style={{ animationDelay: `${index * 75}ms` }}
@@ -427,72 +350,14 @@ const Pagamentos: React.FC = () => {
       </div>
 
       {/* Paginação */}
-      {totalPages > 1 && (
-        <div className="flex justify-center">
-          <Pagination>
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious 
-                  href="#"
-                  size="default"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (currentPage > 1) setCurrentPage(currentPage - 1);
-                  }}
-                  className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                />
-              </PaginationItem>
-              
-              {getPageNumbers().map((pageNum, index, array) => {
-                const showEllipsisBefore = index === 0 && pageNum > 1;
-                const showEllipsisAfter = index === array.length - 1 && pageNum < totalPages;
-                
-                return (
-                  <React.Fragment key={pageNum}>
-                    {showEllipsisBefore && (
-                      <PaginationItem>
-                        <PaginationEllipsis />
-                      </PaginationItem>
-                    )}
-                    
-                    <PaginationItem>
-                      <PaginationLink
-                        href="#"
-                        size="default"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          setCurrentPage(pageNum);
-                        }}
-                        isActive={currentPage === pageNum}
-                        className="cursor-pointer"
-                      >
-                        {pageNum}
-                      </PaginationLink>
-                    </PaginationItem>
-                    
-                    {showEllipsisAfter && (
-                      <PaginationItem>
-                        <PaginationEllipsis />
-                      </PaginationItem>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-              
-              <PaginationItem>
-                <PaginationNext 
-                  href="#"
-                  size="default"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
-                  }}
-                  className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
-        </div>
+      {paginatedData.totalPages > 1 && (
+        <Pagination
+          currentPage={currentPage}
+          totalPages={paginatedData.totalPages}
+          totalCount={paginatedData.total}
+          pageSize={itemsPerPage}
+          onPageChange={setCurrentPage}
+        />
       )}
     </div>
   );

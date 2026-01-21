@@ -151,8 +151,7 @@ export class ProdutoService {
       const { data, error } = await supabase
         .from('produtos_cadastrado')
         .update({
-          ...produtoData,
-          updated_at: new Date().toISOString()
+          ...produtoData
         })
         .eq('id', id)
         .eq('administrador_id', this.adminId)

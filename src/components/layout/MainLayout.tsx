@@ -1,41 +1,45 @@
-import React, { useState, useEffect } from 'react';
-import Sidebar from './Sidebar';
+import { useEffect, useState } from 'react';
+import { Outlet } from 'react-router-dom';
 import Header from './Header';
+import Sidebar from './Sidebar';
 
-interface MainLayoutProps {
-  children: React.ReactNode;
-}
+const MainLayout: React.FC<{ children?: React.ReactNode }> = ({ children }) => { 
+  const [sidebarOpen, setSidebarOpen] = useState(false); 
 
-const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Fechar sidebar ao redimensionar para desktop 
+  useEffect(() => { 
+    const handleResize = () => { 
+      if (window.innerWidth >= 1024) { 
+        setSidebarOpen(false); 
+      } 
+    }; 
 
-  // Close sidebar when clicking outside on mobile
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth >= 1024) {
-        setSidebarOpen(false);
-      }
-    };
+    window.addEventListener('resize', handleResize); 
+    return () => window.removeEventListener('resize', handleResize); 
+  }, []); 
 
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  return ( 
+    <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-gray-900"> 
+      {/* Sidebar */} 
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onClose={() => setSidebarOpen(false)} 
+      /> 
 
-  return (
-    <div className="min-h-screen bg-background transition-colors overflow-x-hidden">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="lg:pl-64 min-h-screen flex flex-col">
-        <Header 
-          onMenuClick={() => setSidebarOpen(true)} 
-        />
-        <main className="flex-1 px-3 py-4 sm:px-4 sm:py-6 lg:px-8 max-w-full overflow-x-auto">
-          <div className="max-w-full">
-            {children}
-          </div>
-        </main>
-      </div>
-    </div>
-  );
-};
+      {/* Conteúdo Principal */} 
+      <div className="flex flex-col flex-1 min-w-0"> 
+        {/* Header */} 
+        <Header onMenuClick={() => setSidebarOpen(true)} /> 
+
+        {/* Área de conteúdo com scroll */} 
+        <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900"> 
+          <div className="px-4 sm:px-6 lg:px-8 py-6"> 
+            {children || <Outlet />} 
+          </div> 
+        </main> 
+      </div> 
+    </div> 
+  ); 
+}; 
 
 export default MainLayout;
