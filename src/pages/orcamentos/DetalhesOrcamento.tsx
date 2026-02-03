@@ -76,15 +76,27 @@ const DetalhesOrcamento: React.FC = () => {
       const html2pdf = (await import('html2pdf.js')).default;
       const element = printRef.current;
       const opt = { 
-        margin: [5, 5, 5, 5] as [number, number, number, number], // Margens em mm
+        margin: 0, 
         filename: `orcamento_nfe_${orcamento.numero_orcamento}.pdf`, 
         image: { type: 'jpeg' as const, quality: 0.98 },  
-        html2canvas: { scale: 2, useCORS: true, scrollY: 0 }, 
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const } 
+        html2canvas: { 
+          scale: 2, 
+          useCORS: true, 
+          scrollY: 0, 
+          windowWidth: 794, 
+          windowHeight: 1123, 
+          letterRendering: true 
+        }, 
+        jsPDF: { 
+          unit: 'mm', 
+          format: 'a4', 
+          orientation: 'portrait' as const, 
+          compress: true 
+        }, 
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] } 
       };
 
       await html2pdf().set(opt).from(element).save();
-      console.log('Gerando PDF...');
     } catch (error) {
       console.error('Erro ao gerar PDF:', error);
       toast.error('Erro ao gerar PDF');
@@ -263,99 +275,109 @@ const DetalhesOrcamento: React.FC = () => {
       </div>
 
       {/* Área de Impressão / Visualização */}
-      <div className="rounded-lg shadow-lg overflow-auto border border-gray-200 dark:border-gray-700 flex justify-center bg-gray-50 dark:bg-gray-900">
+      <div className="rounded-lg shadow-lg overflow-auto border border-gray-200 dark:border-gray-700 flex justify-center bg-gray-50 dark:bg-gray-900 py-8">
         <div 
           ref={printRef} 
-          className="bg-white text-gray-900 shadow-xl" 
+          className="bg-white text-gray-900 shadow-xl mx-auto" 
           style={{ 
             width: '210mm', 
-            minHeight: '297mm',
-            padding: '10mm',
-            margin: '0 auto',
-            boxSizing: 'border-box'
-          }}
+            minHeight: '297mm', 
+            padding: '0', 
+            margin: '0 auto', 
+            boxSizing: 'border-box', 
+            backgroundColor: 'white' 
+          }} 
         >
           {/* Layout Estilo DANFE */}
-          <div className="border-2 border-gray-800 text-[10px] font-sans leading-tight">
+          <div 
+            className="border-2 border-gray-800 text-[9px] font-sans leading-tight" 
+            style={{ padding: '8mm' }} 
+          >
             
             {/* Header: Emitente e DANFE */}
-            <div className="grid grid-cols-12 border-b-2 border-gray-800">
-              {/* Canhoto (Simulado) */}
-              <div className="col-span-12 flex border-b border-gray-800 p-1 min-h-[30px]">
-                 <div className="flex-1">
-                    RECEBEMOS DE {getAdminField('nome_empresa').toUpperCase() || 'EMPRESA'} OS PRODUTOS CONSTANTES NA NOTA FISCAL INDICADA AO LADO
-                 </div>
-                 <div className="w-40 text-center border-l border-gray-800 pl-2">
-                    <div className="font-bold text-sm">NF-e</div>
-                    <div>Nº {orcamento.numero_orcamento.toString().padStart(9, '0')}</div>
-                    <div>SÉRIE 1</div>
-                 </div>
+            <div className="border-b-2 border-gray-800">
+              {/* Canhoto */}
+              <div className="flex border-b border-gray-800 p-1 min-h-[30px]">
+                <div className="flex-1 text-[8px] leading-tight">
+                  RECEBEMOS DE {getAdminField('nome_empresa').toUpperCase() || 'EMPRESA'} OS PRODUTOS CONSTANTES NA NOTA FISCAL INDICADA AO LADO
+                </div>
+                <div style={{ width: '140px' }} className="text-center border-l border-gray-800 pl-2 flex-shrink-0">
+                  <div className="font-bold text-[10px]">NF-e</div>
+                  <div className="text-[9px]">Nº {orcamento.numero_orcamento.toString().padStart(9, '0')}</div>
+                  <div className="text-[8px]">SÉRIE 1</div>
+                </div>
               </div>
 
-              {/* Logo / Dados Emitente */}
-              <div className="col-span-5 p-2 border-r border-gray-800 flex flex-col justify-center min-h-[100px]">
-                <div className="font-bold text-sm mb-1">{getAdminField('nome_empresa') || getAdminField('nome') || 'NOME DA EMPRESA'}</div>
-                <div>{getAdminField('endereco') || 'Endereço da Empresa'}, {getAdminField('numero') || ''}</div>
-                <div>{getAdminField('bairro') || ''} - {getAdminField('cidade') || ''} - {getAdminField('estado') || ''}</div>
-                <div>Fone: {getAdminField('telefone') || ''}</div>
-              </div>
-
-              {/* DANFE Grande */}
-              <div className="col-span-2 p-2 border-r border-gray-800 text-center flex flex-col justify-center">
-                <div className="font-bold text-lg">DANFE</div>
-                <div className="text-[8px]">Documento Auxiliar da Nota Fiscal Eletrônica</div>
-                <div className="my-1">
-                   <span className="block">0 - Entrada</span>
-                   <span className="block font-bold">1 - Saída</span>
-                </div>
-                <div className="font-bold border border-gray-800 p-1 rounded text-lg">
-                   Nº {orcamento.numero_orcamento.toString().padStart(9, '0')}
-                </div>
-                <div className="font-bold mt-1">SÉRIE 1</div>
-                <div className="text-[8px]">Folha 1/1</div>
-              </div>
-
-              {/* Chave de Acesso / Codigo Barras */}
-              <div className="col-span-5 p-2 flex flex-col gap-2 justify-center">
-                <div className="h-10 bg-gray-200 flex items-center justify-center text-gray-400 text-[8px]">
-                   (CÓDIGO DE BARRAS SIMULADO)
-                </div>
-                <div>
-                  <div className="font-bold text-[8px]">CHAVE DE ACESSO</div>
-                  <div className="bg-gray-100 p-1 text-center text-[9px] font-mono tracking-wider">
-                    {/* Chave de acesso fictícia baseada no ID */}
-                    3523 01{orcamento.id.replace(/\D/g, '').padEnd(34, '0').slice(0, 34)} 55 001 000 000 000
+              {/* Dados Principais */}
+              <div className="flex" style={{ minHeight: '90px' }}>
+                {/* Emitente */}
+                <div style={{ width: '43%' }} className="p-2 border-r border-gray-800 flex flex-col justify-center">
+                  <div className="font-bold text-[10px] mb-1 uppercase" style={{ wordBreak: 'break-word', overflow: 'visible', whiteSpace: 'normal' }}>
+                    {getAdminField('nome_empresa') || 'EMPRESA'}
+                  </div>
+                  <div className="text-[8px] leading-tight" style={{ wordBreak: 'break-word', whiteSpace: 'normal', overflow: 'visible' }}>
+                    <div>{getAdminField('endereco') || 'Endereço'}, {getAdminField('numero') || ''}</div>
+                    <div>{getAdminField('bairro') || ''} - {getAdminField('cidade') || ''}/{getAdminField('estado') || ''}</div>
+                    <div>Fone: {getAdminField('telefone') || ''}</div>
                   </div>
                 </div>
-                <div className="text-[8px] text-center">
-                   Consulta de autenticidade no portal nacional da NF-e www.nfe.fazenda.gov.br/portal ou no site da Sefaz Autorizadora
+
+                {/* DANFE */}
+                <div style={{ width: '20%' }} className="p-2 border-r border-gray-800 text-center flex flex-col justify-center flex-shrink-0">
+                  <div className="font-bold text-[14px]">DANFE</div>
+                  <div className="text-[7px] leading-tight mb-1">Documento Auxiliar da NF-e</div>
+                  <div className="text-[8px] mb-1">
+                    <div>0 - Entrada</div>
+                    <div className="font-bold">1 - Saída</div>
+                  </div>
+                  <div className="font-bold border border-gray-800 py-1 text-[13px]">
+                    Nº {orcamento.numero_orcamento.toString().padStart(9, '0')}
+                  </div>
+                  <div className="font-bold text-[9px] mt-1">SÉRIE 1</div>
+                  <div className="text-[7px]">Folha 1/1</div>
+                </div>
+
+                {/* Chave */}
+                <div style={{ width: '37%' }} className="p-2 flex flex-col gap-1 justify-center">
+                  <div style={{ height: '35px' }} className="bg-gray-200 flex items-center justify-center text-gray-400 text-[7px]">
+                    (CÓDIGO DE BARRAS)
+                  </div>
+                  <div>
+                    <div className="font-bold text-[7px]">CHAVE DE ACESSO</div>
+                    <div className="bg-gray-100 p-1 text-center text-[7px] font-mono break-all leading-tight">
+                      3523 01{orcamento.id.replace(/\D/g, '').padEnd(34, '0').slice(0, 34)} 55 001 000
+                    </div>
+                  </div>
+                  <div className="text-[6px] text-center leading-tight">
+                    Consulta: www.nfe.fazenda.gov.br/portal
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Natureza da Operação */}
-            <div className="grid grid-cols-12 border-b-2 border-gray-800 p-1 bg-gray-50">
-               <div className="col-span-7">
+            <div className="flex border-b-2 border-gray-800 p-1 bg-gray-50">
+               <div style={{ width: '58.33%' }}>
                   <div className="font-bold">NATUREZA DA OPERAÇÃO</div>
                   <div>VENDA DE MERCADORIA</div>
                </div>
-               <div className="col-span-5">
+               <div style={{ width: '41.67%' }}>
                   <div className="font-bold">PROTOCOLO DE AUTORIZAÇÃO DE USO</div>
                   <div>{orcamento.created_at ? new Date(orcamento.created_at).getTime() : ''} - {formatDate(orcamento.data_orcamento)}</div>
                </div>
             </div>
 
             {/* Dados Cadastrais Emitente (Inscrição) */}
-            <div className="grid grid-cols-12 border-b-2 border-gray-800 p-1">
-              <div className="col-span-4 border-r border-gray-800 pr-1">
+            <div className="flex border-b-2 border-gray-800 p-1">
+              <div style={{ width: '33.33%' }} className="border-r border-gray-800 pr-1">
                  <div className="font-bold">INSCRIÇÃO ESTADUAL</div>
                  <div>ISENTO</div>
               </div>
-              <div className="col-span-4 border-r border-gray-800 px-1">
+              <div style={{ width: '33.33%' }} className="border-r border-gray-800 px-1">
                  <div className="font-bold">INSCRIÇÃO ESTADUAL DO SUBST. TRIB.</div>
                  <div></div>
               </div>
-              <div className="col-span-4 pl-1">
+              <div style={{ width: '33.33%' }} className="pl-1">
                  <div className="font-bold">CNPJ</div>
                  <div>{getAdminField('cpf_cnpj') || '00.000.000/0000-00'}</div>
               </div>
@@ -365,211 +387,194 @@ const DetalhesOrcamento: React.FC = () => {
             <div className="bg-gray-100 p-1 font-bold border-b border-gray-800 text-[9px]">
                DESTINATÁRIO / REMETENTE
             </div>
-            <div className="grid grid-cols-12 border-b-2 border-gray-800">
+            <div className="flex flex-wrap border-b-2 border-gray-800">
                {/* Linha 1 */}
-               <div className="col-span-7 p-1 border-r border-b border-gray-800">
+               <div style={{ width: '58.33%' }} className="p-1 border-r border-b border-gray-800">
                   <div className="font-bold">NOME / RAZÃO SOCIAL</div>
-                  <div className="truncate font-medium text-xs">{getClienteField('nome') || orcamento.cliente_nome}</div>
+                  <div className="text-[9px] leading-tight" style={{ wordBreak: 'break-word', whiteSpace: 'normal', overflow: 'visible' }}>
+                    {getClienteField('nome') || orcamento.cliente_nome}
+                  </div>
                </div>
-               <div className="col-span-3 p-1 border-r border-b border-gray-800">
+               <div style={{ width: '25%' }} className="p-1 border-r border-b border-gray-800">
                   <div className="font-bold">CNPJ / CPF</div>
                   <div>{getClienteField('cpf') || getClienteField('cnpj') || ''}</div>
                </div>
-               <div className="col-span-2 p-1 border-b border-gray-800">
+               <div style={{ width: '16.67%' }} className="p-1 border-b border-gray-800">
                   <div className="font-bold">DATA DA EMISSÃO</div>
                   <div>{formatDate(orcamento.data_orcamento)}</div>
                </div>
 
                {/* Linha 2 */}
-               <div className="col-span-6 p-1 border-r border-b border-gray-800">
+               <div style={{ width: '50%' }} className="p-1 border-r border-b border-gray-800">
                   <div className="font-bold">ENDEREÇO</div>
-                  <div className="truncate">{getClienteField('endereco') || ''}, {getClienteField('numero') || ''}</div>
+                  <div className="text-[8px] leading-tight" style={{ wordBreak: 'break-word', whiteSpace: 'normal', overflow: 'visible' }}>
+                    {getClienteField('endereco') || ''}, {getClienteField('numero') || ''}
+                  </div>
                </div>
-               <div className="col-span-4 p-1 border-r border-b border-gray-800">
+               <div style={{ width: '33.33%' }} className="p-1 border-r border-b border-gray-800">
                   <div className="font-bold">BAIRRO / DISTRITO</div>
                   <div>{getClienteField('Bairro') || ''}</div>
                </div>
-               <div className="col-span-2 p-1 border-b border-gray-800">
+               <div style={{ width: '16.67%' }} className="p-1 border-b border-gray-800">
                   <div className="font-bold">DATA SAÍDA/ENTRADA</div>
-                  <div>{formatDate(orcamento.data_orcamento)}</div>
+                  <div>{orcamento.data_saida ? formatDate(orcamento.data_saida) : ''}</div>
                </div>
 
                {/* Linha 3 */}
-               <div className="col-span-4 p-1 border-r border-gray-800">
+               <div style={{ width: '33.33%' }} className="p-1 border-r border-gray-800">
                   <div className="font-bold">MUNICÍPIO</div>
                   <div>{getClienteField('Cidade') || ''}</div>
                </div>
-               <div className="col-span-1 p-1 border-r border-gray-800">
+               <div style={{ width: '8.33%' }} className="p-1 border-r border-gray-800">
                   <div className="font-bold">UF</div>
                   <div>{getClienteField('Estado') || ''}</div>
                </div>
-               <div className="col-span-3 p-1 border-r border-gray-800">
+               <div style={{ width: '25%' }} className="p-1 border-r border-gray-800">
                   <div className="font-bold">FONE / FAX</div>
                   <div>{getClienteField('telefone') || ''}</div>
                </div>
-               <div className="col-span-2 p-1 border-r border-gray-800">
+               <div style={{ width: '16.67%' }} className="p-1 border-r border-gray-800">
                   <div className="font-bold">INSCRIÇÃO ESTADUAL</div>
                   <div></div>
                </div>
-               <div className="col-span-2 p-1">
+               <div style={{ width: '16.67%' }} className="p-1">
                    <div className="font-bold">HORA SAÍDA</div>
-                   <div>{new Date().toLocaleTimeString().slice(0,5)}</div>
+                   <div>{orcamento.hora_saida || ''}</div>
                </div>
             </div>
 
             {/* Cálculo do Imposto */}
-            <div className="bg-gray-100 p-1 font-bold border-b border-gray-800 text-[9px]">
+            <div className="bg-gray-100 p-1 font-bold border-b border-gray-800 text-[8px]">
                CÁLCULO DO IMPOSTO
             </div>
-            <div className="grid grid-cols-10 border-b-2 border-gray-800 text-right">
-               <div className="p-1 border-r border-gray-800">
+            <div className="flex border-b-2 border-gray-800 text-right">
+               <div style={{ width: '10%' }} className="p-1 border-r border-gray-800">
                   <div className="font-bold text-left">BASE DE CÁLC. DO ICMS</div>
                   <div>0,00</div>
                </div>
-               <div className="p-1 border-r border-gray-800">
+               <div style={{ width: '10%' }} className="p-1 border-r border-gray-800">
                   <div className="font-bold text-left">VALOR DO ICMS</div>
                   <div>0,00</div>
                </div>
-               <div className="p-1 border-r border-gray-800">
+               <div style={{ width: '10%' }} className="p-1 border-r border-gray-800">
                   <div className="font-bold text-left">BASE CÁLC. ICMS ST</div>
                   <div>0,00</div>
                </div>
-               <div className="p-1 border-r border-gray-800">
+               <div style={{ width: '10%' }} className="p-1 border-r border-gray-800">
                   <div className="font-bold text-left">VALOR DO ICMS ST</div>
                   <div>0,00</div>
                </div>
-               <div className="p-1 border-r border-gray-800">
+               <div style={{ width: '10%' }} className="p-1 border-r border-gray-800">
                   <div className="font-bold text-left">VALOR TOTAL PRODUTOS</div>
                   <div>{formatCurrency(orcamento.valor_total).replace('R$', '')}</div>
                </div>
-               <div className="p-1 border-r border-gray-800">
+               <div style={{ width: '10%' }} className="p-1 border-r border-gray-800">
                   <div className="font-bold text-left">VALOR DO FRETE</div>
                   <div>0,00</div>
                </div>
-               <div className="p-1 border-r border-gray-800">
+               <div style={{ width: '10%' }} className="p-1 border-r border-gray-800">
                   <div className="font-bold text-left">VALOR DO SEGURO</div>
                   <div>0,00</div>
                </div>
-               <div className="p-1 border-r border-gray-800">
+               <div style={{ width: '10%' }} className="p-1 border-r border-gray-800">
                   <div className="font-bold text-left">DESCONTO</div>
                   <div>0,00</div>
                </div>
-               <div className="p-1 border-r border-gray-800">
+               <div style={{ width: '10%' }} className="p-1 border-r border-gray-800">
                   <div className="font-bold text-left">OUTRAS DESP.</div>
                   <div>0,00</div>
                </div>
-               <div className="p-1">
+               <div style={{ width: '10%' }} className="p-1">
                   <div className="font-bold text-left">VALOR TOTAL NOTA</div>
                   <div>{formatCurrency(orcamento.valor_total).replace('R$', '')}</div>
                </div>
             </div>
 
             {/* Transportador / Volumes */}
-            <div className="bg-gray-100 p-1 font-bold border-b border-gray-800 text-[9px]">
+            <div className="bg-gray-100 p-1 font-bold border-b border-gray-800 text-[8px]">
                TRANSPORTADOR / VOLUMES TRANSPORTADOS
             </div>
-            <div className="grid grid-cols-12 border-b-2 border-gray-800">
-               <div className="col-span-4 p-1 border-r border-gray-800">
+            <div className="flex flex-wrap border-b-2 border-gray-800">
+               <div style={{ width: '33.33%' }} className="p-1 border-r border-gray-800">
                   <div className="font-bold">RAZÃO SOCIAL</div>
                   <div>O MESMO</div>
                </div>
-               <div className="col-span-2 p-1 border-r border-gray-800">
+               <div style={{ width: '16.67%' }} className="p-1 border-r border-gray-800">
                   <div className="font-bold">FRETE POR CONTA</div>
                   <div>0 - Emitente</div>
                </div>
-               <div className="col-span-2 p-1 border-r border-gray-800">
+               <div style={{ width: '16.67%' }} className="p-1 border-r border-gray-800">
                   <div className="font-bold">CÓDIGO ANTT</div>
                   <div></div>
                </div>
-               <div className="col-span-2 p-1 border-r border-gray-800">
+               <div style={{ width: '16.67%' }} className="p-1 border-r border-gray-800">
                   <div className="font-bold">PLACA DO VEÍCULO</div>
                   <div></div>
                </div>
-               <div className="col-span-1 p-1 border-r border-gray-800">
+               <div style={{ width: '8.33%' }} className="p-1 border-r border-gray-800">
                   <div className="font-bold">UF</div>
                   <div></div>
                </div>
-               <div className="col-span-1 p-1">
+               <div style={{ width: '8.33%' }} className="p-1">
                   <div className="font-bold">CNPJ/CPF</div>
                   <div></div>
                </div>
                
                {/* Linha 2 Transporte */}
-               <div className="col-span-4 p-1 border-r border-t border-gray-800">
+               <div style={{ width: '33.33%' }} className="p-1 border-r border-t border-gray-800">
                   <div className="font-bold">ENDEREÇO</div>
                   <div></div>
                </div>
-               <div className="col-span-4 p-1 border-r border-t border-gray-800">
+               <div style={{ width: '33.33%' }} className="p-1 border-r border-t border-gray-800">
                   <div className="font-bold">MUNICÍPIO</div>
                   <div></div>
                </div>
-               <div className="col-span-1 p-1 border-r border-t border-gray-800">
+               <div style={{ width: '8.33%' }} className="p-1 border-r border-t border-gray-800">
                   <div className="font-bold">UF</div>
                   <div></div>
                </div>
-               <div className="col-span-3 p-1 border-t border-gray-800">
+               <div style={{ width: '25%' }} className="p-1 border-t border-gray-800">
                   <div className="font-bold">INSCRIÇÃO ESTADUAL</div>
                   <div></div>
                </div>
             </div>
 
             {/* Dados do Produto / Serviço */}
-            <div className="bg-gray-100 p-1 font-bold border-b border-gray-800">
+            <div className="bg-gray-100 p-1 font-bold border-b border-gray-800 text-[8px]">
                DADOS DO PRODUTO / SERVIÇO
             </div>
-            <div className="min-h-[300px]">
-               <table className="w-full text-[10px]">
+            <div style={{ minHeight: '280px' }}>
+               <table className="w-full text-[7px] border-collapse">
                   <thead>
                      <tr className="border-b border-gray-800">
-                        <th className="p-1 border-r border-gray-800 text-left w-20">CÓDIGO</th>
-                        <th className="p-1 border-r border-gray-800 text-left">DESCRIÇÃO</th>
-                        <th className="p-1 border-r border-gray-800 text-center w-16">NCM/SH</th>
-                        <th className="p-1 border-r border-gray-800 text-center w-10">CST</th>
-                        <th className="p-1 border-r border-gray-800 text-center w-10">CFOP</th>
-                        <th className="p-1 border-r border-gray-800 text-center w-10">UNID.</th>
-                        <th className="p-1 border-r border-gray-800 text-right w-16">QTD.</th>
-                        <th className="p-1 border-r border-gray-800 text-right w-20">VLR. UNIT.</th>
-                        <th className="p-1 border-r border-gray-800 text-right w-20">VLR. TOTAL</th>
-                        <th className="p-1 border-r border-gray-800 text-right w-16">BC ICMS</th>
-                        <th className="p-1 border-r border-gray-800 text-right w-16">VLR. ICMS</th>
-                        <th className="p-1 border-r border-gray-800 text-right w-16">VLR. IPI</th>
-                        <th className="p-1 text-right w-12">ALIQ. ICMS</th>
+                        <th className="p-1 border-r border-gray-800 text-left" style={{ width: '5%' }}>CÓD</th>
+                        <th className="p-1 border-r border-gray-800 text-left" style={{ width: '30%' }}>DESCRIÇÃO</th>
+                        <th className="p-1 border-r border-gray-800 text-center" style={{ width: '8%' }}>NCM/SH</th>
+                        <th className="p-1 border-r border-gray-800 text-center" style={{ width: '5%' }}>CST</th>
+                        <th className="p-1 border-r border-gray-800 text-center" style={{ width: '5%' }}>CFOP</th>
+                        <th className="p-1 border-r border-gray-800 text-center" style={{ width: '4%' }}>UN</th>
+                        <th className="p-1 border-r border-gray-800 text-right" style={{ width: '6%' }}>QTD</th>
+                        <th className="p-1 border-r border-gray-800 text-right" style={{ width: '9%' }}>VLR.UNIT</th>
+                        <th className="p-1 border-r border-gray-800 text-right" style={{ width: '10%' }}>VLR.TOTAL</th>
+                        <th className="p-1 border-r border-gray-800 text-right" style={{ width: '7%' }}>BC ICMS</th>
+                        <th className="p-1 border-r border-gray-800 text-right" style={{ width: '7%' }}>V.ICMS</th>
+                        <th className="p-1 text-right" style={{ width: '4%' }}>AL.IC</th>
                      </tr>
                   </thead>
                   <tbody>
                      {orcamento.itens?.map((item, index) => (
                         <tr key={item.id} className="border-b border-gray-200">
-                           <td className="p-1 border-r border-gray-200">{index + 1}</td>
-                           <td className="p-1 border-r border-gray-200">{item.descricao}</td>
-                           <td className="p-1 border-r border-gray-200 text-center"></td>
-                           <td className="p-1 border-r border-gray-200 text-center">000</td>
-                           <td className="p-1 border-r border-gray-200 text-center">5102</td>
-                           <td className="p-1 border-r border-gray-200 text-center">UN</td>
-                           <td className="p-1 border-r border-gray-200 text-right">{item.quantidade}</td>
-                           <td className="p-1 border-r border-gray-200 text-right">{formatCurrency(item.valor_venda_unitario).replace('R$', '')}</td>
-                           <td className="p-1 border-r border-gray-200 text-right">{formatCurrency(item.valor_total).replace('R$', '')}</td>
-                           <td className="p-1 border-r border-gray-200 text-right">0,00</td>
-                           <td className="p-1 border-r border-gray-200 text-right">0,00</td>
-                           <td className="p-1 border-r border-gray-200 text-right">0,00</td>
-                           <td className="p-1 text-right">0,00</td>
-                        </tr>
-                     ))}
-                     {/* Linhas vazias para preencher espaço se necessário */}
-                     {Array.from({ length: Math.max(0, 10 - (orcamento.itens?.length || 0)) }).map((_, i) => (
-                        <tr key={`empty-${i}`} className="border-b border-gray-100 text-transparent">
-                           <td className="p-1 border-r border-gray-100">-</td>
-                           <td className="p-1 border-r border-gray-100">-</td>
-                           <td className="p-1 border-r border-gray-100">-</td>
-                           <td className="p-1 border-r border-gray-100">-</td>
-                           <td className="p-1 border-r border-gray-100">-</td>
-                           <td className="p-1 border-r border-gray-100">-</td>
-                           <td className="p-1 border-r border-gray-100">-</td>
-                           <td className="p-1 border-r border-gray-100">-</td>
-                           <td className="p-1 border-r border-gray-100">-</td>
-                           <td className="p-1 border-r border-gray-100">-</td>
-                           <td className="p-1 border-r border-gray-100">-</td>
-                           <td className="p-1 border-r border-gray-100">-</td>
-                           <td className="p-1">-</td>
+                           <td className="p-1 border-r border-gray-200 text-[7px]">{index + 1}</td>
+                           <td className="p-1 border-r border-gray-200 text-[7px] truncate" style={{ maxWidth: '200px' }}>{item.descricao}</td>
+                           <td className="p-1 border-r border-gray-200 text-center text-[7px]">000</td>
+                           <td className="p-1 border-r border-gray-200 text-center text-[7px]">5102</td>
+                           <td className="p-1 border-r border-gray-200 text-center text-[7px]">UN</td>
+                           <td className="p-1 border-r border-gray-200 text-right text-[7px]">{item.quantidade}</td>
+                           <td className="p-1 border-r border-gray-200 text-right text-[7px]">{formatCurrency(item.valor_venda_unitario).replace('R$', '').trim()}</td>
+                           <td className="p-1 border-r border-gray-200 text-right text-[7px]">{formatCurrency(item.valor_total).replace('R$', '').trim()}</td>
+                           <td className="p-1 border-r border-gray-200 text-right text-[7px]">0,00</td>
+                           <td className="p-1 border-r border-gray-200 text-right text-[7px]">0,00</td>
+                           <td className="p-1 text-right text-[7px]">0</td>
                         </tr>
                      ))}
                   </tbody>
@@ -577,19 +582,19 @@ const DetalhesOrcamento: React.FC = () => {
             </div>
 
             {/* Dados Adicionais */}
-            <div className="bg-gray-100 p-1 font-bold border-t border-b border-gray-800">
+            <div className="bg-gray-100 p-1 font-bold border-t border-b border-gray-800 text-[8px]">
                DADOS ADICIONAIS
             </div>
-            <div className="grid grid-cols-12 min-h-[100px]">
+            <div className="grid grid-cols-12" style={{ minHeight: '60px' }}>
                <div className="col-span-7 p-1 border-r border-gray-800">
-                  <div className="text-[9px] font-bold">INFORMAÇÕES COMPLEMENTARES</div>
-                  <div className="text-[9px]">
+                  <div className="text-[8px] font-bold">INFORMAÇÕES COMPLEMENTARES</div>
+                  <div className="text-[8px]">
                      Orçamento válido por 7 dias. Documento sem valor fiscal. 
                      {/* Espaço para mais obs */}
                   </div>
                </div>
                <div className="col-span-5 p-1">
-                  <div className="text-[9px] font-bold">RESERVADO AO FISCO</div>
+                  <div className="text-[8px] font-bold">RESERVADO AO FISCO</div>
                </div>
             </div>
 

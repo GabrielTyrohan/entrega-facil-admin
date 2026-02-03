@@ -1,3 +1,4 @@
+import { EstoqueAtual } from '@/types/estoque';
 import { useQuery, UseQueryResult } from '@tanstack/react-query';
 import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,9 +13,11 @@ export const useDashboard = () => {
   // Hooks auxiliares definidos abaixo
   const summaryQuery = useDashboardSummary(adminId || '', { enabled: !!adminId });
   const chartsQuery = usePagamentosMensais(adminId || '', { enabled: !!adminId });
+  const estoqueAlertsQuery = useEstoqueAlerts(adminId || '', { enabled: !!adminId });
 
   const summary = summaryQuery.data;
   const chartsData = chartsQuery.data;
+  const estoqueAlerts = estoqueAlertsQuery.data;
 
   // Cálculos de percentual
   const calcPercent = (atual: number, anterior: number) => {
@@ -45,8 +48,9 @@ export const useDashboard = () => {
       faturamentoMensal: chartsData || []
     },
     vendedores,
+    estoqueAlerts: estoqueAlerts || [],
     isLoading: summaryQuery.isLoading,
-    someLoading: summaryQuery.isLoading || chartsQuery.isLoading
+    someLoading: summaryQuery.isLoading || chartsQuery.isLoading || estoqueAlertsQuery.isLoading
   };
 };
 
@@ -240,6 +244,28 @@ export const useDashboardStats = (administrador_id: string, options?: { enabled?
 
   return useSupabaseQuery('DASHBOARD_STATS', query, [CACHE_KEYS.DASHBOARD_STATS, administrador_id], {
     enabled: options?.enabled && !!administrador_id,
+  });
+};
+
+// Hook para total de vendas por vendedor (usado no modal de detalhes)
+export const useTotalVendasPorVendedor = (vendedorId: string, options?: { enabled?: boolean }) => {
+  return useQuery({
+    queryKey: ['TOTAL_VENDAS_VENDEDOR', vendedorId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('entregas')
+        .select('valor')
+        .eq('vendedor_id', vendedorId);
+
+      if (error) throw error;
+
+      const total = data?.reduce((acc, curr) => acc + (curr.valor || 0), 0) || 0;
+      const count = data?.length || 0;
+
+      return { total, count };
+    },
+    enabled: options?.enabled && !!vendedorId,
+    staleTime: 1000 * 60 * 5, // 5 minutos
   });
 };
 
@@ -444,10 +470,10 @@ export const useTopVendedores = (administrador_id: string, options?: { enabled?:
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth() + 1;
-  const previousMonth = currentMonth === 1 ? 12 : currentMonth - 1;
-  const previousYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+  const currentMonthStart = `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`;
+  const currentMonthEnd = new Date(currentYear, currentMonth, 0).toISOString().split('T')[0];
 
-  // Query para entregas dos últimos 60 dias
+  // Query para entregas dos últimos 60 dias (para garantir dados mesmo se o mês começou agora)
   const last60DaysQuery = supabase
     .from('entregas')
     .select(`
@@ -481,9 +507,6 @@ export const useTopVendedores = (administrador_id: string, options?: { enabled?:
     }
 
     // Separar entregas por mês
-    const currentMonthStart = `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`;
-    const currentMonthEnd = new Date(currentYear, currentMonth, 0).toISOString().split('T')[0];
-
     const currentMonthEntregas = entregas.filter(e => 
       e.data_entrega >= currentMonthStart && e.data_entrega <= currentMonthEnd
     );
@@ -520,7 +543,7 @@ export const useTopVendedores = (administrador_id: string, options?: { enabled?:
       .slice(0, 5);
 
     return topVendedores;
-  }, [entregasData.data, entregasData.isLoading, administrador_id, currentYear, currentMonth, previousYear, previousMonth]);
+  }, [entregasData.data, entregasData.isLoading, administrador_id, currentMonthStart, currentMonthEnd]);
 
   return {
     data: processedData,
@@ -532,413 +555,101 @@ export const useTopVendedores = (administrador_id: string, options?: { enabled?:
 // Hook para pagamentos mensais dos últimos 12 meses
 export const usePagamentosMensais = (administrador_id: string, options?: { enabled?: boolean }) => {
   const currentDate = new Date();
-  const months = [];
+  const months: { month: string; value: number; height: number; count: number }[] = [];
   
   // Gerar dados dos últimos 12 meses
   for (let i = 11; i >= 0; i--) {
-    const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
-    const monthStart = date.toISOString().split('T')[0];
-    const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
-    
+    const d = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+    const monthName = d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
     months.push({
-      label: date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''),
-      monthStart,
-      monthEnd,
-      index: i
+      month: monthName.charAt(0).toUpperCase() + monthName.slice(1),
+      value: 0,
+      height: 0,
+      count: 0
     });
   }
 
-  // Calcular o range correto: do mês mais antigo até o mês atual
-  const startDate = months[0].monthStart; // Primeiro mês (mais antigo)
-  const endDate = months[months.length - 1].monthEnd; // Último mês (atual)
+  const { data: faturamentoData, isLoading } = useFaturamentoMensal(administrador_id, options);
 
-  // Criar uma query única que busca todos os dados dos últimos 12 meses
-  const query = supabase
-    .from('pagamentos')
-    .select('valor, data_pagamento, entregas!inner(vendedores!inner(administrador_id))')
-    .eq('entregas.vendedores.administrador_id', administrador_id)
-    .gte('data_pagamento', startDate)
-    .lte('data_pagamento', endDate)
-    .order('data_pagamento', { ascending: true });
+  const processedData = React.useMemo(() => {
+    if (!faturamentoData || isLoading) return [];
 
-  const { data: allData, ...queryResult } = useSupabaseQuery('PAGAMENTOS_MENSAIS', query, [CACHE_KEYS.PAGAMENTOS_MENSAIS, administrador_id], {
-    enabled: options?.enabled && !!administrador_id,
-  });
+    const dataMap = [...months];
+    let maxValue = 0;
 
-  // Processar os dados para agrupar por mês
-  const processedData = months.map(month => {
-    const monthData = Array.isArray(allData) ? allData.filter((item: any) => {
-      const itemDate = new Date(item.data_pagamento);
-      const itemMonth = itemDate.toISOString().split('T')[0];
-      return itemMonth >= month.monthStart && itemMonth <= month.monthEnd;
-    }) : [];
-
-    const totalValue = monthData.reduce((sum: number, item: any) => sum + (item.valor || 0), 0);
-    
-    return {
-      month: month.label,
-      value: totalValue,
-      count: monthData.length
-    };
-  });
-
-  // Calcular altura relativa para o gráfico
-  const maxValue = Math.max(...processedData.map(d => d.value), 1);
-  const dataWithHeight = processedData.map(data => ({
-    ...data,
-    height: maxValue > 0 ? (data.value / maxValue) * 100 : 0
-  }));
-
-  return {
-    ...queryResult,
-    data: dataWithHeight,
-    months: months.map(m => m.label),
-    queries: months.map(() => ({ data: [] })) // Para compatibilidade com código existente
-  };
-};
-
-export const useVendasMensaisPorVendedor = (administrador_id: string, options?: { enabled?: boolean }) => {
-  const now = new Date();
-  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  
-  const firstDayString = firstDay.toISOString().split('T')[0];
-  const lastDayString = lastDay.toISOString().split('T')[0];
-
-  const vendasQuery = supabase
-    .from('entregas')
-    .select(`
-      vendedor_id,
-      vendedores!inner(
-        id,
-        nome,
-        administrador_id
-      )
-    `)
-    .eq('vendedores.administrador_id', administrador_id)
-    .gte('data_entrega', firstDayString)
-    .lte('data_entrega', lastDayString);
-
-  const { data: entregasData, ...queryResult } = useSupabaseQuery('VENDAS_MENSAIS_VENDEDORES', vendasQuery, [CACHE_KEYS.VENDAS_MENSAIS_VENDEDORES, administrador_id], {
-    enabled: options?.enabled && !!administrador_id,
-  });
-
-  // Processar os dados para contar entregas por vendedor
-  const vendasPorVendedor = useQuery({
-    queryKey: ['VENDAS_PROCESSADAS', administrador_id, firstDayString, lastDayString],
-    queryFn: () => {
-      if (!entregasData || !Array.isArray(entregasData)) return {};
+    faturamentoData.forEach((item: any) => {
+      const date = new Date(item.data_pagamento);
+      const monthIndex = 11 - (currentDate.getMonth() - date.getMonth() + 
+        (12 * (currentDate.getFullYear() - date.getFullYear())));
       
-      const contadorVendas: Record<string, number> = {};
-      
-      entregasData.forEach((entrega: any) => {
-        const vendedorId = entrega.vendedor_id;
-        contadorVendas[vendedorId] = (contadorVendas[vendedorId] || 0) + 1;
-      });
-      
-      return contadorVendas;
-    },
-    enabled: !!entregasData && options?.enabled !== false,
-  });
-
-  return {
-    ...queryResult,
-    data: vendasPorVendedor.data || {},
-    isLoading: queryResult.isLoading || vendasPorVendedor.isLoading,
-    error: queryResult.error || vendasPorVendedor.error,
-  };
-};
-
-// Hook para buscar total de entregas por vendedor (sem filtro de data)
-export const useTotalVendasPorVendedor = (vendedor_id: string, options?: { enabled?: boolean }) => {
-  const totalVendasQuery = supabase
-    .from('entregas')
-    .select('valor')
-    .eq('vendedor_id', vendedor_id);
-
-  const { data: entregasData, ...queryResult } = useSupabaseQuery(
-    'TOTAL_VENDAS_VENDEDOR', 
-    totalVendasQuery, 
-    [CACHE_KEYS.TOTAL_VENDAS_VENDEDOR, vendedor_id],
-    {
-      enabled: options?.enabled && !!vendedor_id,
-    }
-  );
-
-  // Calcular o valor total das vendas
-  const totalValue = Array.isArray(entregasData) 
-    ? entregasData.reduce((sum, entrega) => sum + (entrega.valor || 0), 0)
-    : 0;
-
-  return {
-    ...queryResult,
-    data: totalValue,
-    isLoading: queryResult.isLoading,
-    error: queryResult.error,
-  };
-};
-
-// Hook para contar o total de entregas por vendedor
-// Hook para obter total de entregas por administrador (para todos os vendedores)
-export const useTotalEntregasPorAdministrador = (administrador_id: string, options?: { enabled?: boolean }) => {
-  const entregasQuery = supabase
-    .from('entregas')
-    .select('vendedor_id, vendedores!inner(administrador_id)')
-    .eq('vendedores.administrador_id', administrador_id);
-
-  const { data: entregasData, ...queryResult } = useSupabaseQuery(
-    'TOTAL_ENTREGAS_ADMINISTRADOR',
-    entregasQuery,
-    [CACHE_KEYS.TOTAL_ENTREGAS_ADMINISTRADOR, administrador_id],
-    {
-      enabled: options?.enabled && !!administrador_id,
-    }
-  );
-
-  // Agrupar por vendedor_id e contar
-  const entregasPorVendedor: Record<string, number> = {};
-  if (Array.isArray(entregasData)) {
-    entregasData.forEach((entrega: any) => {
-      entregasPorVendedor[entrega.vendedor_id] = (entregasPorVendedor[entrega.vendedor_id] || 0) + 1;
-    });
-  }
-
-  return {
-    ...queryResult,
-    data: entregasPorVendedor,
-  };
-};
-
-export const useClientesAtivos = (adminId: string, options?: { enabled?: boolean }) => {
-  return useQuery({
-    queryKey: ['clientes-ativos', adminId],
-    queryFn: async () => {
-      const { data: vendedores } = await supabase
-        .from('vendedores')
-        .select('id')
-        .eq('administrador_id', adminId)
-        .eq('ativo', true);
-      
-      const vendedorIds = vendedores?.map(v => v.id) || [];
-      
-      const { data } = await supabase
-        .from('clientes')
-        .select('id')
-        .in('vendedor_id', vendedorIds)
-        .eq('ativo', true);
-      
-      return data?.length || 0;
-    },
-    enabled: options?.enabled && !!adminId
-  });
-};
-
-export const useTaxaInadimplencia = (adminId: string, options?: { enabled?: boolean }) => {
-  return useQuery({
-    queryKey: ['taxa-inadimplencia', adminId],
-    queryFn: async () => {
-      const { data: vendedores } = await supabase
-        .from('vendedores')
-        .select('id')
-        .eq('administrador_id', adminId);
-      
-      const vendedorIds = vendedores?.map(v => v.id) || [];
-      
-      const { data: entregas } = await supabase
-        .from('entregas')
-        .select('id, pago, valor')
-        .in('vendedor_id', vendedorIds);
-      
-      const total = entregas?.length || 0;
-      const pendentes = entregas?.filter(e => !e.pago).length || 0;
-      const valorPendente = entregas?.filter(e => !e.pago).reduce((sum, e) => sum + (e.valor || 0), 0) || 0;
-      
-      return {
-        percentual: total > 0 ? ((pendentes / total) * 100) : 0,
-        quantidade: pendentes,
-        valorPendente
-      };
-    },
-    enabled: options?.enabled && !!adminId
-  });
-};
-
-export const useEntregasMensais = (adminId: string, options?: { enabled?: boolean }) => {
-  return useQuery({
-    queryKey: ['entregas-mensais', adminId],
-    queryFn: async () => {
-      const { data: vendedores } = await supabase
-        .from('vendedores')
-        .select('id')
-        .eq('administrador_id', adminId);
-      
-      const vendedorIds = vendedores?.map(v => v.id) || [];
-      
-      const { data: entregas } = await supabase
-        .from('entregas')
-        .select('data_entrega')
-        .in('vendedor_id', vendedorIds);
-      
-      const monthlyData: { [key: string]: number } = {};
-      
-      entregas?.forEach(e => {
-        const date = new Date(e.data_entrega);
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        monthlyData[monthKey] = (monthlyData[monthKey] || 0) + 1;
-      });
-      
-      return monthlyData;
-    },
-    enabled: options?.enabled && !!adminId
-  });
-};
-
-
-export const useTopProdutos = (adminId: string, options?: { enabled?: boolean }) => {
-  return useQuery({
-    queryKey: ['top-produtos', adminId],
-    queryFn: async () => {
-      const currentMonth = new Date();
-      currentMonth.setDate(1);
-      currentMonth.setHours(0, 0, 0, 0);
-      
-      const { data: vendedores } = await supabase
-        .from('vendedores')
-        .select('id')
-        .eq('administrador_id', adminId);
-      
-      const vendedorIds = vendedores?.map(v => v.id) || [];
-      
-      // Buscar entregas e seus valores
-      const { data: entregas } = await supabase
-        .from('entregas')
-        .select('produto_id, valor')
-        .in('vendedor_id', vendedorIds)
-        .gte('data_entrega', currentMonth.toISOString())
-        .not('produto_id', 'is', null);
-      
-      if (!entregas || entregas.length === 0) return [];
-
-      // Extrair IDs dos produtos
-      const produtoIds = [...new Set(entregas.map(e => e.produto_id))];
-
-      // Buscar nomes dos produtos manualmente (evita erro de FK inexistente)
-      const { data: produtos } = await supabase
-        .from('produtos_cadastrado')
-        .select('id, produto_nome')
-        .in('id', produtoIds);
-        
-      const produtosMapName = new Map();
-      produtos?.forEach(p => produtosMapName.set(p.id, p.produto_nome));
-      
-      const produtosStats: { [key: string]: { nome: string; quantidade: number; valorTotal: number } } = {};
-      
-      entregas.forEach((e: any) => {
-        const produtoId = e.produto_id;
-        if (!produtoId) return;
-
-        if (!produtosStats[produtoId]) {
-          produtosStats[produtoId] = { 
-            nome: produtosMapName.get(produtoId) || 'Produto desconhecido', 
-            quantidade: 0, 
-            valorTotal: 0 
-          };
+      if (monthIndex >= 0 && monthIndex < 12) {
+        dataMap[monthIndex].value += item.valor;
+        dataMap[monthIndex].count += 1;
+        if (dataMap[monthIndex].value > maxValue) {
+          maxValue = dataMap[monthIndex].value;
         }
-        produtosStats[produtoId].quantidade += 1;
-        produtosStats[produtoId].valorTotal += (e.valor || 0);
-      });
-      
-      return Object.values(produtosStats)
-        .sort((a, b) => b.quantidade - a.quantidade)
-        .slice(0, 5);
-    },
-    enabled: options?.enabled && !!adminId
-  });
-};
-
-export const useStatusPagamentos = (adminId: string, dias: string = '30', options?: { enabled?: boolean }) => {
-  return useQuery({
-    queryKey: ['status-pagamentos', adminId, dias],
-    queryFn: async () => {
-      const { data: vendedores } = await supabase
-        .from('vendedores')
-        .select('id')
-        .eq('administrador_id', adminId);
-      
-      const vendedorIds = vendedores?.map(v => v.id) || [];
-      
-      let query = supabase
-        .from('entregas')
-        .select('pago, valor')
-        .in('vendedor_id', vendedorIds);
-      
-      if (dias !== 'todos') {
-        const date = new Date();
-        date.setDate(date.getDate() - parseInt(dias));
-        query = query.gte('data_entrega', date.toISOString());
       }
-      
-      const { data } = await query;
-      
-      const pagas = data?.filter(e => e.pago).length || 0;
-      const pendentes = data?.filter(e => !e.pago).length || 0;
-      const valorPago = data?.filter(e => e.pago).reduce((sum, e) => sum + (e.valor || 0), 0) || 0;
-      const valorPendente = data?.filter(e => !e.pago).reduce((sum, e) => sum + (e.valor || 0), 0) || 0;
-      
-      return [
-        { name: 'Pagas', value: pagas, valorTotal: valorPago, color: '#10b981' },
-        { name: 'Pendentes', value: pendentes, valorTotal: valorPendente, color: '#ef4444' }
-      ];
+    });
+
+    // Calcular alturas relativas (max 90%)
+    return dataMap.map(item => ({
+      ...item,
+      height: maxValue > 0 ? (item.value / maxValue) * 90 : 10
+    }));
+  }, [faturamentoData, isLoading]);
+
+  return {
+    data: processedData,
+    isLoading
+  };
+};
+
+// Hook para alertas de estoque baixo
+export const useEstoqueAlerts = (administrador_id: string, options?: { enabled?: boolean }) => {
+  return useQuery({
+    queryKey: [CACHE_KEYS.VIEW_ESTOQUE_ATUAL, 'baixo', administrador_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('view_estoque_atual')
+        .select('*')
+        .eq('administrador_id', administrador_id)
+        .or('status_estoque.eq.BAIXO,status_estoque.eq.ZERADO')
+        .order('qtd_estoque', { ascending: true });
+
+      if (error) throw error;
+      return data as EstoqueAtual[];
     },
-    enabled: options?.enabled && !!adminId
+    enabled: options?.enabled && !!administrador_id,
+    staleTime: CACHE_TIMES.DASHBOARD_SUMMARY.staleTime,
   });
 };
 
-export const useAlertas = (adminId: string, options?: { enabled?: boolean }) => {
+// Hook para total de entregas por vendedor (agrupado para o administrador)
+export const useTotalEntregasPorAdministrador = (administrador_id: string, options?: { enabled?: boolean }) => {
   return useQuery({
-    queryKey: ['alertas-dashboard', adminId],
+    queryKey: ['TOTAL_ENTREGAS_POR_ADMINISTRADOR', administrador_id],
     queryFn: async () => {
-      const alertas: any[] = [];
+      // Buscar entregas e seus vendedores
+      const { data, error } = await supabase
+        .from('entregas')
+        .select('vendedor_id, vendedores!inner(administrador_id)')
+        .eq('vendedores.administrador_id', administrador_id);
+
+      if (error) throw error;
+
+      // Agrupar contagem por vendedor_id
+      const entregasPorVendedor: Record<string, number> = {};
       
-      const { data: vendedores } = await supabase
-        .from('vendedores')
-        .select('id, nome, last_sync')
-        .eq('administrador_id', adminId)
-        .eq('ativo', true);
-      
-      const diasSemSync = 7;
-      const dataLimite = new Date();
-      dataLimite.setDate(dataLimite.getDate() - diasSemSync);
-      
-      vendedores?.forEach(v => {
-        if (!v.last_sync || new Date(v.last_sync) < dataLimite) {
-          alertas.push({
-            tipo: 'warning',
-            mensagem: `${v.nome} sem sincronizar há ${diasSemSync}+ dias`,
-            icone: '⚠️'
-          });
+      data?.forEach((entrega) => {
+        const vendedorId = entrega.vendedor_id;
+        if (vendedorId) {
+          entregasPorVendedor[vendedorId] = (entregasPorVendedor[vendedorId] || 0) + 1;
         }
       });
-      
-      const { data: entregas } = await supabase
-        .from('entregas')
-        .select('id, cliente_id, clientes(nome)')
-        .in('vendedor_id', vendedores?.map(v => v.id) || [])
-        .eq('pago', false)
-        .order('data_entrega', { ascending: true })
-        .limit(3);
-      
-      entregas?.forEach(e => {
-        alertas.push({
-          tipo: 'danger',
-          mensagem: `Cliente ${(e.clientes as any)?.nome} com pagamento pendente`,
-          icone: '💰'
-        });
-      });
-      
-      return alertas.slice(0, 5);
+
+      return entregasPorVendedor;
     },
-    enabled: options?.enabled && !!adminId
+    enabled: options?.enabled && !!administrador_id,
+    staleTime: 1000 * 60 * 15, // 15 minutos
   });
-  
 };

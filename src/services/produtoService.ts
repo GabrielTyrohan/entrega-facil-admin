@@ -8,6 +8,30 @@ export interface ProdutoCadastrado {
   categoria: string;
   qtd_estoque: number;
   preco_unt: number;
+  // Novos campos
+  codigo_barras?: string;
+  kit?: boolean;
+  ativo?: boolean;
+  unidade_medida?: string;
+  custo_compra?: number;
+  margem_lucro?: number;
+  readonly valor_estoque?: number; // Calculated by DB
+  // Campos fiscais
+  ncm?: string;
+  cest?: string;
+  cfop_padrao?: string;
+  cst_pis?: string;
+  aliquota_pis?: number;
+  cst_cofins?: string;
+  aliquota_cofins?: number;
+  cst_icms?: string;
+  aliquota_icms?: number;
+  // Campos de gestão
+  fornecedor_principal?: string;
+  ultima_compra?: string; // ISO date
+  estoque_minimo?: number;
+  estoque_maximo?: number;
+  // Timestamps
   created_at?: string;
   updated_at?: string;
 }
@@ -19,6 +43,70 @@ export interface CreateProdutoData {
   qtd_estoque: number;
   preco_unt: number;
   administrador_id?: string;
+  // Novos campos opcionais
+  codigo_barras?: string;
+  kit?: boolean;
+  ativo?: boolean;
+  unidade_medida?: string;
+  custo_compra?: number;
+  margem_lucro?: number;
+  ncm?: string;
+  cest?: string;
+  cfop_padrao?: string;
+  cst_pis?: string;
+  aliquota_pis?: number;
+  cst_cofins?: string;
+  aliquota_cofins?: number;
+  cst_icms?: string;
+  aliquota_icms?: number;
+  fornecedor_principal?: string;
+  ultima_compra?: string;
+  estoque_minimo?: number;
+  estoque_maximo?: number;
+}
+
+export type TipoMovimentacao = 
+  | 'entrada_compra' 
+  | 'entrada_devolucao' 
+  | 'entrada_ajuste' 
+  | 'entrada_transferencia' 
+  | 'saida_venda' 
+  | 'saida_perda' 
+  | 'saida_ajuste' 
+  | 'saida_devolucao' 
+  | 'saida_transferencia';
+
+export type ReferenciaTipo = 
+  | 'venda_atacado' 
+  | 'entrega' 
+  | 'nota_fiscal' 
+  | 'orcamento' 
+  | 'ajuste_manual' 
+  | 'inventario';
+
+export interface MovimentacaoEstoque {
+  id: string;
+  administrador_id: string;
+  produto_cadastrado_id: string;
+  tipo_movimentacao: TipoMovimentacao;
+  quantidade: number;
+  quantidade_anterior: number;
+  quantidade_nova: number;
+  custo_unitario?: number;
+  valor_total?: number;
+  referencia_tipo?: ReferenciaTipo;
+  referencia_id?: string;
+  usuario_id: string;
+  usuario_tipo: 'admin' | 'funcionario' | 'vendedor';
+  usuario_nome: string;
+  motivo?: string;
+  observacoes?: string;
+  lote?: string;
+  data_validade?: string;
+  fornecedor?: string;
+  nota_fiscal_numero?: string;
+  sincronizado: boolean;
+  created_at: string;
 }
 
 export class ProdutoService {

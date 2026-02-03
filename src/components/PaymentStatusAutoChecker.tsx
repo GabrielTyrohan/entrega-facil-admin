@@ -53,11 +53,13 @@ const rawVencStr: string | undefined = (adminData as any)?.data_vencimento;
         };
 
         const vencStr = normalizeDateStr(rawVencStr);
-        const isExpiredByDate = !!vencStr && vencStr <= hojeStr;
+        // O vencimento é INCLUSIVE no dia (expira apenas quando hoje > vencimento)
+        const isExpiredByDate = !!vencStr && hojeStr > vencStr;
 
         if (isStatusVencido || isExpiredByDate) {
+          console.warn('⚠️ Pagamento vencido detectado! Logout seria realizado aqui.');
           // Faz logout do usuário e ProtectedRoute redireciona para /login
-          await signOut();
+          await signOut(); 
         }
       } catch (error) {
         console.error('Erro na verificação automática de pagamento:', error);

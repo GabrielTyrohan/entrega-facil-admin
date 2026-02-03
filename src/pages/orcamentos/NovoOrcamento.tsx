@@ -6,15 +6,15 @@ import { supabase } from '@/lib/supabase';
 import { toast } from '@/utils/toast';
 import { useQuery } from '@tanstack/react-query';
 import {
-  ArrowLeft,
-  Calculator,
-  ChevronDown,
-  Loader2,
-  Package,
-  Plus,
-  Save,
-  Trash2,
-  X
+    ArrowLeft,
+    Calculator,
+    ChevronDown,
+    Loader2,
+    Package,
+    Plus,
+    Save,
+    Trash2,
+    X
 } from 'lucide-react';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -33,6 +33,8 @@ const NovoOrcamento: React.FC = () => {
     cliente_id: '',
     cliente_nome: '',
     data_validade: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // +7 dias
+    data_saida: '',
+    hora_saida: '',
     observacoes: '',
     margem_padrao: 40
   });
@@ -168,6 +170,8 @@ const NovoOrcamento: React.FC = () => {
         cliente_id: formData.cliente_id,
         cliente_nome: formData.cliente_nome,
         data_orcamento: new Date().toISOString(),
+        data_saida: formData.data_saida || undefined,
+        hora_saida: formData.hora_saida || undefined,
         status: 'pendente', // Alterado de 'rascunho' para 'pendente' para evitar erro de constraint
         valor_total: calcularTotalGeral(),
         margem_lucro_geral: 0, // Calculate if needed
@@ -269,6 +273,26 @@ const NovoOrcamento: React.FC = () => {
               type="date"
               value={formData.data_validade}
               onChange={(e) => setFormData({ ...formData, data_validade: e.target.value })}
+              className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white transition-shadow"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Data de Saída</label>
+            <input
+              type="date"
+              value={formData.data_saida}
+              onChange={(e) => setFormData({ ...formData, data_saida: e.target.value })}
+              className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white transition-shadow"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Hora de Saída</label>
+            <input
+              type="time"
+              value={formData.hora_saida}
+              onChange={(e) => setFormData({ ...formData, hora_saida: e.target.value })}
               className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white transition-shadow"
             />
           </div>

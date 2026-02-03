@@ -1,10 +1,10 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User } from '@supabase/supabase-js';
+import { prefetchEssentialData } from '@/lib/cache/prefetch';
+import { CACHE_KEYS } from '@/lib/constants/queryKeys';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/utils/toast';
+import { User } from '@supabase/supabase-js';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CACHE_KEYS } from '@/lib/constants/queryKeys';
-import { prefetchEssentialData } from '@/lib/cache/prefetch';
+import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 
 // ===== INTERFACES =====
 
@@ -95,8 +95,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [userType, setUserType] = useState<UserType>(null);
-  const [adminId, setAdminId] = useState<string | null>(null);
   const [isSessionLoading, setIsSessionLoading] = useState(true);
   const queryClient = useQueryClient();
 
@@ -107,33 +105,42 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!user) return null; 
 
       // 1. Tentar Admin 
-      const { data: admin } = await supabase 
+      console.log('🔍 Buscando perfil de admin para:', user.id);
+      const { data: admin, error: adminError } = await supabase 
         .from('administradores') 
         .select('*') 
         .eq('id', user.id) 
-        .single(); 
+        .maybeSingle(); 
+
+      if (adminError) {
+        console.error('❌ Erro ao buscar admin:', adminError);
+      }
 
       if (admin) { 
-        setUserType('admin'); 
-        setAdminId(admin.id); 
-        return admin as AdminProfile; 
+        console.log('✅ Perfil de admin encontrado:', admin);
+        return { ...admin, type: 'admin' } as AdminProfile & { type: 'admin' }; 
       } 
 
       // 2. Tentar Funcionário 
-      const { data: funcionario } = await supabase 
+      console.log('🔍 Admin não encontrado, buscando funcionário...');
+      const { data: funcionario, error: funcError } = await supabase 
         .from('funcionarios') 
         .select('*') 
         .eq('auth_user_id', user.id) 
         .eq('ativo', true) 
-        .single(); 
+        .maybeSingle(); 
+
+      if (funcError) {
+        console.error('❌ Erro ao buscar funcionário:', funcError);
+      }
 
       if (funcionario) { 
-        setUserType('funcionario'); 
-        setAdminId(funcionario.administrador_id); 
-        return funcionario as FuncionarioProfile; 
+        console.log('✅ Perfil de funcionário encontrado:', funcionario);
+        return { ...funcionario, type: 'funcionario' } as FuncionarioProfile & { type: 'funcionario' }; 
       } 
 
-      throw new Error('Usuário não autorizado'); 
+      console.error('❌ Nenhum perfil encontrado para o usuário');
+      throw new Error('Usuário não autorizado: Perfil não encontrado'); 
     }, 
     enabled: !!user, // SÓ executa se user existir 
     staleTime: 10 * 60 * 1000, // 10 minutos (perfil não muda frequente) 
@@ -141,9 +148,46 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     retry: 1, 
   }); 
 
-  const permissions = userType === 'admin' 
-    ? ADMIN_PERMISSIONS 
-    : (userProfile as FuncionarioProfile)?.permissoes || ADMIN_PERMISSIONS; 
+  // Derivar estados do userProfile usando useMemo para garantir consistência imediata
+  const { userType, adminId, permissions } = useMemo(() => {
+    if (!userProfile) {
+      return { 
+        userType: null, 
+        adminId: null, 
+        permissions: ADMIN_PERMISSIONS 
+      };
+    }
+
+    const type = (userProfile as any).type || 
+                 ('administrador_id' in userProfile ? 'funcionario' : 'admin');
+    
+    let derivedAdminId: string | null = null;
+    let derivedPermissions = ADMIN_PERMISSIONS;
+
+    if (type === 'admin') {
+      derivedAdminId = (userProfile as AdminProfile).id;
+      derivedPermissions = ADMIN_PERMISSIONS;
+    } else {
+      derivedAdminId = (userProfile as FuncionarioProfile).administrador_id;
+      derivedPermissions = (userProfile as FuncionarioProfile).permissoes || ADMIN_PERMISSIONS;
+    }
+
+    return {
+      userType: type as UserType,
+      adminId: derivedAdminId,
+      permissions: derivedPermissions
+    };
+  }, [userProfile]);
+
+  // Log para debug
+  useEffect(() => {
+    console.log('🔄 AuthContext State:', { 
+      userType, 
+      adminId, 
+      isLoading: isSessionLoading || (!!user && isLoadingProfile), 
+      hasProfile: !!userProfile 
+    });
+  }, [userType, adminId, isSessionLoading, user, isLoadingProfile, userProfile]);
 
   const isLoading = isSessionLoading || (!!user && isLoadingProfile);
 
@@ -179,8 +223,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       await supabase.auth.signOut();
       setUser(null);
-      setUserType(null);
-      setAdminId(null);
       queryClient.removeQueries({ queryKey: [CACHE_KEYS.USER_PROFILE] });
       toast.success('Logout realizado com sucesso');
     } catch (error) {
@@ -211,8 +253,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setUser(session?.user ?? null);
       if (!session?.user) {
-        setUserType(null);
-        setAdminId(null);
         queryClient.removeQueries({ queryKey: [CACHE_KEYS.USER_PROFILE] });
       }
     });

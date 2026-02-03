@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { X, Package, Hash, Tag, DollarSign, Save } from 'lucide-react';
-import { ProdutoService, CreateProdutoData } from '../../services/produtoService';
+import { DollarSign, Hash, Package, Save, Tag, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { type Produto } from '../../hooks/useProdutos';
+import { CreateProdutoData, ProdutoService } from '../../services/produtoService';
 import { applyCurrencyMask, currencyMaskToNumber } from '../../utils/currencyUtils';
 
 interface ProdutoModalProps {
@@ -19,6 +19,15 @@ const categorias = [
   'Limpeza',
   'Higiene',
   'Outros'
+];
+
+const unidadesMedida = [
+  'UN',
+  'KG',
+  'LT',
+  'CX',
+  'FD',
+  'PCT'
 ];
 
 const gerarSKU = (categoria: string): string => {
@@ -42,15 +51,35 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
     id: '',
     administrador_id: '',
     produto_nome: '',
-    produto_cod: '', // Alterado para string
+    produto_cod: '',
     categoria: '',
     qtd_estoque: 0,
     preco_unt: 0,
     created_at: '',
-    updated_at: ''
+    updated_at: '',
+    // Campos opcionais inicializados
+    codigo_barras: '',
+    kit: false,
+    ativo: true,
+    unidade_medida: 'UN',
+    custo_compra: 0,
+    margem_lucro: 0,
+    ncm: '',
+    cest: '',
+    cfop_padrao: '',
+    fornecedor_principal: '',
+    estoque_minimo: 0,
+    estoque_maximo: 0,
+    cst_pis: '',
+    aliquota_pis: 0,
+    cst_cofins: '',
+    aliquota_cofins: 0,
+    cst_icms: '',
+    aliquota_icms: 0
   });
 
   const [precoDisplay, setPrecoDisplay] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<'basico' | 'estoque' | 'fiscal'>('basico');
 
   // Reset form when modal opens/closes or mode changes
   useEffect(() => {
@@ -61,21 +90,41 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
            id: '',
            administrador_id: '',
            produto_nome: '',
-           produto_cod: '', // Alterado para string
+           produto_cod: '',
            categoria: '',
            qtd_estoque: 0,
            preco_unt: 0,
            created_at: '',
-           updated_at: ''
+           updated_at: '',
+           codigo_barras: '',
+           kit: false,
+           ativo: true,
+           unidade_medida: 'UN',
+           custo_compra: 0,
+           margem_lucro: 0,
+           ncm: '',
+           cest: '',
+           cfop_padrao: '',
+           fornecedor_principal: '',
+           estoque_minimo: 0,
+           estoque_maximo: 0,
+           cst_pis: '',
+           aliquota_pis: 0,
+           cst_cofins: '',
+           aliquota_cofins: 0,
+           cst_icms: '',
+           aliquota_icms: 0
          });
         setPrecoDisplay('');
+        setActiveTab('basico');
       } else if (produto && (mode === 'edit' || mode === 'view')) {
         // Load product data for edit/view mode
         setFormData({
           ...produto,
-          produto_cod: String(produto.produto_cod) // Garante que produto_cod seja string
+          produto_cod: String(produto.produto_cod)
         });
         setPrecoDisplay(produto.preco_unt > 0 ? applyCurrencyMask(String(Math.round(produto.preco_unt * 100))) : '');
+        setActiveTab('basico');
       }
     }
   }, [produto, mode, isOpen, user?.id]);
@@ -94,144 +143,108 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
     const { name, value, type } = e.target;
     
     if (name === 'preco_unt') {
-      // Apply currency mask
       const maskedValue = applyCurrencyMask(value);
       setPrecoDisplay(maskedValue);
-      
-      // Convert to number and update form data
       const numericValue = currencyMaskToNumber(maskedValue);
-      setFormData(prev => ({
-        ...prev,
-        [name]: numericValue
-      }));
+      setFormData(prev => ({ ...prev, [name]: numericValue }));
+    } else if (type === 'checkbox') {
+      const checked = (e.target as HTMLInputElement).checked;
+      setFormData(prev => ({ ...prev, [name]: checked }));
+    } else if ([
+      'qtd_estoque', 'custo_compra', 'margem_lucro', 
+      'estoque_minimo', 'estoque_maximo', 'aliquota_pis', 
+      'aliquota_cofins', 'aliquota_icms'
+    ].includes(name)) {
+      setFormData(prev => ({ ...prev, [name]: parseFloat(value) || 0 }));
     } else {
-      setFormData(prev => ({
-        ...prev,
-        [name]: type === 'number' ? (value === '' ? 0 : Number(value)) : value
-      }));
+      setFormData(prev => ({ ...prev, [name]: value }));
     }
   };
 
-
-
   const handleSave = async () => {
     try {
-      // Validate required fields
-      if (!formData.produto_nome.trim()) {
-        alert('Nome do produto é obrigatório');
-        return;
-      }
-      
-      if (!formData.produto_cod.trim()) { // Alterado para trim()
-        alert('Código do produto é obrigatório');
-        return;
-      }
-      
-      if (formData.produto_cod.length !== 10) { // Validação do tamanho do SKU
-        alert('O código SKU deve ter 10 caracteres (XXX-######).');
-        return;
-      }
-      
-      if (!formData.categoria.trim()) {
-        alert('Categoria é obrigatória');
-        return;
-      }
-      
-      if (formData.preco_unt < 0) {
-        alert('Preço não pode ser negativo');
-        return;
-      }
-      
-      if (formData.qtd_estoque < 0) {
-        alert('Quantidade não pode ser negativa');
-        return;
-      }
+      if (!formData.produto_nome.trim()) { alert('Nome do produto é obrigatório'); return; }
+      if (!formData.produto_cod.trim()) { alert('Código do produto é obrigatório'); return; }
+      if (formData.produto_cod.length !== 10) { alert('O código SKU deve ter 10 caracteres (XXX-######).'); return; }
+      if (!formData.categoria.trim()) { alert('Categoria é obrigatória'); return; }
+      if (formData.preco_unt < 0) { alert('Preço não pode ser negativo'); return; }
+      if (formData.qtd_estoque < 0) { alert('Quantidade não pode ser negativa'); return; }
 
       if (mode === 'create') {
-        if (!user?.id) {
-          alert('Usuário não autenticado');
-          return;
-        }
+        if (!user?.id) { alert('Usuário não autenticado'); return; }
 
-        // Check if product code already exists
         const existingProduct = await ProdutoService.checkExistingCode(formData.produto_cod, user.id);
-        if (existingProduct) {
-          alert('Já existe um produto com este código');
-          return;
-        }
+        if (existingProduct) { alert('Já existe um produto com este código'); return; }
 
         const createData: CreateProdutoData = {
           administrador_id: user.id,
           produto_nome: formData.produto_nome,
-          produto_cod: formData.produto_cod, // Mantido como string
+          produto_cod: formData.produto_cod,
           categoria: formData.categoria,
           qtd_estoque: formData.qtd_estoque,
-          preco_unt: formData.preco_unt
+          preco_unt: formData.preco_unt,
+          codigo_barras: formData.codigo_barras,
+          kit: formData.kit,
+          ativo: formData.ativo,
+          unidade_medida: formData.unidade_medida,
+          custo_compra: formData.custo_compra,
+          margem_lucro: formData.margem_lucro,
+          ncm: formData.ncm,
+          cest: formData.cest,
+          cfop_padrao: formData.cfop_padrao,
+          fornecedor_principal: formData.fornecedor_principal,
+          estoque_minimo: formData.estoque_minimo,
+          estoque_maximo: formData.estoque_maximo,
+          cst_pis: formData.cst_pis,
+          aliquota_pis: formData.aliquota_pis,
+          cst_cofins: formData.cst_cofins,
+          aliquota_cofins: formData.aliquota_cofins,
+          cst_icms: formData.cst_icms,
+          aliquota_icms: formData.aliquota_icms
         };
 
         const newProduct = await ProdutoService.createProduto(createData);
-        
-        if (onSave) {
-          // The created product already matches the new interface
-          onSave(newProduct);
-        }
-        
+        if (onSave) onSave(newProduct);
         alert('Produto criado com sucesso!');
-        
-        // Reset form after successful creation
-        setFormData({
-          id: '',
-          administrador_id: '',
-          produto_nome: '',
-          produto_cod: '', // Alterado para string
-          categoria: '',
-          qtd_estoque: 0,
-          preco_unt: 0,
-          created_at: '',
-          updated_at: ''
-        });
-        setPrecoDisplay('');
-        
         onClose();
       } else if (mode === 'edit') {
-        // Handle edit mode - implementar atualização do produto
-        if (!user?.id) {
-          alert('Usuário não autenticado');
-          return;
-        }
+        if (!user?.id) { alert('Usuário não autenticado'); return; }
 
-        try {
-          const produtoService = new ProdutoService(user.id);
-          
-          // Verificar se o código já existe (excluindo o produto atual)
-          const codigoExiste = await produtoService.verificarCodigoExistente(formData.produto_cod, formData.id);
-          if (codigoExiste) {
-            alert('Já existe um produto com este código');
-            return;
-          }
+        const produtoService = new ProdutoService(user.id);
+        const codigoExiste = await produtoService.verificarCodigoExistente(formData.produto_cod, formData.id);
+        if (codigoExiste) { alert('Já existe um produto com este código'); return; }
 
-          // Atualizar o produto
-          const produtoAtualizado = await produtoService.updateProduto(formData.id, {
-            produto_nome: formData.produto_nome,
-            produto_cod: formData.produto_cod, // Mantido como string
-            categoria: formData.categoria,
-            qtd_estoque: formData.qtd_estoque,
-            preco_unt: formData.preco_unt
-          });
+        const produtoAtualizado = await produtoService.updateProduto(formData.id, {
+          produto_nome: formData.produto_nome,
+          produto_cod: formData.produto_cod,
+          categoria: formData.categoria,
+          qtd_estoque: formData.qtd_estoque,
+          preco_unt: formData.preco_unt,
+          codigo_barras: formData.codigo_barras,
+          kit: formData.kit,
+          ativo: formData.ativo,
+          unidade_medida: formData.unidade_medida,
+          custo_compra: formData.custo_compra,
+          margem_lucro: formData.margem_lucro,
+          ncm: formData.ncm,
+          cest: formData.cest,
+          cfop_padrao: formData.cfop_padrao,
+          fornecedor_principal: formData.fornecedor_principal,
+          estoque_minimo: formData.estoque_minimo,
+          estoque_maximo: formData.estoque_maximo,
+          cst_pis: formData.cst_pis,
+          aliquota_pis: formData.aliquota_pis,
+          cst_cofins: formData.cst_cofins,
+          aliquota_cofins: formData.aliquota_cofins,
+          cst_icms: formData.cst_icms,
+          aliquota_icms: formData.aliquota_icms
+        });
 
-          if (onSave) {
-            onSave(produtoAtualizado);
-          }
-          
-          alert('Produto atualizado com sucesso!');
-          onClose();
-        } catch {
-          // Error handling without logging sensitive data
-          alert('Erro ao atualizar produto. Tente novamente.');
-        }
+        if (onSave) onSave(produtoAtualizado);
+        alert('Produto atualizado com sucesso!');
+        onClose();
       }
     } catch {
-      // Error handling without logging sensitive data
       alert('Erro ao salvar produto. Tente novamente.');
     }
   };
@@ -240,210 +253,324 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 shrink-0">
           <div className="flex items-center space-x-3">
             <Package className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
               {mode === 'create' ? 'Criar Produto' : mode === 'edit' ? 'Editar Produto' : 'Detalhes do Produto'}
             </h2>
           </div>
-          <button
-            onClick={() => {
-              // Reset form when closing modal
-              if (mode === 'create') {
-                setFormData({
-                  id: '',
-                  administrador_id: '',
-                  produto_nome: '',
-                  produto_cod: '', // Alterado para string
-                  categoria: '',
-                  qtd_estoque: 0,
-                  preco_unt: 0,
-                  created_at: '',
-                  updated_at: ''
-                });
-                setPrecoDisplay('');
-              }
-              onClose();
-            }}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-          >
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
             <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           </button>
         </div>
 
+        {/* Tabs */}
+        <div className="flex border-b border-gray-200 dark:border-gray-700 px-6 shrink-0">
+          <button
+            className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'basico' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            onClick={() => setActiveTab('basico')}
+          >
+            Informações Básicas
+          </button>
+          <button
+            className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'estoque' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            onClick={() => setActiveTab('estoque')}
+          >
+            Estoque e Custos
+          </button>
+          <button
+            className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'fiscal' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            onClick={() => setActiveTab('fiscal')}
+          >
+            Dados Fiscais
+          </button>
+        </div>
+
         {/* Content */}
-        <div className="p-6 space-y-6">
-          {/* Informações Básicas */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Nome do Produto *
-              </label>
-              {mode === 'view' ? (
-                <div className="px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg text-gray-900 dark:text-white">
-                  {formData.produto_nome}
-                </div>
-              ) : (
+        <div className="p-6 space-y-6 overflow-y-auto flex-1">
+          {/* Tab: Informações Básicas */}
+          {activeTab === 'basico' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Nome do Produto *</label>
                 <input
                   type="text"
                   name="produto_nome"
                   value={formData.produto_nome}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                  placeholder="Digite o nome do produto"
+                  disabled={mode === 'view'}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
                 />
-              )}
-            </div>
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Código (SKU) *
-              </label>
-              {mode === 'view' ? (
-                <div className="flex items-center px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg text-gray-900 dark:text-white">
-                  <Hash className="w-4 h-4 mr-2 text-gray-400" />
-                  {formData.produto_cod}
-                </div>
-              ) : (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Código (SKU) *</label>
                 <div className="relative">
                   <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
-                    type="text" // Alterado para text
+                    type="text"
                     name="produto_cod"
                     value={formData.produto_cod}
-                    readOnly // Adicionado readOnly
+                    readOnly
                     className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 cursor-not-allowed font-mono"
-                    placeholder="Gerado automaticamente"
                   />
                 </div>
-              )}
-            </div>
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Categoria *
-              </label>
-              {mode === 'view' ? (
-                <div className="flex items-center px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg text-gray-900 dark:text-white">
-                  <Tag className="w-4 h-4 mr-2 text-gray-400" />
-                  {formData.categoria}
-                </div>
-              ) : (
-                <>
-                  <div className="relative">
-                    <Tag className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <select
-                      name="categoria"
-                      value={formData.categoria}
-                      onChange={handleInputChange}
-                      className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                    >
-                      <option value="">Selecione uma categoria</option>
-                      {categorias.map(categoria => (
-                        <option key={categoria} value={categoria}>{categoria}</option>
-                      ))}
-                    </select>
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Quantidade em Estoque *
-              </label>
-              {mode === 'view' ? (
-                <div className="px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg text-gray-900 dark:text-white">
-                  {formData.qtd_estoque} unidades
-                </div>
-              ) : (
-                <>
-                  <input
-                    type="number"
-                    name="qtd_estoque"
-                    value={formData.qtd_estoque}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Categoria *</label>
+                <div className="relative">
+                  <Tag className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <select
+                    name="categoria"
+                    value={formData.categoria}
                     onChange={handleInputChange}
-                    min="0"
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                    placeholder="0"
+                    disabled={mode === 'view'}
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                  >
+                    <option value="">Selecione</option>
+                    {categorias.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Código de Barras</label>
+                <input
+                  type="text"
+                  name="codigo_barras"
+                  value={formData.codigo_barras || ''}
+                  onChange={handleInputChange}
+                  disabled={mode === 'view'}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Unidade</label>
+                <select
+                  name="unidade_medida"
+                  value={formData.unidade_medida || 'UN'}
+                  onChange={handleInputChange}
+                  disabled={mode === 'view'}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                >
+                  {unidadesMedida.map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
+              </div>
+
+              <div className="flex items-center space-x-4 pt-6">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="ativo"
+                    checked={formData.ativo}
+                    onChange={handleInputChange}
+                    disabled={mode === 'view'}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                   />
-                </>
-              )}
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Ativo</span>
+                </label>
+                
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="kit"
+                    checked={formData.kit}
+                    onChange={handleInputChange}
+                    disabled={mode === 'view'}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">É Kit?</span>
+                </label>
+              </div>
             </div>
+          )}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Preço Unitário *
-              </label>
-              {mode === 'view' ? (
-                <div className="flex items-center px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg text-gray-900 dark:text-white">
-                  <DollarSign className="w-4 h-4 mr-2 text-gray-400" />
-                  R$ {formData.preco_unt.toFixed(2)}
+          {/* Tab: Estoque e Custos */}
+          {activeTab === 'estoque' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Qtd. Estoque *</label>
+                <input
+                  type="number"
+                  name="qtd_estoque"
+                  value={formData.qtd_estoque}
+                  onChange={handleInputChange}
+                  disabled={mode === 'view'}
+                  min="0"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Preço Unitário *</label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    name="preco_unt"
+                    value={precoDisplay}
+                    onChange={handleInputChange}
+                    disabled={mode === 'view'}
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                  />
                 </div>
-              ) : (
-                <>
-                  <div className="relative">
-                    <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      type="text"
-                      name="preco_unt"
-                      value={precoDisplay}
-                      onChange={handleInputChange}
-                      className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                      placeholder="R$ 0,00"
-                    />
-                  </div>
-                </>
-              )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Custo Compra</label>
+                <input
+                  type="number"
+                  name="custo_compra"
+                  value={formData.custo_compra || 0}
+                  onChange={handleInputChange}
+                  disabled={mode === 'view'}
+                  min="0"
+                  step="0.01"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Margem Lucro (%)</label>
+                <input
+                  type="number"
+                  name="margem_lucro"
+                  value={formData.margem_lucro || 0}
+                  onChange={handleInputChange}
+                  disabled={mode === 'view'}
+                  step="0.1"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Estoque Mínimo</label>
+                <input
+                  type="number"
+                  name="estoque_minimo"
+                  value={formData.estoque_minimo || 0}
+                  onChange={handleInputChange}
+                  disabled={mode === 'view'}
+                  min="0"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Estoque Máximo</label>
+                <input
+                  type="number"
+                  name="estoque_maximo"
+                  value={formData.estoque_maximo || 0}
+                  onChange={handleInputChange}
+                  disabled={mode === 'view'}
+                  min="0"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Fornecedor Principal</label>
+                <input
+                  type="text"
+                  name="fornecedor_principal"
+                  value={formData.fornecedor_principal || ''}
+                  onChange={handleInputChange}
+                  disabled={mode === 'view'}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Informações de Sistema */}
-          {mode === 'view' && (
-            <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Informações do Sistema</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-500 dark:text-gray-400">Criado em:</span>
-                  <p className="text-gray-900 dark:text-white">
-                    {formData.created_at ? new Date(formData.created_at).toLocaleString('pt-BR') : 'Não informado'}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-gray-500 dark:text-gray-400">Última atualização:</span>
-                  <p className="text-gray-900 dark:text-white">
-                    {formData.updated_at ? new Date(formData.updated_at).toLocaleString('pt-BR') : 'Não informado'}
-                  </p>
-                </div>
+          {/* Tab: Dados Fiscais */}
+          {activeTab === 'fiscal' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">NCM</label>
+                <input
+                  type="text"
+                  name="ncm"
+                  value={formData.ncm || ''}
+                  onChange={handleInputChange}
+                  disabled={mode === 'view'}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CEST</label>
+                <input
+                  type="text"
+                  name="cest"
+                  value={formData.cest || ''}
+                  onChange={handleInputChange}
+                  disabled={mode === 'view'}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CFOP Padrão</label>
+                <input
+                  type="text"
+                  name="cfop_padrao"
+                  value={formData.cfop_padrao || ''}
+                  onChange={handleInputChange}
+                  disabled={mode === 'view'}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                />
+              </div>
+              
+              {/* Espaço vazio para alinhar */}
+              <div className="hidden md:block"></div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CST PIS</label>
+                <input
+                  type="text"
+                  name="cst_pis"
+                  value={formData.cst_pis || ''}
+                  onChange={handleInputChange}
+                  disabled={mode === 'view'}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                />
+              </div>
+               <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CST COFINS</label>
+                <input
+                  type="text"
+                  name="cst_cofins"
+                  value={formData.cst_cofins || ''}
+                  onChange={handleInputChange}
+                  disabled={mode === 'view'}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                />
+              </div>
+               <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CST ICMS</label>
+                <input
+                  type="text"
+                  name="cst_icms"
+                  value={formData.cst_icms || ''}
+                  onChange={handleInputChange}
+                  disabled={mode === 'view'}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                />
               </div>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-gray-700 shrink-0">
           <button
-            onClick={() => {
-              // Reset form when canceling
-              if (mode === 'create') {
-                setFormData({
-                  id: '',
-                  administrador_id: '',
-                  produto_nome: '',
-                  produto_cod: '', // Alterado para string
-                  categoria: '',
-                  qtd_estoque: 0,
-                  preco_unt: 0,
-                  created_at: '',
-                  updated_at: ''
-                });
-                setPrecoDisplay('');
-              }
-              onClose();
-            }}
+            onClick={onClose}
             className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
           >
             {mode === 'view' ? 'Fechar' : 'Cancelar'}

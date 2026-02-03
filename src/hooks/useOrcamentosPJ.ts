@@ -22,6 +22,8 @@ export interface OrcamentoPJ {
   cliente_id: string;
   cliente_nome: string;
   data_orcamento: string;
+  data_saida?: string;
+  hora_saida?: string;
   status: 'pendente' | 'aprovado' | 'rejeitado' | 'convertido';
   valor_total: number;
   margem_lucro_geral: number;

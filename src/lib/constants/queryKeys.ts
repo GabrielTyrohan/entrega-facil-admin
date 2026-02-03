@@ -15,6 +15,8 @@ export const CACHE_KEYS = {
   FLUXO_CAIXA: 'fluxo_caixa',
   FLUXO_CAIXA_STATS: 'FLUXO_CAIXA_STATS',
   VENDAS_ATACADO_STATS: 'VENDAS_ATACADO_STATS',
+  MOVIMENTACOES_ESTOQUE: 'movimentacoes_estoque' as const,
+  VIEW_ESTOQUE_ATUAL: 'view_estoque_atual' as const,
   // Dashboard specific cache keys
   DASHBOARD_STATS: 'dashboard_stats',
   DASHBOARD_SUMMARY: 'DASHBOARD_SUMMARY',
@@ -100,6 +102,14 @@ export const CACHE_TIMES = {
   ORCAMENTOS_PJ: DEFAULT_CACHE_CONFIG,
   VENDAS_ATACADO: DEFAULT_CACHE_CONFIG,
   ACERTOS_DIARIOS: DEFAULT_CACHE_CONFIG,
+  ESTOQUE: {
+    staleTime: 5 * 60 * 1000,  // 5 minutos
+    gcTime: 15 * 60 * 1000,    // 15 minutos
+  },
+  RELATORIOS_ESTOQUE: {
+    staleTime: 30 * 60 * 1000, // 30 minutos
+    gcTime: 60 * 60 * 1000,    // 1 hora
+  },
   FLUXO_CAIXA_STATS: DEFAULT_CACHE_CONFIG,
   VENDAS_ATACADO_STATS: DEFAULT_CACHE_CONFIG,
   TABELA_PRECOS: {

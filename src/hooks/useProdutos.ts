@@ -1,58 +1,46 @@
-import { useQueryClient, useMutation } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
-import { useSupabaseQuery, CACHE_KEYS } from '../lib/supabaseCache';
-import { useAuth } from '../contexts/AuthContext';
 import { handleSupabaseError } from '@/utils/supabaseErrorHandler';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
+import { CACHE_KEYS, useSupabaseQuery } from '../lib/supabaseCache';
+import { ProdutoCadastrado } from '../services/produtoService';
 
-export interface Produto {
-  id: string;
-  administrador_id: string;
-  produto_nome: string;
-  produto_cod: string;
-  categoria: string;
-  qtd_estoque: number;
-  preco_unt: number;
-  created_at?: string;
-  updated_at?: string;
-}
+export type Produto = ProdutoCadastrado;
 
 // Hook para listar todos os produtos
 export const useProdutos = (options?: {
   enabled?: boolean;
   categoria?: string;
 }) => {
-  const { user, adminId } = useAuth();
-  const targetId = adminId || user?.id;
-  
-  if (!targetId) {
-    return { 
-      data: [], 
-      isLoading: false, 
-      error: null, 
-      refetch: () => Promise.resolve({ data: [], error: null })
-    };
-  }
+  const { adminId } = useAuth();
+  const targetId = adminId;
 
-  let query = supabase
+  const query = supabase
     .from('produtos_cadastrado')
     .select('*')
-    .eq('administrador_id', targetId)
+    .eq('administrador_id', targetId!)
+    .eq('ativo', true)
     .order('produto_nome');
 
   // Filtros opcionais
   if (options?.categoria) {
-    query = query.eq('categoria', options.categoria);
+    query.eq('categoria', options.categoria);
   }
 
-  return useSupabaseQuery('PRODUTOS', query, [CACHE_KEYS.PRODUTOS, targetId, { categoria: options?.categoria }], {
-    enabled: options?.enabled && !!targetId,
-  });
+  return useSupabaseQuery(
+    'PRODUTOS',
+    query,
+    [CACHE_KEYS.PRODUTOS, targetId, { categoria: options?.categoria }],
+    {
+      enabled: (options?.enabled ?? true) && !!targetId,
+    }
+  );
 };
 
 // Hook para buscar produto por ID
 export const useProduto = (id: string, options?: { enabled?: boolean }) => {
-  const { user, adminId } = useAuth();
-  const targetId = adminId || user?.id;
+  const { adminId } = useAuth();
+  const targetId = adminId;
   
   if (!targetId || !id) {
     return { data: null, isLoading: false, error: null };
@@ -72,8 +60,8 @@ export const useProduto = (id: string, options?: { enabled?: boolean }) => {
 
 // Hook para buscar produtos por categoria
 export const useProdutosPorCategoria = (categoria: string, options?: { enabled?: boolean }) => {
-  const { user, adminId } = useAuth();
-  const targetId = adminId || user?.id;
+  const { adminId } = useAuth();
+  const targetId = adminId;
   
   if (!targetId || !categoria) {
     return { data: [], isLoading: false, error: null };
@@ -166,38 +154,40 @@ export const useDeleteProduto = () => {
 
 // Hook para buscar categorias de produtos
 export const useProdutoCategories = (options?: { enabled?: boolean }) => {
-  const { user } = useAuth();
+  const { user, adminId } = useAuth();
+  const targetId = adminId || user?.id;
   
-  if (!user?.id) {
+  if (!targetId) {
     return { data: [], isLoading: false, error: null };
   }
 
   const query = supabase
     .from('produtos_cadastrado')
     .select('categoria')
-    .eq('administrador_id', user.id)
+    .eq('administrador_id', targetId)
     .order('categoria');
 
-  return useSupabaseQuery('PRODUTOS', query, [CACHE_KEYS.PRODUTOS, 'categories', user?.id], {
-    enabled: options?.enabled && !!user?.id,
+  return useSupabaseQuery('PRODUTOS', query, [CACHE_KEYS.PRODUTOS, 'categories', targetId], {
+    enabled: options?.enabled && !!targetId,
   });
 };
 
 // Hook para estatísticas de produtos
 export const useEstatisticasProdutos = (options?: { enabled?: boolean }) => {
-  const { user } = useAuth();
+  const { adminId } = useAuth();
+  const targetId = adminId;
   
-  if (!user?.id) {
+  if (!targetId) {
     return { data: null, isLoading: false, error: null };
   }
 
   const query = supabase
     .from('produtos_cadastrado')
     .select('*')
-    .eq('administrador_id', user.id);
+    .eq('administrador_id', targetId);
 
-  return useSupabaseQuery('PRODUTOS', query, [CACHE_KEYS.PRODUTOS, 'stats', user?.id], {
-    enabled: options?.enabled && !!user?.id,
+  return useSupabaseQuery('PRODUTOS', query, [CACHE_KEYS.PRODUTOS, 'stats', targetId], {
+    enabled: options?.enabled && !!targetId,
   });
 };
 

@@ -1,6 +1,6 @@
 # Estrutura do Projeto - Diretório `src`
 
-Este documento detalha a organização profunda dos arquivos e diretórios dentro de `src/` do projeto `entrega-admin`, refletindo a arquitetura mais recente implementada em 21/01/2026.
+Este documento detalha a organização profunda dos arquivos e diretórios dentro de `src/` do projeto `entrega-admin`, refletindo a arquitetura mais recente implementada em 29/01/2026.
 
 ## Árvore de Diretórios Completa
 
@@ -53,7 +53,9 @@ src/
 │   ├── useDashboard.ts      # Agregação de dados para KPIs
 │   ├── useCountUp.ts        # Animação de números (UI)
 │   ├── useSuporteSolicitacoes.ts # Sistema de tickets
-│   └── useResponsaveis.ts   # Gestão de responsáveis
+│   ├── useResponsaveis.ts   # Gestão de responsáveis
+│   ├── useEstoque.ts        # Gestão básica de estoque
+│   └── useMovimentacoesEstoque.ts # Gestão de entradas/saídas de estoque
 ├── lib/                     # Configurações e Utilitários de Infraestrutura
 │   ├── cache/               # Estratégia de Cache Avançada (TanStack Query)
 │   │   ├── cacheConfig.ts   # Configuração do QueryClient (Stale/GC times)
@@ -63,7 +65,7 @@ src/
 │   │   └── validateCache.ts # Validação de integridade do cache
 │   ├── constants/           # Constantes do Sistema
 │   │   ├── queryKeys.ts     # Centralização de chaves de cache (CACHE_KEYS)
-│   │   └── pagination.ts    # Configurações de paginação
+│   │   ├── pagination.ts    # Configurações de paginação
 │   ├── supabase.ts          # Cliente Supabase Singleton
 │   ├── supabaseCache.ts     # Helpers para cache do Supabase
 │   └── utils.ts             # Utilitários gerais do Shadcn/UI
@@ -74,6 +76,9 @@ src/
 │   ├── Caixa/               # Módulo Financeiro: Fluxo de Caixa
 │   │   ├── FluxoCaixa.tsx
 │   │   └── LancamentoCaixa.tsx
+│   ├── Estoque/             # Módulo de Estoque
+│   │   ├── MovimentacoesEstoque.tsx
+│   │   └── RelatorioEstoque.tsx
 │   ├── orcamentos/          # Módulo Comercial: Orçamentos
 │   │   ├── ListaOrcamentos.tsx
 │   │   ├── NovoOrcamento.tsx
@@ -84,6 +89,7 @@ src/
 │   ├── TabelaPrecos/        # Módulo Comercial: Preços
 │   │   └── TabelaAtacado.tsx
 │   ├── Configuracoes.tsx    # Configurações Globais
+│   ├── FuncionarioConfig.tsx # Perfil do Funcionário (Novo)
 │   ├── Dashboard.tsx        # Home / Visão Geral
 │   ├── LoginPage.tsx        # Autenticação (Login)
 │   ├── Relatorios.tsx       # Central de Relatórios

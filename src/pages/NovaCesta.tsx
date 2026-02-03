@@ -5,17 +5,7 @@ import { ValidationService } from '../services/validationService';
 import { CestaService } from '../services/cestaService';
 import { useAuth } from '../contexts/AuthContext';
 import { useVendedoresByAdmin } from '../hooks/useVendedores';
-import { useProdutos } from '../hooks/useProdutos';
-
-interface Produto {
-  id: string;
-  produto_nome: string;
-  produto_cod: string;
-  categoria: string;
-  qtd_estoque: number;
-  preco_unt: number;
-  descricao?: string;
-}
+import { useProdutos, type Produto } from '../hooks/useProdutos';
 
 interface ItemCesta {
   produtoId: string;

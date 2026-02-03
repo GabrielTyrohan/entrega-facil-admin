@@ -1,7 +1,7 @@
 # Guia de Troubleshooting e Resolução de Problemas
 
-**Data:** 21/01/2026
-**Versão:** 2.3
+**Data:** 29/01/2026
+**Versão:** 2.6
 
 Este guia compila soluções para erros técnicos, problemas de cache e comportamentos inesperados identificados no ambiente de produção e desenvolvimento.
 
@@ -35,10 +35,13 @@ Este guia compila soluções para erros técnicos, problemas de cache e comporta
 1.  Verifique a data/hora do sistema operacional.
 2.  Limpe os cookies e LocalStorage (`sb-xxxx-auth-token`).
 
-### Permissão Negada (RLS)
-**Sintoma:** Erro 403 ou listas vazias inesperadamente.
-**Causa:** O usuário logado não tem o `administrador_id` correto vinculado na tabela `users` ou `vendedores`.
-**Diagnóstico:** Verifique a tabela `users` no Supabase e confirme se o campo `administrador_id` está preenchido e coincide com os dados que estão sendo acessados.
+### Permissão Negada (RLS) - Listas Vazias
+**Sintoma:** Erro 403 ou listas vazias (ex: Produtos) inesperadamente para funcionários, mas logs mostram IDs corretos.
+**Causa:** O usuário logado (funcionário) não tem permissão no Banco de Dados para ver registros criados pelo administrador. O Supabase filtra silenciosamente (retorna array vazio) se a política RLS não permitir explicitamente.
+**Solução:**
+1.  Verifique as Policies no painel do Supabase (Authentication > Policies).
+2.  Crie uma política que permita SELECT se: `auth.uid() = administrador_id` OR `EXISTS (SELECT 1 FROM funcionarios WHERE auth_user_id = auth.uid() AND administrador_id = table.administrador_id)`.
+3.  Rode o script `fix_permissions.sql` disponível na raiz do projeto.
 
 ---
 
@@ -49,10 +52,10 @@ Este guia compila soluções para erros técnicos, problemas de cache e comporta
 **Causa:** Case sensitivity. O arquivo é `Header.tsx` mas o import está `header.tsx`.
 **Solução:** Garanta que os imports respeitem exatamente o casing do nome do arquivo.
 
-### Erro TS2345: Argument of type 'number[]' (html2pdf)
-**Sintoma:** Erro ao passar margens como array `[5, 5, 5, 5]`.
-**Causa:** O TypeScript infere como `number[]` genérico, mas a lib espera uma tupla fixa.
-**Solução:** Use *Type Assertion*: `margin: [5, 5, 5, 5] as [number, number, number, number]`.
+### Erro TS2304 / ReferenceError (useMemo, hooks)
+**Sintoma:** Erro "Cannot find name 'useMemo'" ou "ReferenceError: useMemo is not defined".
+**Causa:** Hooks do React usados sem importação no topo do arquivo.
+**Solução:** Adicione `import { useMemo, useState, useEffect } from 'react';` no topo do arquivo.
 
 ### Conflito de Classes Tailwind (`cssConflict`)
 **Sintoma:** Warning no editor sobre classes duplicadas (ex: `bg-white dark:bg-gray-800`).
@@ -81,4 +84,16 @@ Este guia compila soluções para erros técnicos, problemas de cache e comporta
 ### Dados da Empresa Faltando (Funcionários)
 **Sintoma:** PDF ou cabeçalho sem nome/endereço da empresa quando logado como funcionário.
 **Causa:** O perfil do funcionário (`userProfile`) não contém dados da empresa.
-**Solução:** Busque sempre os dados na tabela `administradores` usando o `administrador_id` vinculado, independentemente de quem está logado.
+**Solução:** O `AuthContext` agora resolve automaticamente o `adminId` correto. Use esse ID para buscar os dados da empresa na tabela `administradores`.
+
+---
+
+## 5. Erros de Banco de Dados (Supabase)
+
+### Violação de Constraint (`check_violation`)
+**Sintoma:** Erro 400 ao tentar rejeitar um orçamento ou mudar status. Mensagem: `new row for relation "orcamentos_pj" violates check constraint "orcamentos_pj_status_check"`.
+**Causa:** A restrição (constraint) no banco de dados não inclui o novo status (ex: 'rejeitado') na lista de valores permitidos.
+**Solução:**
+1.  É necessário atualizar a constraint no banco de dados.
+2.  Execute o script SQL `fix_orcamento_status.sql` no Editor SQL do Supabase.
+3.  Comando: `ALTER TABLE orcamentos_pj DROP CONSTRAINT...; ADD CONSTRAINT... CHECK (status IN (...));`.

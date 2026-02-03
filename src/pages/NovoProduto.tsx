@@ -1,23 +1,25 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Package, Hash, Tag, DollarSign } from 'lucide-react';
+import { ArrowLeft, FileText, Hash, Package, Save, Tag, TrendingUp, Truck } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ProdutoCadastrado } from '../services/produtoService';
 import { ValidationService } from '../services/validationService';
-
-interface FormData {
-  nome: string;
-  codigo: string;
-  categoria: string;
-  quantidade: number;
-  preco: number;
-  descricao: string;
-}
 
 const categorias = [
   'Bebidas',
   'Alimentos',
   'Limpeza',
   'Higiene',
+  'Congelados',
   'Outros'
+];
+
+const unidadesMedida = [
+  'UN',
+  'KG',
+  'LT',
+  'CX',
+  'FD',
+  'PCT'
 ];
 
 const gerarSKU = (categoria: string): string => {
@@ -36,13 +38,30 @@ const gerarSKU = (categoria: string): string => {
 
 const NovoProduto: React.FC = () => {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState<FormData>({
-    nome: '',
-    codigo: '',
+  const [formData, setFormData] = useState<Partial<ProdutoCadastrado>>({
+    produto_nome: '',
+    produto_cod: '',
     categoria: '',
-    quantidade: 0,
-    preco: 0,
-    descricao: ''
+    qtd_estoque: 0,
+    preco_unt: 0,
+    codigo_barras: '',
+    kit: false,
+    ativo: true,
+    unidade_medida: 'UN',
+    custo_compra: 0,
+    margem_lucro: 0,
+    ncm: '',
+    cest: '',
+    cfop_padrao: '',
+    fornecedor_principal: '',
+    estoque_minimo: 0,
+    estoque_maximo: 0,
+    cst_pis: '',
+    aliquota_pis: 0,
+    cst_cofins: '',
+    aliquota_cofins: 0,
+    cst_icms: '',
+    aliquota_icms: 0
   });
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
@@ -52,37 +71,61 @@ const NovoProduto: React.FC = () => {
   // useEffect para gerar SKU quando categoria mudar
   useEffect(() => {
     if (formData.categoria) {
+      // Apenas gerar novo SKU se não houver um definido ou se o usuário estiver mudando a categoria de um novo produto
+      // (assumindo que estamos criando, não editando)
       const novoSKU = gerarSKU(formData.categoria);
       console.log('🔍 Categoria selecionada:', formData.categoria);
       console.log('🔍 SKU gerado:', novoSKU);
-      setFormData(prev => ({ ...prev, codigo: novoSKU }));
+      setFormData(prev => ({ ...prev, produto_cod: novoSKU }));
       
       // Limpar erro do código quando categoria for selecionada
-      if (errors.codigo) {
+      if (errors.produto_cod) {
         setErrors(prev => {
           const newErrors = { ...prev };
-          delete newErrors.codigo;
+          delete newErrors.produto_cod;
           return newErrors;
         });
       }
     } else {
-      setFormData(prev => ({ ...prev, codigo: '' }));
+      setFormData(prev => ({ ...prev, produto_cod: '' }));
     }
   }, [formData.categoria]);
 
+  // Cálculo automático da margem de lucro ou preço de venda
+  useEffect(() => {
+    // Se temos custo e preço, podemos calcular a margem
+    if (formData.custo_compra && formData.preco_unt) {
+      const custo = Number(formData.custo_compra);
+      // const preco = Number(formData.preco_unt);
+      if (custo > 0) {
+        // const margem = ((preco - custo) / custo) * 100;
+      }
+    }
+  }, [formData.custo_compra, formData.preco_unt]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
+    const { name, value, type } = e.target;
     
     // Limpar mensagem de sucesso
     if (successMessage) {
       setSuccessMessage('');
     }
     
-    if (name === 'quantidade') {
-      setFormData(prev => ({ ...prev, [name]: parseInt(value) || 0 }));
-    } else if (name === 'preco') {
+    // Tratamento para checkboxes
+    if (type === 'checkbox') {
+      const checked = (e.target as HTMLInputElement).checked;
+      setFormData(prev => ({ ...prev, [name]: checked }));
+    } 
+    // Tratamento para números
+    else if ([
+      'qtd_estoque', 'preco_unt', 'custo_compra', 'margem_lucro', 
+      'estoque_minimo', 'estoque_maximo', 'aliquota_pis', 
+      'aliquota_cofins', 'aliquota_icms'
+    ].includes(name)) {
       setFormData(prev => ({ ...prev, [name]: parseFloat(value) || 0 }));
-    } else {
+    } 
+    // Texto padrão
+    else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
 
@@ -99,29 +142,30 @@ const NovoProduto: React.FC = () => {
   const validateForm = (): boolean => {
     const newErrors: { [key: string]: string } = {};
 
-    // Validação básica do produto
+    // Validação básica do produto usando o serviço
     const produtoValidation = ValidationService.validateProduto(formData);
     if (!produtoValidation.isValid) {
-      // Determinar qual campo tem erro baseado na mensagem
+      // Mapear mensagens de erro genéricas para campos específicos
       if (produtoValidation.message?.includes('Nome')) {
-        newErrors.nome = produtoValidation.message;
+        newErrors.produto_nome = produtoValidation.message;
       } else if (produtoValidation.message?.includes('Código')) {
-        newErrors.codigo = produtoValidation.message;
+        newErrors.produto_cod = produtoValidation.message;
       } else if (produtoValidation.message?.includes('Categoria')) {
         newErrors.categoria = produtoValidation.message;
       } else if (produtoValidation.message?.includes('Quantidade')) {
-        newErrors.quantidade = produtoValidation.message;
+        newErrors.qtd_estoque = produtoValidation.message;
       } else if (produtoValidation.message?.includes('Preço')) {
-        newErrors.preco = produtoValidation.message;
+        newErrors.preco_unt = produtoValidation.message;
       }
     }
 
-    if (!formData.codigo) {
-      newErrors.codigo = 'Selecione uma categoria para gerar o código SKU.';
+    if (!formData.produto_cod) {
+      newErrors.produto_cod = 'Selecione uma categoria para gerar o código SKU.';
     }
 
-    if (formData.codigo.length !== 10) {
-      newErrors.codigo = 'O código SKU deve ter 10 caracteres (XXX-######).';
+    // Validar campos adicionais
+    if (formData.estoque_minimo && formData.estoque_maximo && formData.estoque_minimo > formData.estoque_maximo) {
+      newErrors.estoque_minimo = 'Estoque mínimo não pode ser maior que o máximo';
     }
 
     setErrors(newErrors);
@@ -141,12 +185,14 @@ const NovoProduto: React.FC = () => {
       // Simular salvamento (em um sistema real, seria uma chamada à API)
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Salvar no localStorage para demonstração
+      // Salvar no localStorage para demonstração (adaptado para nova estrutura)
       const produtosExistentes = JSON.parse(localStorage.getItem('produtos') || '[]');
       const novoProduto = {
         id: Date.now().toString(),
+        administrador_id: 'admin-demo', // Valor mockado
         ...formData,
-        dataCriacao: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
       
       produtosExistentes.push(novoProduto);
@@ -207,32 +253,47 @@ const NovoProduto: React.FC = () => {
           </div>
         )}
 
+        {/* Informações Básicas */}
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="flex items-center space-x-3 mb-6">
             <Package className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Informações do Produto</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Informações Básicas</h2>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Nome do Produto *
               </label>
               <input
                 type="text"
-                name="nome"
-                value={formData.nome}
+                name="produto_nome"
+                value={formData.produto_nome}
                 onChange={handleInputChange}
                 className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white ${
-                  errors.nome ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-gray-600'
+                  errors.produto_nome ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-gray-600'
                 }`}
                 placeholder="Ex: Coca-Cola 350ml"
               />
-              {errors.nome && (
-                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.nome}</p>
+              {errors.produto_nome && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.produto_nome}</p>
               )}
             </div>
             
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Código de Barras
+              </label>
+              <input
+                type="text"
+                name="codigo_barras"
+                value={formData.codigo_barras}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                placeholder="EAN-13"
+              />
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Categoria *
@@ -247,7 +308,7 @@ const NovoProduto: React.FC = () => {
                     errors.categoria ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-gray-600'
                   }`}
                 >
-                  <option value="">Selecione uma categoria</option>
+                  <option value="">Selecione</option>
                   {categorias.map(categoria => (
                     <option key={categoria} value={categoria}>{categoria}</option>
                   ))}
@@ -260,94 +321,287 @@ const NovoProduto: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Código do Produto (SKU) *
+                Código (SKU) *
               </label>
               <div className="relative">
                 <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="text"
-                  name="codigo"
-                  value={formData.codigo}
+                  name="produto_cod"
+                  value={formData.produto_cod}
                   readOnly
                   className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 cursor-not-allowed font-mono"
-                  placeholder="Selecione uma categoria"
+                  placeholder="Automático"
                 />
               </div>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Gerado automaticamente ao selecionar a categoria</p>
-              {errors.codigo && (
-                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.codigo}</p>
+              {errors.produto_cod && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.produto_cod}</p>
               )}
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Quantidade em Estoque *
+                Unidade
+              </label>
+              <select
+                name="unidade_medida"
+                value={formData.unidade_medida}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+              >
+                {unidadesMedida.map(un => (
+                  <option key={un} value={un}>{un}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center space-x-4 pt-8">
+               <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="ativo"
+                  checked={formData.ativo}
+                  onChange={handleInputChange}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Ativo</span>
+              </label>
+              
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="kit"
+                  checked={formData.kit}
+                  onChange={handleInputChange}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">É Kit?</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* Estoque e Custos */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center space-x-3 mb-6">
+            <TrendingUp className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Estoque e Custos</h2>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Qtd. Estoque *
               </label>
               <input
                 type="number"
-                name="quantidade"
-                value={formData.quantidade}
+                name="qtd_estoque"
+                value={formData.qtd_estoque}
                 onChange={handleInputChange}
                 min="0"
                 className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white ${
-                  errors.quantidade ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-gray-600'
+                  errors.qtd_estoque ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-gray-600'
                 }`}
-                placeholder="0"
               />
-              {errors.quantidade && (
-                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.quantidade}</p>
+              {errors.qtd_estoque && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.qtd_estoque}</p>
               )}
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Preço Unitário (R$) *
+                Preço Venda (R$) *
               </label>
-              <div className="relative">
-                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="number"
-                  name="preco"
-                  value={formData.preco}
-                  onChange={handleInputChange}
-                  min="0"
-                  step="0.01"
-                  className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white ${
-                    errors.preco ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-gray-600'
-                  }`}
-                  placeholder="0.00"
-                />
-              </div>
-              {errors.preco && (
-                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.preco}</p>
+              <input
+                type="number"
+                name="preco_unt"
+                value={formData.preco_unt}
+                onChange={handleInputChange}
+                min="0"
+                step="0.01"
+                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white ${
+                  errors.preco_unt ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-gray-600'
+                }`}
+              />
+              {errors.preco_unt && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.preco_unt}</p>
               )}
             </div>
-            
-            <div className="md:col-span-2">
+
+            <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Descrição (Opcional)
+                Custo Compra (R$)
               </label>
-              <textarea
-                name="descricao"
-                value={formData.descricao}
+              <input
+                type="number"
+                name="custo_compra"
+                value={formData.custo_compra}
                 onChange={handleInputChange}
-                rows={3}
+                min="0"
+                step="0.01"
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                placeholder="Descrição adicional do produto..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Margem Lucro (%)
+              </label>
+              <input
+                type="number"
+                name="margem_lucro"
+                value={formData.margem_lucro}
+                onChange={handleInputChange}
+                step="0.1"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Estoque Mínimo
+              </label>
+              <input
+                type="number"
+                name="estoque_minimo"
+                value={formData.estoque_minimo}
+                onChange={handleInputChange}
+                min="0"
+                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white ${
+                  errors.estoque_minimo ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-gray-600'
+                }`}
+              />
+               {errors.estoque_minimo && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.estoque_minimo}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Estoque Máximo
+              </label>
+              <input
+                type="number"
+                name="estoque_maximo"
+                value={formData.estoque_maximo}
+                onChange={handleInputChange}
+                min="0"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
               />
             </div>
           </div>
         </div>
 
-        {/* Resumo */}
-        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
-          <h3 className="text-sm font-medium text-blue-900 dark:text-blue-300 mb-2">Resumo do Produto</h3>
-          <div className="text-sm text-blue-800 dark:text-blue-400 space-y-1">
-            <p><strong>Nome:</strong> {formData.nome || 'Não informado'}</p>
-            <p><strong>Categoria:</strong> {formData.categoria || 'Não selecionada'}</p>
-            <p><strong>Código SKU:</strong> {formData.codigo || 'Não gerado'}</p>
-            <p><strong>Estoque:</strong> {formData.quantidade} unidades</p>
-            <p><strong>Preço:</strong> R$ {formData.preco.toFixed(2)}</p>
+        {/* Dados Fiscais */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center space-x-3 mb-6">
+            <FileText className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Dados Fiscais</h2>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                NCM
+              </label>
+              <input
+                type="text"
+                name="ncm"
+                value={formData.ncm}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                placeholder="0000.00.00"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                CEST
+              </label>
+              <input
+                type="text"
+                name="cest"
+                value={formData.cest}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                CFOP Padrão
+              </label>
+              <input
+                type="text"
+                name="cfop_padrao"
+                value={formData.cfop_padrao}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                placeholder="5102"
+              />
+            </div>
+
+            {/* Impostos simplificados para layout */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                CST PIS
+              </label>
+              <input
+                type="text"
+                name="cst_pis"
+                value={formData.cst_pis}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+              />
+            </div>
+             <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                CST COFINS
+              </label>
+              <input
+                type="text"
+                name="cst_cofins"
+                value={formData.cst_cofins}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+              />
+            </div>
+             <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                CST ICMS
+              </label>
+              <input
+                type="text"
+                name="cst_icms"
+                value={formData.cst_icms}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Fornecedor */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center space-x-3 mb-6">
+            <Truck className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Fornecedor</h2>
+          </div>
+          
+          <div className="grid grid-cols-1 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Fornecedor Principal
+              </label>
+              <input
+                type="text"
+                name="fornecedor_principal"
+                value={formData.fornecedor_principal}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                placeholder="Nome do Fornecedor"
+              />
+            </div>
           </div>
         </div>
       </form>

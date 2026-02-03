@@ -1,13 +1,6 @@
-// Serviço para controle de estoque e reservas
-export interface Produto {
-  id: string;
-  nome: string;
-  codigo: string;
-  categoria: string;
-  quantidade: number;
-  preco: number;
-  descricao?: string;
-}
+import { ProdutoCadastrado } from '../services/produtoService';
+
+export type Produto = ProdutoCadastrado;
 
 export interface ItemCesta {
   produto: Produto;
@@ -58,7 +51,7 @@ class EstoqueService {
       };
     }
 
-    const quantidadeDisponivel = produto.quantidade - totalReservado;
+    const quantidadeDisponivel = produto.qtd_estoque - totalReservado;
     
     return {
       disponivel: quantidadeDisponivel >= quantidade_solicitada,
@@ -95,7 +88,7 @@ class EstoqueService {
 
       if (!disponibilidade.disponivel) {
         erros.push(
-          `Produto ${item.produto.nome}: estoque insuficiente. ` +
+          `Produto ${item.produto.produto_nome}: estoque insuficiente. ` +
           `Disponível: ${disponibilidade.quantidade_disponivel}, ` +
           `Solicitado: ${item.quantidade}`
         );
@@ -237,39 +230,39 @@ class EstoqueService {
     return [
       {
         id: '1',
-        nome: 'Coca-Cola 350ml',
-        codigo: 'COCA350ML',
+        administrador_id: 'admin-1',
+        produto_nome: 'Coca-Cola 350ml',
+        produto_cod: 'COCA350ML',
         categoria: 'Bebidas',
-        quantidade: 50,
-        preco: 4.50,
-        descricao: 'Refrigerante Coca-Cola lata 350ml'
+        qtd_estoque: 50,
+        preco_unt: 4.50,
       },
       {
         id: '2',
-        nome: 'Pão de Açúcar Integral',
-        codigo: 'PAO_INTEGRAL',
+        administrador_id: 'admin-1',
+        produto_nome: 'Pão de Açúcar Integral',
+        produto_cod: 'PAO_INTEGRAL',
         categoria: 'Alimentos',
-        quantidade: 25,
-        preco: 8.90,
-        descricao: 'Pão integral 500g'
+        qtd_estoque: 25,
+        preco_unt: 8.90,
       },
       {
         id: '3',
-        nome: 'Detergente Ypê',
-        codigo: 'DET_YPE_500',
+        administrador_id: 'admin-1',
+        produto_nome: 'Detergente Ypê',
+        produto_cod: 'DET_YPE_500',
         categoria: 'Limpeza',
-        quantidade: 30,
-        preco: 3.25,
-        descricao: 'Detergente líquido neutro 500ml'
+        qtd_estoque: 30,
+        preco_unt: 3.25,
       },
       {
         id: '4',
-        nome: 'Shampoo Head & Shoulders',
-        codigo: 'SHAMP_HS_400',
+        administrador_id: 'admin-1',
+        produto_nome: 'Shampoo Head & Shoulders',
+        produto_cod: 'SHAMP_HS_400',
         categoria: 'Higiene',
-        quantidade: 15,
-        preco: 12.90,
-        descricao: 'Shampoo anticaspa 400ml'
+        qtd_estoque: 15,
+        preco_unt: 12.90,
       }
     ];
   }
@@ -296,7 +289,7 @@ class EstoqueService {
     // Validar quantidades
     for (const item of cesta.itens) {
       if (item.quantidade <= 0) {
-        erros.push(`Quantidade inválida para produto ${item.produto.nome}`);
+        erros.push(`Quantidade inválida para produto ${item.produto.produto_nome}`);
       }
     }
 
@@ -309,7 +302,7 @@ class EstoqueService {
 
       if (!disponibilidade.disponivel) {
         erros.push(
-          `Estoque insuficiente para ${item.produto.nome}. ` +
+          `Estoque insuficiente para ${item.produto.produto_nome}. ` +
           `Disponível: ${disponibilidade.quantidade_disponivel}, ` +
           `Solicitado: ${item.quantidade}`
         );

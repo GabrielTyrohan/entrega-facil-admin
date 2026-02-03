@@ -161,7 +161,7 @@ const VendedorModal: React.FC<VendedorModalProps> = ({ vendedor, isOpen, onClose
                       <div className="animate-pulse bg-gray-200 dark:bg-gray-600 h-4 w-24 rounded"></div>
                     ) : (
                       <p className="text-sm sm:text-base text-gray-900 dark:text-white font-medium">
-                        {totalVendas ? `R$ ${totalVendas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'R$ 0,00'}
+                        {totalVendas ? `R$ ${totalVendas.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'R$ 0,00'}
                       </p>
                     )}
                   </div>

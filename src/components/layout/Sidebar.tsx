@@ -6,6 +6,7 @@
 import { Permissoes, useAuth } from '@/contexts/AuthContext';
 import {
   AlertCircle,
+  ArrowUpDown,
   BarChart3,
   ChevronDown,
   ChevronRight,
@@ -35,6 +36,7 @@ interface MenuItem {
   icon: React.ReactNode;
   permission?: keyof Permissoes;
   adminOnly?: boolean;
+  funcionarioOnly?: boolean;
   group?: string;
 }
 
@@ -67,6 +69,14 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
       group: 'Pessoas'
     },
     {
+      path: '/funcionarios',
+      label: 'Funcionários',
+      icon: <UserCog className="w-5 h-5" />,
+      permission: 'funcionarios',
+      adminOnly: true,
+      group: 'Pessoas'
+    },
+    {
       path: '/clientes',
       label: 'Clientes',
       icon: <UserCircle className="w-5 h-5" />,
@@ -87,6 +97,22 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
       group: 'Catálogo'
     },
     
+    // ESTOQUE
+    {
+      path: '/estoque/movimentacoes',
+      label: 'Movimentações',
+      icon: <ArrowUpDown className="w-5 h-5" />,
+      permission: 'caixa',
+      group: 'Estoque'
+    },
+    {
+      path: '/estoque/relatorio',
+      label: 'Relatório',
+      icon: <ClipboardList className="w-5 h-5" />,
+      permission: 'caixa',
+      group: 'Estoque'
+    },
+
     // OPERACIONAL
     {
       path: '/entregas',
@@ -157,17 +183,16 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     
     // SISTEMA
     {
-      path: '/suporte',
-      label: 'Suporte',
-      icon: <MessageSquare className="w-5 h-5" />,
+      path: '/funcionario-config',
+      label: 'Meu Perfil',
+      icon: <UserCog className="w-5 h-5" />,
+      funcionarioOnly: true,
       group: 'Sistema'
     },
     {
-      path: '/funcionarios',
-      label: 'Funcionários',
-      icon: <UserCog className="w-5 h-5" />,
-      permission: 'funcionarios',
-      adminOnly: true,
+      path: '/suporte',
+      label: 'Suporte',
+      icon: <MessageSquare className="w-5 h-5" />,
       group: 'Sistema'
     },
     {
@@ -185,11 +210,14 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     // Se tem adminOnly e não é admin, esconder
     if (item.adminOnly && !isAdmin) return false;
 
+    // Se é apenas para funcionários e o usuário não é funcionário
+    if (item.funcionarioOnly && userType !== 'funcionario') return false;
+
     // Se tem permissão específica, verificar
     if (item.permission && !permissions[item.permission]) return false;
 
     return true;
-  }), [menuItems, isAdmin, permissions]);
+  }), [menuItems, isAdmin, permissions, userType]);
 
   // Agrupar itens por categoria
   const groupedItems = useMemo(() => visibleItems.reduce((acc, item) => {

@@ -322,6 +322,8 @@ export const useCreateEntrega = () => {
       queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CLIENTES] });
       queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.VENDEDORES] });
       queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.MOVIMENTACOES_ESTOQUE] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PRODUTOS] });
     }
   });
 };

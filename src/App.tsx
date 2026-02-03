@@ -1,42 +1,46 @@
-import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Navigate, Route, HashRouter as Router, Routes } from 'react-router-dom';
+import ErrorBoundary from './components/ErrorBoundary';
+import MainLayout from './components/layout/MainLayout';
+import PaymentStatusAutoChecker from './components/PaymentStatusAutoChecker';
+import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
-import ProtectedRoute from './components/ProtectedRoute';
-import ErrorBoundary from './components/ErrorBoundary';
-import PaymentStatusAutoChecker from './components/PaymentStatusAutoChecker';
-import LoginPage from './pages/LoginPage';
-import MainLayout from './components/layout/MainLayout';
-import Dashboard from './pages/Dashboard';
-import Vendedores from './pages/Vendedores';
-import NovoVendedor from './pages/NovoVendedor';
-import EditarVendedor from './pages/EditarVendedor';
-import NovoProduto from './pages/NovoProduto';
 import CestasVendedor from './pages/CestasVendedor';
-import NovaCesta from './pages/NovaCesta';
+import ChangePasswordPage from './pages/ChangePasswordPage';
 import Clientes from './pages/Clientes';
-import Entregas from './pages/Entregas';
-import Pagamentos from './pages/Pagamentos';
+import Configuracoes from './pages/Configuracoes';
+import Dashboard from './pages/Dashboard';
 import Devedores from './pages/Devedores';
+import EditarVendedor from './pages/EditarVendedor';
+import Entregas from './pages/Entregas';
+import MovimentacoesEstoque from './pages/Estoque/MovimentacoesEstoque';
+import RelatorioEstoque from './pages/Estoque/RelatorioEstoque';
+
+import LoginPage from './pages/LoginPage';
+import NovaCesta from './pages/NovaCesta';
+import NovoProduto from './pages/NovoProduto';
+import NovoVendedor from './pages/NovoVendedor';
+import Pagamentos from './pages/Pagamentos';
 import Produtos from './pages/Produtos';
 import Relatorios from './pages/Relatorios';
 import Suporte from './pages/Suporte';
-import Configuracoes from './pages/Configuracoes';
-import ChangePasswordPage from './pages/ChangePasswordPage';
-import { useEffect } from 'react';
+import Vendedores from './pages/Vendedores';
 
 // Novos componentes e permissões
 import { RequirePermission } from './components/Permissoes/RequirePermission';
-import ListaOrcamentos from './pages/orcamentos/ListaOrcamentos';
-import NovoOrcamento from './pages/orcamentos/NovoOrcamento';
-import DetalhesOrcamento from './pages/orcamentos/DetalhesOrcamento';
-import ListaVendas from './pages/VendasAtacado/ListaVendas';
-import NovaVendaAtacado from './pages/VendasAtacado/NovaVendaAtacado';
 import ListaAcertos from './pages/AcertosDiarios/ListaAcertos';
 import NovoAcerto from './pages/AcertosDiarios/NovoAcerto';
 import FluxoCaixa from './pages/Caixa/FluxoCaixa';
 import LancamentoCaixa from './pages/Caixa/LancamentoCaixa';
-import TabelaAtacado from './pages/TabelaPrecos/TabelaAtacado';
+import FuncionarioConfig from './pages/FuncionarioConfig';
 import Funcionarios from './pages/Funcionarios';
+import DetalhesOrcamento from './pages/orcamentos/DetalhesOrcamento';
+import ListaOrcamentos from './pages/orcamentos/ListaOrcamentos';
+import NovoOrcamento from './pages/orcamentos/NovoOrcamento';
+import TabelaAtacado from './pages/TabelaPrecos/TabelaAtacado';
+import ListaVendas from './pages/VendasAtacado/ListaVendas';
+import NovaVendaAtacado from './pages/VendasAtacado/NovaVendaAtacado';
 
 function App() {
   // Migração para IndexedDB e limpeza de cache antigo do LocalStorage
@@ -91,6 +95,17 @@ function App() {
                         <Route path="/devedores" element={<Devedores />} />
                         <Route path="/produtos" element={<Produtos />} />
                         
+                        <Route path="/estoque/movimentacoes" element={
+                          <RequirePermission permission="caixa" redirectTo="/dashboard">
+                            <MovimentacoesEstoque />
+                          </RequirePermission>
+                        } />
+                        <Route path="/estoque/relatorio" element={
+                          <RequirePermission permission="caixa" redirectTo="/dashboard">
+                            <RelatorioEstoque />
+                          </RequirePermission>
+                        } />
+
                         {/* Rota de Relatórios Protegida */}
                         <Route path="/relatorios" element={
                           <RequirePermission permission="relatorios" redirectTo="/dashboard">
@@ -100,6 +115,7 @@ function App() {
 
                         <Route path="/suporte" element={<Suporte />} />
                         <Route path="/configuracoes" element={<Configuracoes />} />
+                        <Route path="/funcionario-config" element={<FuncionarioConfig />} />
                         <Route path="/funcionarios" element={<Funcionarios />} />
                         <Route path="/change-password" element={<ChangePasswordPage />} />
 

@@ -131,6 +131,8 @@ export const useCreateVendaAtacado = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.VENDAS_ATACADO || 'VENDAS_ATACADO'] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.MOVIMENTACOES_ESTOQUE] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PRODUTOS] });
     },
     onError: (error) => {
       console.error('Erro ao criar venda:', error);

@@ -1,19 +1,20 @@
-import React, { useState, useMemo } from 'react';
-import { Package, Plus, Search, Filter, MoreHorizontal, Edit, Trash2, Eye } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import ProdutoModal from '@/components/ui/ProdutoModal';
 import { Pagination } from "@/components/ui/pagination";
-import {
-  useProdutos,
-  useDeleteProduto,
-  type Produto 
-} from '../hooks/useProdutos';
+import ProdutoModal from '@/components/ui/ProdutoModal';
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Edit, Eye, Filter, MoreHorizontal, Package, Plus, Search, Trash2 } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import {
+  useDeleteProduto,
+  useProdutos,
+  type Produto
+} from '../hooks/useProdutos';
 
 const categorias = [
   'Todas',
@@ -21,10 +22,12 @@ const categorias = [
   'Alimentos',
   'Limpeza',
   'Higiene',
+  'Congelados',
   'Outros'
 ];
 
 const Produtos: React.FC = () => {
+  const { isLoading: authLoading, userType, adminId } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todas');
   const [selectedProduto, setSelectedProduto] = useState<Produto | null>(null);
@@ -37,10 +40,12 @@ const Produtos: React.FC = () => {
   // Usar hooks de cache para buscar produtos
   const {
     data: produtosData = [],
-    isLoading,
+    isLoading: productsLoading,
     error,
     refetch
   } = useProdutos();
+
+  const isLoading = authLoading || productsLoading;
 
   // Buscar categorias disponíveis (removido - não utilizado)
   // const { data: categoriasDisponiveis = [] } = useProdutoCategories();
@@ -93,7 +98,39 @@ const Produtos: React.FC = () => {
     handleResize(); // Calcular inicial
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [produtos.length, currentPage]);
+  }, [produtos.length]);
+
+  // Renderização de Debug para caso de lista vazia
+  if (!isLoading && produtos.length === 0 && userType === 'funcionario') {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-8 text-center space-y-4">
+        <Package className="h-16 w-16 text-gray-300" />
+        <h2 className="text-xl font-semibold text-gray-700">Nenhum produto encontrado</h2>
+        <p className="text-gray-500 max-w-md">
+          Não encontramos produtos vinculados ao administrador.
+        </p>
+        
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-left text-sm max-w-lg w-full mt-4">
+          <h3 className="font-bold text-yellow-800 mb-2 flex items-center">
+            <MoreHorizontal className="h-4 w-4 mr-2" />
+            Diagnóstico de Permissões
+          </h3>
+          <ul className="space-y-1 text-yellow-700">
+            <li><strong>Admin ID Vinculado:</strong> {adminId || 'Não encontrado'}</li>
+            <li><strong>Status da Conta:</strong> Funcionário</li>
+            <li><strong>Ação Necessária:</strong> Peça ao administrador para rodar o script de correção de permissões (fix_permissions.sql) no Supabase.</li>
+          </ul>
+        </div>
+
+        <button 
+          onClick={() => refetch()}
+          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+        >
+          Tentar Novamente
+        </button>
+      </div>
+    );
+  }
 
   // Filtrar produtos usando useMemo para otimização
   const filteredProdutos = useMemo(() => {

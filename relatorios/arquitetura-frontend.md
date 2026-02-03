@@ -1,8 +1,8 @@
 # Relatório Técnico de Arquitetura Frontend
 
 **Projeto:** Sistema de Gestão de Entregas (React + Supabase + React Query + Electron)
-**Data:** 21/01/2026
-**Versão:** 2.4
+**Data:** 29/01/2026
+**Versão:** 2.6
 
 ---
 
@@ -66,7 +66,14 @@ Para desacoplar a UI da lógica de banco de dados, utilizamos classes de serviç
     *   `RequirePermission.tsx`: Verifica permissões granulares (ex: `can_edit_products`) dentro de componentes ou páginas.
     
 2.  **Row Level Security (RLS):**
-    *   A segurança final é garantida pelo banco de dados. O Supabase aplica políticas RLS baseadas no token JWT do usuário, impedindo acesso a dados de outros administradores/empresas mesmo que a aplicação frontend seja manipulada.
+    *   A segurança final é garantida pelo banco de dados. O Supabase aplica políticas RLS baseadas no token JWT do usuário.
+    *   **Política Híbrida:** As tabelas (como `produtos_cadastrado`) possuem políticas que permitem acesso se:
+        *   `auth.uid() == administrador_id` (Admin Dono)
+        *   OU `auth.uid()` existe na tabela `funcionarios` vinculado ao `administrador_id` da linha (Funcionário Vinculado).
+
+3.  **Controle de Acesso de Interface (UI):**
+    *   **Sidebar Dinâmica:** Itens de menu podem ser restritos via props `adminOnly` ou `funcionarioOnly`.
+    *   **Páginas Exclusivas:** Páginas como `FuncionarioConfig` possuem validação interna de tipo de usuário, redirecionando ou exibindo mensagens de erro caso um usuário não autorizado tente acessar diretamente pela URL.
 
 ---
 
@@ -78,7 +85,7 @@ Para desacoplar a UI da lógica de banco de dados, utilizamos classes de serviç
 
 ### Renderização Otimizada
 *   **Skeletons:** Uso extensivo de `src/components/ui/Skeleton.tsx` para evitar *Layout Shift* durante o carregamento inicial.
-*   **Memoização:** Uso de `useMemo` para cálculos pesados em tabelas e gráficos (ex: agregação de totais no Dashboard).
+*   **Memoização de Estado:** Uso de `useMemo` no `AuthContext` para derivar permissões e IDs instantaneamente, evitando condições de corrida e "flash of unauthorized content".
 
 ---
 
@@ -86,5 +93,8 @@ Para desacoplar a UI da lógica de banco de dados, utilizamos classes de serviç
 
 O contexto de autenticação é o "coração" da segurança no frontend:
 1.  **Inicialização:** Verifica sessão existente no Supabase.
-2.  **Hidratação do Perfil:** Busca dados estendidos na tabela `public.users` e `configuracoes_empresa`.
-3.  **Gestão de Sessão:** Monitora eventos de `SIGNED_IN`, `SIGNED_OUT` e `TOKEN_REFRESHED` para manter a UI sincronizada.
+2.  **Hidratação do Perfil (Estratégia Otimizada):** 
+    *   Busca dados na tabela `administradores`.
+    *   Se falhar, busca na tabela `funcionarios`.
+    *   Usa `useMemo` para calcular `adminId`, `userType` e `permissions` imediatamente após o retorno do perfil.
+3.  **Sincronização:** Mantém o ID do administrador correto (`adminId`) disponível globalmente, seja o usuário o próprio admin ou um funcionário vinculado.
