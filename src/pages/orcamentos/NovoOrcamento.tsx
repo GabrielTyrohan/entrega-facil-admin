@@ -3,23 +3,125 @@ import { useClientesByAdmin } from '@/hooks/useClientes';
 import { OrcamentoPJItem, useCreateOrcamentoPJ } from '@/hooks/useOrcamentosPJ';
 import { Produto } from '@/hooks/useProdutos';
 import { supabase } from '@/lib/supabase';
+import { cn } from '@/lib/utils';
 import { toast } from '@/utils/toast';
 import { useQuery } from '@tanstack/react-query';
 import {
-    ArrowLeft,
-    Calculator,
-    ChevronDown,
-    Loader2,
-    Package,
-    Plus,
-    Save,
-    Trash2,
-    X
+  ArrowLeft,
+  Calculator,
+  Check,
+  ChevronDown,
+  Loader2,
+  Package,
+  Plus,
+  Save,
+  Trash2,
+  X
 } from 'lucide-react';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const MARGIN_OPTIONS = [10, 15, 20, 30, 40];
+
+interface ProductSelectorProps {
+  value: string;
+  onChange: (value: string) => void;
+  products: Produto[];
+  isLoading: boolean;
+}
+
+const ProductSelector: React.FC<ProductSelectorProps> = ({ value, onChange, products, isLoading }) => {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const selectedProduct = products.find((p) => p.id === value);
+
+  const filtered = products.filter((p) =>
+    p.produto_nome.toLowerCase().includes(search.toLowerCase())
+  );
+
+  React.useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setSearch('');
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg flex items-center justify-between bg-white dark:bg-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-left"
+      >
+        <span className="truncate text-gray-900 dark:text-white flex items-center gap-2">
+          {isLoading && <Loader2 className="h-3 w-3 animate-spin text-blue-500" />}
+          {selectedProduct ? selectedProduct.produto_nome : 'Selecione...'}
+        </span>
+        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50 text-gray-500" />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl">
+          <div className="p-2 border-b border-gray-200 dark:border-gray-700">
+            <input
+              autoFocus
+              type="text"
+              placeholder="Buscar produto..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="max-h-60 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 text-center">
+                Nenhum produto encontrado.
+              </div>
+            ) : (
+              filtered.map((product) => {
+                const stock = product.qtd_estoque || 0;
+                const disabled = stock <= 0;
+                return (
+                  <div
+                    key={product.id}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      if (disabled) return;
+                      onChange(product.id);
+                      setOpen(false);
+                      setSearch('');
+                    }}
+                    className={cn(
+                      'flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 last:border-0 transition-colors',
+                      disabled
+                        ? 'opacity-50 cursor-not-allowed'
+                        : 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                    )}
+                  >
+                    <div className="flex flex-col">
+                      <span className="text-sm text-gray-900 dark:text-white">
+                        {product.produto_nome}
+                      </span>
+                      <span className={cn('text-xs', disabled ? 'text-red-500 font-medium' : 'text-gray-500')}>
+                        Estoque: {stock}
+                      </span>
+                    </div>
+                    {value === product.id && <Check className="h-4 w-4 text-blue-600 shrink-0" />}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const NovoOrcamento: React.FC = () => {
   const navigate = useNavigate();
@@ -36,7 +138,8 @@ const NovoOrcamento: React.FC = () => {
     data_saida: '',
     hora_saida: '',
     observacoes: '',
-    margem_padrao: 40
+    margem_padrao: 40,
+    forma_pagamento: 'outros'
   });
 
   const [itens, setItens] = useState<Partial<OrcamentoPJItem>[]>([]);
@@ -69,11 +172,18 @@ const NovoOrcamento: React.FC = () => {
   const clientes = Array.isArray(clientesData) ? clientesData : [];
 
   // Handlers
+  const getClienteDisplayName = (cliente: any) => {
+    if (cliente.tipo_pessoa === 'PJ') {
+      return cliente.razao_social || cliente.nome_fantasia || cliente.nome;
+    }
+    return [cliente.nome, cliente.sobrenome].filter(Boolean).join(' ');
+  };
+
   const selectCliente = (cliente: any) => {
     setFormData(prev => ({
       ...prev,
       cliente_id: cliente.id,
-      cliente_nome: cliente.nome
+      cliente_nome: getClienteDisplayName(cliente)
     }));
     setClienteSearch('');
     setShowDropdown(false);
@@ -118,11 +228,25 @@ const NovoOrcamento: React.FC = () => {
         // Recalculate based on new cost
         const valorVenda = (prod.preco_unt || 0) * (1 + (item.margem_percentual || 0) / 100);
         item.valor_venda_unitario = valorVenda;
-        item.valor_total = valorVenda * (item.quantidade || 1);
+        // Reset quantity to 1 when changing product, but respect stock
+        const stock = prod.qtd_estoque || 0;
+        item.quantidade = stock > 0 ? 1 : 0;
+        item.valor_total = valorVenda * (item.quantidade || 0);
       }
     } else if (field === 'quantidade') {
-      item.quantidade = Number(value);
-      item.valor_total = (item.valor_venda_unitario || 0) * Number(value);
+      const prod = produtos.find((p: Produto) => p.id === item.produto_cadastrado_id);
+      const stock = prod?.qtd_estoque || 0;
+      let newQty = Number(value);
+      
+      // Limit by stock
+      if (newQty > stock) {
+        toast.error(`Quantidade máxima disponível: ${stock}`);
+        newQty = stock;
+      }
+      if (newQty < 1 && stock > 0) newQty = 1;
+
+      item.quantidade = newQty;
+      item.valor_total = (item.valor_venda_unitario || 0) * newQty;
     } else if (field === 'custo_unitario') {
       item.custo_unitario = Number(value);
       const valorVenda = Number(value) * (1 + (item.margem_percentual || 0) / 100);
@@ -170,12 +294,15 @@ const NovoOrcamento: React.FC = () => {
         cliente_id: formData.cliente_id,
         cliente_nome: formData.cliente_nome,
         data_orcamento: new Date().toISOString(),
-        data_saida: formData.data_saida || undefined,
-        hora_saida: formData.hora_saida || undefined,
+        // @ts-ignore - colunas criadas manualmente no banco
+        dataSaida: formData.data_saida || undefined,
+        // @ts-ignore - colunas criadas manualmente no banco
+        horaSaida: formData.hora_saida || undefined,
         status: 'pendente', // Alterado de 'rascunho' para 'pendente' para evitar erro de constraint
         valor_total: calcularTotalGeral(),
         margem_lucro_geral: 0, // Calculate if needed
         numero_orcamento: Math.floor(Math.random() * 1000000), // Should be handled by DB sequence ideally
+        forma_pagamento: formData.forma_pagamento,
         itens: itens as OrcamentoPJItem[]
       });
 
@@ -257,8 +384,10 @@ const NovoOrcamento: React.FC = () => {
                         className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 px-4 py-3 border-b border-gray-100 dark:border-gray-700 last:border-0 transition-colors"
                         onClick={() => selectCliente(cliente)}
                       >
-                        <div className="font-medium text-gray-900 dark:text-white">{cliente.nome}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{cliente.telefone || 'Sem telefone'}</div>
+                        <div className="font-medium text-gray-900 dark:text-white">{getClienteDisplayName(cliente)}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                          {cliente.tipo_pessoa === 'PJ' ? `CNPJ: ${cliente.cnpj || 'Sem CNPJ'}` : (cliente.telefone || 'Sem telefone')}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -312,11 +441,32 @@ const NovoOrcamento: React.FC = () => {
               <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
             </div>
           </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Forma de Pagamento</label>
+            <div className="relative">
+              <select
+                value={formData.forma_pagamento}
+                onChange={(e) => setFormData({ ...formData, forma_pagamento: e.target.value })}
+                className="w-full pl-4 pr-12 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white transition-shadow appearance-none"
+              >
+                <option value="dinheiro">Dinheiro</option>
+                <option value="pix">Pix</option>
+                <option value="boleto">Boleto</option>
+                <option value="cartao_credito">Cartão de Crédito</option>
+                <option value="cartao_debito">Cartão de Débito</option>
+                <option value="transferencia">Transferência</option>
+                <option value="cheque">Cheque</option>
+                <option value="outros">Outros</option>
+              </select>
+              <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Itens */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden min-h-[500px] flex flex-col">
         <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
           <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
             <Calculator className="w-5 h-5" />
@@ -331,7 +481,7 @@ const NovoOrcamento: React.FC = () => {
           </button>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto flex-1">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
@@ -345,82 +495,83 @@ const NovoOrcamento: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {itens.map((item, index) => (
-                <tr key={index}>
-                  <td className="px-4 py-2">
-                    <select
-                      value={item.produto_cadastrado_id || ''}
-                      onChange={(e) => updateItem(index, 'produto_cadastrado_id', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                    >
-                      <option value="">Selecione...</option>
-                      {isLoadingProdutos ? (
-                        <option disabled>Carregando produtos...</option>
-                      ) : produtos.length === 0 ? (
-                        <option disabled>Nenhum produto encontrado</option>
-                      ) : (
-                        produtos.map((p: Produto) => (
-                          <option key={p.id} value={p.id}>{p.produto_nome}</option>
-                        ))
-                      )}
-                    </select>
-                  </td>
-                  <td className="px-4 py-2">
-                    <input
-                      type="number"
-                      min="1"
-                      value={item.quantidade}
-                      onChange={(e) => updateItem(index, 'quantidade', e.target.value)}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-                    />
-                  </td>
-                  <td className="px-4 py-2">
-                    <div className="relative">
-                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500 text-xs">R$</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={item.custo_unitario}
-                        disabled
-                        className="w-full pl-6 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 cursor-not-allowed opacity-100"
+              {itens.map((item, index) => {
+                const selectedProduct = produtos.find(p => p.id === item.produto_cadastrado_id);
+                return (
+                  <tr key={index}>
+                    <td className="px-4 py-2">
+                      <ProductSelector
+                        value={item.produto_cadastrado_id || ''}
+                        onChange={(val) => updateItem(index, 'produto_cadastrado_id', val)}
+                        products={produtos}
+                        isLoading={isLoadingProdutos}
                       />
-                    </div>
-                  </td>
-                  <td className="px-4 py-2">
-                    <div className="relative">
-                      <select
-                        value={item.margem_percentual}
-                        onChange={(e) => updateItem(index, 'margem_percentual', e.target.value)}
-                        className="w-full pl-3 pr-12 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white appearance-none"
+                    </td>
+                    <td className="px-4 py-2">
+                      <div className="flex flex-col">
+                        <input
+                          type="number"
+                          min="1"
+                          max={selectedProduct?.qtd_estoque}
+                          value={item.quantidade}
+                          onChange={(e) => updateItem(index, 'quantidade', e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                        />
+                        {selectedProduct && (
+                          <span className="text-xs text-gray-500 mt-1">
+                            Max: {selectedProduct.qtd_estoque}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-2">
+                      <div className="relative">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500 text-xs">R$</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.custo_unitario}
+                          disabled
+                          className="w-full pl-6 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 cursor-not-allowed opacity-100"
+                        />
+                      </div>
+                    </td>
+                    <td className="px-4 py-2">
+                      <div className="relative">
+                        <select
+                          value={item.margem_percentual}
+                          onChange={(e) => updateItem(index, 'margem_percentual', e.target.value)}
+                          className="w-full pl-3 pr-12 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white appearance-none"
+                        >
+                          {MARGIN_OPTIONS.map(m => (
+                            <option key={m} value={m}>{m}%</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+                      </div>
+                    </td>
+                    <td className="px-4 py-2">
+                      <div className="text-sm font-medium text-gray-900 dark:text-white">
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.valor_venda_unitario || 0)}
+                      </div>
+                    </td>
+                    <td className="px-4 py-2">
+                      <div className="text-sm font-bold text-gray-900 dark:text-white">
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.valor_total || 0)}
+                      </div>
+                    </td>
+                    <td className="px-4 py-2 text-center">
+                      <button
+                        onClick={() => removerItem(index)}
+                        className="text-gray-400 hover:text-red-500 transition-colors"
                       >
-                        {MARGIN_OPTIONS.map(m => (
-                          <option key={m} value={m}>{m}%</option>
-                        ))}
-                      </select>
-                      <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
-                    </div>
-                  </td>
-                  <td className="px-4 py-2">
-                    <div className="text-sm font-medium text-gray-900 dark:text-white">
-                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.valor_venda_unitario || 0)}
-                    </div>
-                  </td>
-                  <td className="px-4 py-2">
-                    <div className="text-sm font-bold text-gray-900 dark:text-white">
-                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.valor_total || 0)}
-                    </div>
-                  </td>
-                  <td className="px-4 py-2 text-center">
-                    <button
-                      onClick={() => removerItem(index)}
-                      className="text-gray-400 hover:text-red-500 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
               {itens.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">

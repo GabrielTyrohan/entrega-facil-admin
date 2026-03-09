@@ -15,10 +15,11 @@ const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false); 
   const [error, setError] = useState(''); 
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isBlocked, setIsBlocked] = useState(false); 
   const [blockTimeRemaining, setBlockTimeRemaining] = useState(0); 
 
-  const { signIn, user } = useAuth(); 
+  const { signIn, user, userProfile, isLoading: authLoading } = useAuth(); 
   const navigate = useNavigate(); 
   const location = useLocation(); 
 
@@ -36,6 +37,21 @@ const LoginPage = () => {
       } 
     } 
   }, []); 
+
+  // ===== VERIFICAR MENSAGENS DE ERRO REDIRECIONADAS =====
+  useEffect(() => {
+    const errorMsg = localStorage.getItem('loginErrorMsg');
+    if (errorMsg) {
+      if (errorMsg === 'ACESSO_DESATIVADO') {
+        setError('Seu acesso foi desativado. Entre em contato com o administrador.');
+      } else if (errorMsg === 'PAGAMENTO_INATIVO') {
+        setError('Conta bloqueada por falta de pagamento. Regularize sua assinatura.');
+      } else {
+        setError('Erro de autorização. Faça login novamente.');
+      }
+      localStorage.removeItem('loginErrorMsg');
+    }
+  }, []);
 
   // ===== COUNTDOWN DO BLOQUEIO ===== 
   useEffect(() => { 
@@ -58,11 +74,11 @@ const LoginPage = () => {
 
   // ===== REDIRECIONAR SE JÁ LOGADO ===== 
   useEffect(() => { 
-    if (user) { 
+    if (user && userProfile && !authLoading) { 
       const from = (location.state as any)?.from?.pathname || '/'; 
       navigate(from, { replace: true }); 
     } 
-  }, [user, navigate, location]); 
+  }, [user, userProfile, authLoading, navigate, location]); 
 
   // ===== SUBMIT ===== 
   const handleSubmit = async (e: React.FormEvent) => { 
@@ -95,7 +111,7 @@ const LoginPage = () => {
         setBlockTimeRemaining(blockDuration); 
         setError(`Muitas tentativas falhas. Bloqueado por ${blockDuration}s`); 
       } else { 
-        setError(err.message || 'Erro ao fazer login'); 
+        setErrorMessage('Credenciais inválidas. Verifique seu e-mail e senha.');
       } 
     } finally { 
       setIsLoading(false); 
@@ -125,7 +141,7 @@ const LoginPage = () => {
             </div>
           )}
 
-          {/* Email */}
+          {/* E-mail */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
               E-mail
@@ -133,7 +149,10 @@ const LoginPage = () => {
             <input
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setErrorMessage(null);
+              }}
               required
               disabled={isBlocked}
               className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 transition-colors"
@@ -150,7 +169,10 @@ const LoginPage = () => {
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setErrorMessage(null);
+                }}
                 required
                 disabled={isBlocked}
                 className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 transition-colors pr-10"
@@ -169,6 +191,15 @@ const LoginPage = () => {
               </button>
             </div>
           </div>
+
+          {errorMessage && (
+            <div className="flex items-center gap-2 rounded-lg border border-red-400 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M18 10A8 8 0 11 2 10a8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              <span>{errorMessage}</span>
+            </div>
+          )}
 
           {/* Botão */}
           <button

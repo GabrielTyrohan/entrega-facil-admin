@@ -1,7 +1,7 @@
-import { useSupabaseQuery } from '@/lib/supabaseCache';
-import { supabase } from '@/lib/supabase';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CACHE_KEYS } from '@/lib/constants/queryKeys';
+import { supabase } from '@/lib/supabase';
+import { useSupabaseQuery } from '@/lib/supabaseCache';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 export interface Funcionario {
   id: string;
@@ -43,19 +43,44 @@ export const useCreateFuncionario = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: any) => {
-      // Chama RPC para criar usuário no Auth e inserir na tabela
-      const { data: result, error } = await supabase.rpc('criar_funcionario', {
-        p_administrador_id: data.administrador_id,
-        p_nome: data.nome,
-        p_email: data.email,
-        p_senha: data.senha,
-        p_telefone: data.telefone,
-        p_cargo: data.cargo,
-        p_permissoes: data.permissoes
+      // Usa um cliente separado (sem persistir sessão) para não derrubar a sessão do admin
+      const { createClient } = await import('@supabase/supabase-js');
+      const tempClient = createClient(
+        import.meta.env.VITE_SUPABASE_URL,
+        import.meta.env.VITE_SUPABASE_ANON_KEY,
+        { auth: { persistSession: false, autoRefreshToken: false } }
+      );
+
+      // 1. Cria o usuário no Supabase Auth
+      const { data: authData, error: authError } = await tempClient.auth.signUp({
+        email: data.email,
+        password: data.senha,
+        options: {
+          data: { nome: data.nome, role: 'funcionario' }
+        }
       });
 
-      if (error) throw error;
-      return result;
+      if (authError) throw authError;
+      if (!authData.user) throw new Error('Falha ao criar usuário de autenticação');
+
+      // 2. Insere na tabela funcionarios vinculado ao auth_user_id
+      const { error: dbError } = await supabase
+        .from('funcionarios')
+        .insert({
+          administrador_id: data.administrador_id,
+          auth_user_id: authData.user.id,
+          nome: data.nome,
+          email: data.email,
+          telefone: data.telefone || null,
+          cargo: data.cargo || null,
+          permissoes: data.permissoes,
+          ativo: true,
+          nome_empresa: data.nome_empresa || null
+        });
+
+      if (dbError) throw dbError;
+
+      return { success: true, email: data.email };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.FUNCIONARIOS] });

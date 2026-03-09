@@ -44,7 +44,6 @@ export class VendedorService {
       .from('vendedores')
       .select('*')
       .eq('id', id)
-      .eq('administrador_id', administradorId)
       .single();
 
     if (error) {
@@ -53,6 +52,12 @@ export class VendedorService {
       }
       // Error handling without logging sensitive data
       throw new Error('Erro ao buscar vendedor');
+    }
+
+    // Verificação de segurança manual se administradorId for fornecido
+    if (administradorId && data.administrador_id !== administradorId) {
+      console.warn('Tentativa de acesso a vendedor de outro administrador');
+      return null;
     }
 
     return data;

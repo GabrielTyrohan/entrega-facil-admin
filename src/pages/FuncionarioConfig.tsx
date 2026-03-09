@@ -168,10 +168,6 @@ const FuncionarioConfig: React.FC = () => {
                 </p>
               </div>
               <div>
-                <span className="text-sm font-medium text-gray-600 dark:text-gray-400">ID do Funcionário:</span>
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">{funcionarioData?.id}</p>
-              </div>
-              <div>
                 <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Data de Cadastro:</span>
                 <p className="text-gray-900 dark:text-white">{formatDate(funcionarioData?.created_at)}</p>
               </div>

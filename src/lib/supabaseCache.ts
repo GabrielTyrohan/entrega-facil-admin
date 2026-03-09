@@ -20,6 +20,7 @@ export const useSupabaseQuery = <TData = any>(
     enabled?: boolean;
     staleTime?: number;
     gcTime?: number;
+    refetchOnMount?: boolean | "always";
   }
 ): UseQueryResult<TData, Error> & { count?: number | null } => {
   const cacheConfig = CACHE_TIMES[tableName as keyof typeof CACHE_TIMES];
@@ -40,8 +41,10 @@ export const useSupabaseQuery = <TData = any>(
     enabled: options?.enabled !== false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
+    refetchOnMount: options?.refetchOnMount,
     staleTime: options?.staleTime || (cacheConfig ? cacheConfig.staleTime : 5 * 60 * 1000),
     gcTime: options?.gcTime || (cacheConfig ? cacheConfig.gcTime : 30 * 60 * 1000),
+    retry: false // Evitar retry infinito em caso de erro 400
   };
   
   const queryResult = useQuery(queryOptions);

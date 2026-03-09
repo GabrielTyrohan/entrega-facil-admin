@@ -144,6 +144,9 @@ export interface EntregaComDetalhes {
     Bairro?: string;
     Cidade?: string;
     Estado?: string;
+    bairro?: string;
+    cidade?: string;
+    estado?: string;
     cep?: string;
     complemento?: string | null;
   };
@@ -203,7 +206,12 @@ export class EntregaService {
             cpf,
             telefone,
             email,
-            endereco
+            endereco,
+            numero,
+            "Bairro",
+          "Cidade",
+          "Estado",
+            cep
           ),
           vendedores!entregas_vendedor_id_fkey (
             nome,
@@ -257,6 +265,14 @@ export class EntregaService {
           telefone: (entrega.clientes as any).telefone || '',
           email: (entrega.clientes as any).email || null,
           endereco: (entrega.clientes as any).endereco || '',
+          numero: (entrega.clientes as any).numero || '',
+          bairro: (entrega.clientes as any).Bairro || '',
+          cidade: (entrega.clientes as any).Cidade || '',
+          estado: (entrega.clientes as any).Estado || '',
+          cep: (entrega.clientes as any).cep || '',
+          Bairro: (entrega.clientes as any).Bairro || '',
+          Cidade: (entrega.clientes as any).Cidade || '',
+          Estado: (entrega.clientes as any).Estado || '',
         } : undefined,
         vendedor: entrega.vendedores ? {
           nome: (entrega.vendedores as any).nome || '',
@@ -321,7 +337,12 @@ export class EntregaService {
             cpf,
             telefone,
             email,
-            endereco
+            endereco,
+            numero,
+            "Bairro",
+          "Cidade",
+          "Estado",
+            cep
           ),
           vendedores!entregas_vendedor_id_fkey (
             nome
@@ -374,6 +395,14 @@ export class EntregaService {
           telefone: (entrega.clientes as any).telefone || '',
           email: (entrega.clientes as any).email || null,
           endereco: (entrega.clientes as any).endereco || '',
+          numero: (entrega.clientes as any).numero || '',
+          bairro: (entrega.clientes as any).Bairro || '',
+          cidade: (entrega.clientes as any).Cidade || '',
+          estado: (entrega.clientes as any).Estado || '',
+          cep: (entrega.clientes as any).cep || '',
+          Bairro: (entrega.clientes as any).Bairro || '',
+          Cidade: (entrega.clientes as any).Cidade || '',
+          Estado: (entrega.clientes as any).Estado || '',
         } : undefined,
         vendedor: entrega.vendedores ? {
           nome: (entrega.vendedores as any).nome || '',
@@ -431,7 +460,12 @@ export class EntregaService {
           cpf,
           telefone,
           email,
-          endereco
+          endereco,
+          numero,
+          "Bairro",
+          "Cidade",
+          "Estado",
+          cep
         ),
         vendedores!entregas_vendedor_id_fkey (
           nome,
@@ -497,13 +531,21 @@ export class EntregaService {
       produto_preco: Number((entrega.produtos as any)?.preco || 0),
       // Nested objects for component compatibility
       cliente: entrega.clientes ? {
-        nome: (entrega.clientes as any).nome || '',
-        sobrenome: (entrega.clientes as any).sobrenome || null,
-        cpf: (entrega.clientes as any).cpf || '',
-        telefone: (entrega.clientes as any).telefone || '',
-        email: (entrega.clientes as any).email || null,
-        endereco: (entrega.clientes as any).endereco || '',
-      } : undefined,
+          nome: (entrega.clientes as any).nome || '',
+          sobrenome: (entrega.clientes as any).sobrenome || null,
+          cpf: (entrega.clientes as any).cpf || '',
+          telefone: (entrega.clientes as any).telefone || '',
+          email: (entrega.clientes as any).email || null,
+          endereco: (entrega.clientes as any).endereco || '',
+          numero: (entrega.clientes as any).numero || '',
+          bairro: (entrega.clientes as any).Bairro || '',
+          cidade: (entrega.clientes as any).Cidade || '',
+          estado: (entrega.clientes as any).Estado || '',
+          cep: (entrega.clientes as any).cep || '',
+          Bairro: (entrega.clientes as any).Bairro || '',
+          Cidade: (entrega.clientes as any).Cidade || '',
+          Estado: (entrega.clientes as any).Estado || '',
+        } : undefined,
       vendedor: entrega.vendedores ? {
         nome: (entrega.vendedores as any).nome || '',
       } : undefined,
@@ -664,6 +706,9 @@ export class EntregaService {
         Bairro: (entrega.clientes as any).Bairro || '',
         Cidade: (entrega.clientes as any).Cidade || '',
         Estado: (entrega.clientes as any).Estado || '',
+        bairro: (entrega.clientes as any).Bairro || '',
+        cidade: (entrega.clientes as any).Cidade || '',
+        estado: (entrega.clientes as any).Estado || '',
         cep: (entrega.clientes as any).cep || '',
         complemento: (entrega.clientes as any).complemento || null,
       } : undefined,

@@ -4,21 +4,20 @@
 // Mantendo compatibilidade com hooks legados
 // ============================================
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
-import { QUERY_KEYS, CACHE_KEYS, CACHE_TIMES } from '@/lib/constants/queryKeys';
-import { PAGINATION } from '@/lib/constants/pagination';
 import { useAuth } from '@/contexts/AuthContext';
-import { toast } from '@/utils/toast';
+import { PAGINATION } from '@/lib/constants/pagination';
+import { CACHE_KEYS, CACHE_TIMES, QUERY_KEYS } from '@/lib/constants/queryKeys';
+import { supabase } from '@/lib/supabase';
 import { useSupabaseQuery } from '@/lib/supabaseCache';
 import { handleSupabaseError } from '@/utils/supabaseErrorHandler';
+import { toast } from '@/utils/toast';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 // Interface Unificada (Mantendo campos legados para compatibilidade)
 export interface Cliente {
   id: string;
   vendedor_id: string;
   nome: string;
-  // Campos legados mantidos
   sobrenome?: string;
   cpf: string;
   rg?: string;
@@ -32,6 +31,9 @@ export interface Cliente {
   email?: string;
   endereco: string;
   numero?: string;
+  bairro?: string;
+  cidade?: string;
+  estado?: string;
   Bairro?: string;
   Cidade?: string;
   Estado?: string;
@@ -50,6 +52,16 @@ export interface Cliente {
     id: string;
     nome: string;
   };
+  tipo_pessoa?: 'PF' | 'PJ';
+  razao_social?: string;
+  nome_fantasia?: string;
+  cnpj?: string;
+  inscricao_estadual?: string;
+  inscricao_municipal?: string;
+  responsavel_pj_nome?: string;
+  responsavel_pj_cpf?: string;
+  responsavel_pj_cargo?: string;
+  responsavel_pj_telefone?: string;
 }
 
 // Interface de retorno legado (para manter compatibilidade)
@@ -92,11 +104,15 @@ export const useClientes = (
         query = query.eq('vendedor_id', vendedorId);
       }
 
-      // Busca por nome, telefone ou CPF
+      // Busca por nome, telefone ou CPF (com suporte a PJ)
       if (search) {
-        query = query.or(
-          `nome.ilike.%${search}%,telefone.ilike.%${search}%,cpf.ilike.%${search}%`
-        );
+        // Query para PF: busca em nome, sobrenome, telefone, cpf
+        const pfFilter = `and(tipo_pessoa.eq.PF,or(nome.ilike.%${search}%,sobrenome.ilike.%${search}%,telefone.ilike.%${search}%,cpf.ilike.%${search}%))`;
+        
+        // Query para PJ: busca em responsavel_pj_nome, telefone, cpf
+        const pjFilter = `and(tipo_pessoa.eq.PJ,or(responsavel_pj_nome.ilike.%${search}%,telefone.ilike.%${search}%,cpf.ilike.%${search}%))`;
+        
+        query = query.or(`${pfFilter},${pjFilter}`);
       }
 
       const { data, error, count } = await query;
@@ -236,7 +252,7 @@ export const useClientesByAdmin = (administradorId: string, options?: {
     // 2. Construir query de clientes
     let query = supabase
       .from('clientes')
-      .select('id, nome, telefone, endereco, ativo, created_at, vendedor_id, cpf, updated_at, email', { count: 'exact' })
+      .select('id, nome, sobrenome, telefone, endereco, ativo, created_at, vendedor_id, cpf, rg, data_nascimento, sexo, estado_civil, nacionalidade, nome_pai, nome_mae, nome_conjuge, menor_idade, updated_at, email, tipo_pessoa, responsavel_pj_nome, responsavel_pj_cpf, razao_social, nome_fantasia, cnpj, inscricao_estadual, inscricao_municipal, responsavel_pj_cargo, responsavel_pj_telefone, Bairro, Cidade, Estado, numero, complemento, cep, renda_mensal, ponto_referencia, sincronizado', { count: 'exact' })
       .in('vendedor_id', vendedorIds)
       .order('nome')
       .range(from, to);
@@ -251,8 +267,15 @@ export const useClientesByAdmin = (administradorId: string, options?: {
     }
 
     if (options?.search) {
-      const orFilter = `nome.ilike.%${options.search}%,email.ilike.%${options.search}%,telefone.ilike.%${options.search}%`;
-      query = query.or(orFilter);
+      // Lógica unificada para busca
+      const search = options.search;
+      // Query para PF: busca em nome, sobrenome, telefone, cpf, email
+      const pfFilter = `and(tipo_pessoa.eq.PF,or(nome.ilike.%${search}%,sobrenome.ilike.%${search}%,telefone.ilike.%${search}%,cpf.ilike.%${search}%,email.ilike.%${search}%))`;
+      
+      // Query para PJ: busca em responsavel_pj_nome, telefone, cpf, email, razao_social, nome_fantasia, cnpj
+      const pjFilter = `and(tipo_pessoa.eq.PJ,or(responsavel_pj_nome.ilike.%${search}%,telefone.ilike.%${search}%,cpf.ilike.%${search}%,email.ilike.%${search}%,razao_social.ilike.%${search}%,nome_fantasia.ilike.%${search}%,cnpj.ilike.%${search}%))`;
+      
+      query = query.or(`${pfFilter},${pjFilter}`);
     }
 
     const { data, error, count } = await query;
@@ -265,6 +288,7 @@ export const useClientesByAdmin = (administradorId: string, options?: {
     queryKey: [
       CACHE_KEYS.CLIENTES, 
       administradorId, 
+      'v2_with_sobrenome',
       { 
         ativo: options?.ativo, 
         search: options?.search,

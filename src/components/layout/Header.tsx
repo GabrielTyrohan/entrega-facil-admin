@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
 import { Menu, Moon, Sun } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -58,7 +58,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onLogout }) => {
           <div className="hidden lg:block ml-4">
             <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">{getGreeting()}</h4>
             <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
-              {(userProfile as any)?.nome_empresa || ''}
+              {userProfile?.nome_empresa || 'Empresa não configurada'}
             </h1>
           </div>
         </div>

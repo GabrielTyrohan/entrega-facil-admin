@@ -4,76 +4,68 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useUpdateCliente, type Cliente } from '../../hooks/useClientes';
 import { useVendedoresByAdmin } from '../../hooks/useVendedores';
 
-interface EditClienteModalProps {
+interface EditClientePJModalProps {
   isOpen: boolean;
   onClose: () => void;
   cliente: Cliente | null;
 }
 
-const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cliente }) => {
+const EditClientePJModal: React.FC<EditClientePJModalProps> = ({ isOpen, onClose, cliente }) => {
   const { adminId } = useAuth();
   const { data: vendedores = [] } = useVendedoresByAdmin(adminId || '');
   const updateClienteMutation = useUpdateCliente();
   const [isLoading, setIsLoading] = useState(false);
 
   const [formData, setFormData] = useState({
-    nome: '',
-    sobrenome: '',
-    cpf: '',
-    rg: '',
-    data_nascimento: '',
-    sexo: '',
-    estado_civil: '',
-    nacionalidade: '',
-    nome_pai: '',
-    nome_mae: '',
-    nome_conjuge: '',
-    renda_mensal: '',
+    razao_social: '',
+    nome_fantasia: '',
+    cnpj: '',
+    inscricao_estadual: '',
+    inscricao_municipal: '',
+    responsavel_pj_nome: '',
+    responsavel_pj_cpf: '',
+    responsavel_pj_cargo: '',
+    responsavel_pj_telefone: '',
     telefone: '',
     email: '',
-    endereco: '',
+    cep: '',
+    logradouro: '',
     numero: '',
+    complemento: '',
     bairro: '',
     cidade: '',
     estado: '',
-    cep: '',
-    complemento: '',
+    renda_mensal: '',
     ponto_referencia: '',
     vendedor_id: '',
-    menor_idade: false,
     ativo: true
   });
 
   // Populate form when cliente changes
   useEffect(() => {
     if (cliente) {
-
-      
       setFormData({
-        nome: cliente.nome || '',
-        sobrenome: cliente.sobrenome || '',
-        cpf: formatCPF(cliente.cpf || ''),
-        rg: formatRG(cliente.rg || ''),
-        data_nascimento: cliente.data_nascimento || '',
-        sexo: cliente.sexo || '',
-        estado_civil: cliente.estado_civil || '',
-        nacionalidade: cliente.nacionalidade || '',
-        nome_pai: cliente.nome_pai || '',
-        nome_mae: cliente.nome_mae || '',
-        nome_conjuge: cliente.nome_conjuge || '',
-        renda_mensal: formatCurrency(cliente.renda_mensal || 0),
+        razao_social: cliente.razao_social || cliente.nome || '',
+        nome_fantasia: cliente.nome_fantasia || cliente.sobrenome || '',
+        cnpj: formatCNPJ(cliente.cnpj || cliente.cpf || ''),
+        inscricao_estadual: cliente.inscricao_estadual || '',
+        inscricao_municipal: cliente.inscricao_municipal || '',
+        responsavel_pj_nome: cliente.responsavel_pj_nome || '',
+        responsavel_pj_cpf: formatCPF(cliente.responsavel_pj_cpf || ''),
+        responsavel_pj_cargo: cliente.responsavel_pj_cargo || '',
+        responsavel_pj_telefone: formatPhone(cliente.responsavel_pj_telefone || ''),
         telefone: formatPhone(cliente.telefone || ''),
         email: cliente.email || '',
-        endereco: cliente.endereco || '',
+        cep: formatCEP(cliente.cep || ''),
+        logradouro: cliente.endereco || '',
         numero: cliente.numero || '',
+        complemento: cliente.complemento || '',
         bairro: cliente.Bairro || cliente.bairro || '',
         cidade: cliente.Cidade || cliente.cidade || '',
         estado: cliente.Estado || cliente.estado || '',
-        cep: formatCEP(cliente.cep || ''),
-        complemento: cliente.complemento || '',
+        renda_mensal: formatCurrency(cliente.renda_mensal || 0),
         ponto_referencia: cliente.ponto_referencia || '',
         vendedor_id: cliente.vendedor_id || '',
-        menor_idade: cliente.menor_idade || false,
         ativo: cliente.ativo ?? true
       });
     }
@@ -105,20 +97,20 @@ const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cl
   };
 
   // Format functions
+  const formatCNPJ = (value: string): string => {
+    const numbers = value.replace(/\D/g, '');
+    if (numbers.length <= 14) {
+      return numbers.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+    }
+    return numbers.slice(0, 14).replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+  };
+
   const formatCPF = (value: string): string => {
     const numbers = value.replace(/\D/g, '');
     if (numbers.length <= 11) {
       return numbers.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
     }
     return numbers.slice(0, 11).replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-  };
-
-  const formatRG = (value: string): string => {
-    const numbers = value.replace(/\D/g, '');
-    if (numbers.length <= 9) {
-      return numbers.replace(/(\d{2})(\d{3})(\d{3})(\d{1})/, '$1.$2.$3-$4');
-    }
-    return numbers.slice(0, 9).replace(/(\d{2})(\d{3})(\d{3})(\d{1})/, '$1.$2.$3-$4');
   };
 
   const formatPhone = (value: string): string => {
@@ -150,19 +142,19 @@ const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cl
   };
 
   // Handle change functions
-  const handleCPFChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatCPF(e.target.value);
-    setFormData(prev => ({ ...prev, cpf: formatted }));
+  const handleCNPJChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatCNPJ(e.target.value);
+    setFormData(prev => ({ ...prev, cnpj: formatted }));
   };
 
-  const handleRGChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatRG(e.target.value);
-    setFormData(prev => ({ ...prev, rg: formatted }));
+  const handleCPFChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatCPF(e.target.value);
+    setFormData(prev => ({ ...prev, responsavel_pj_cpf: formatted }));
   };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatPhone(e.target.value);
-    setFormData(prev => ({ ...prev, telefone: formatted }));
+    setFormData(prev => ({ ...prev, [e.target.name]: formatted }));
   };
 
   const handleCEPChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -190,18 +182,37 @@ const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cl
     setIsLoading(true);
     try {
       // Desestruturar campos lowercase que NÃO existem no banco (colunas reais: Bairro, Cidade, Estado)
-      const { bairro, cidade, estado, ...restFormData } = formData;
+      const { bairro, cidade, estado, logradouro, ...restFormData } = formData;
 
       const dataToUpdate = {
-        ...restFormData,
-        renda_mensal: parseCurrency(formData.renda_mensal),
-        cpf: formData.cpf.replace(/\D/g, ''),
-        rg: formData.rg.replace(/\D/g, ''),
-        telefone: formData.telefone.replace(/\D/g, ''),
-        cep: formData.cep.replace(/\D/g, ''),
+        razao_social: restFormData.razao_social,
+        nome_fantasia: restFormData.nome_fantasia,
+        // Also update legacy fields for compatibility
+        nome: restFormData.razao_social,
+        sobrenome: restFormData.nome_fantasia,
+        cnpj: restFormData.cnpj.replace(/\D/g, ''),
+        // CPF field is used as fallback for CNPJ in some legacy logic
+        cpf: restFormData.cnpj.replace(/\D/g, ''),
+        inscricao_estadual: restFormData.inscricao_estadual,
+        inscricao_municipal: restFormData.inscricao_municipal,
+        responsavel_pj_nome: restFormData.responsavel_pj_nome,
+        responsavel_pj_cpf: restFormData.responsavel_pj_cpf.replace(/\D/g, ''),
+        responsavel_pj_cargo: restFormData.responsavel_pj_cargo,
+        responsavel_pj_telefone: restFormData.responsavel_pj_telefone.replace(/\D/g, ''),
+        telefone: restFormData.telefone.replace(/\D/g, ''),
+        email: restFormData.email,
+        cep: restFormData.cep.replace(/\D/g, ''),
+        endereco: logradouro,
+        numero: restFormData.numero,
+        complemento: restFormData.complemento,
         Bairro: bairro,
         Cidade: cidade,
-        Estado: estado
+        Estado: estado,
+        renda_mensal: parseCurrency(restFormData.renda_mensal),
+        ponto_referencia: restFormData.ponto_referencia,
+        vendedor_id: restFormData.vendedor_id,
+        ativo: restFormData.ativo,
+        tipo_pessoa: 'PJ' as const
       };
 
       await updateClienteMutation.mutateAsync({
@@ -211,7 +222,7 @@ const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cl
 
       onClose();
     } catch (error) {
-      console.error('Erro ao atualizar cliente:', error);
+      console.error('Erro ao atualizar cliente PJ:', error);
     } finally {
       setIsLoading(false);
     }
@@ -227,7 +238,7 @@ const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cl
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Editar Cliente
+            Editar Cliente (PJ)
           </h2>
           <button
             onClick={onClose}
@@ -238,20 +249,20 @@ const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cl
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Informações Básicas */}
+          {/* Dados da Empresa */}
           <div>
             <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Informações Básicas
+              Dados da Empresa
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
+              <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Nome *
+                  Razão Social *
                 </label>
                 <input
                   type="text"
-                  name="nome"
-                  value={formData.nome}
+                  name="razao_social"
+                  value={formData.razao_social}
                   onChange={handleInputChange}
                   required
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
@@ -260,12 +271,12 @@ const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cl
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Sobrenome
+                  Nome Fantasia
                 </label>
                 <input
                   type="text"
-                  name="sobrenome"
-                  value={formData.sobrenome}
+                  name="nome_fantasia"
+                  value={formData.nome_fantasia}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                 />
@@ -273,42 +284,28 @@ const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cl
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  CPF
+                  CNPJ *
                 </label>
                 <input
                   type="text"
-                  name="cpf"
-                  value={formData.cpf}
-                  onChange={handleCPFChange}
-                  placeholder="000.000.000-00"
-                  maxLength={14}
+                  name="cnpj"
+                  value={formData.cnpj}
+                  onChange={handleCNPJChange}
+                  required
+                  placeholder="00.000.000/0000-00"
+                  maxLength={18}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  RG
+                  Inscrição Estadual
                 </label>
                 <input
                   type="text"
-                  name="rg"
-                  value={formData.rg}
-                  onChange={handleRGChange}
-                  placeholder="00.000.000-0"
-                  maxLength={12}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Data de Nascimento
-                </label>
-                <input
-                  type="date"
-                  name="data_nascimento"
-                  value={formData.data_nascimento}
+                  name="inscricao_estadual"
+                  value={formData.inscricao_estadual}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                 />
@@ -316,70 +313,12 @@ const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cl
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Sexo
-                </label>
-                <select
-                  name="sexo"
-                  value={formData.sexo}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                >
-                  <option value="">Selecione</option>
-                  <option value="M">Masculino</option>
-                  <option value="F">Feminino</option>
-                  <option value="O">Outro</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Estado Civil
-                </label>
-                <select
-                  name="estado_civil"
-                  value={formData.estado_civil}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                >
-                  <option value="">Selecione</option>
-                  <option value="Solteiro">Solteiro(a)</option>
-                  <option value="Casado">Casado(a)</option>
-                  <option value="Divorciado">Divorciado(a)</option>
-                  <option value="Viúvo">Viúvo(a)</option>
-                  <option value="União Estável">União Estável</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Nacionalidade
+                  Inscrição Municipal
                 </label>
                 <input
                   type="text"
-                  name="nacionalidade"
-                  value={formData.nacionalidade}
-                  onChange={handleInputChange}
-                  placeholder="Brasileira"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Informações Familiares */}
-          <div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Informações Familiares
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Nome do Pai
-                </label>
-                <input
-                  type="text"
-                  name="nome_pai"
-                  value={formData.nome_pai}
+                  name="inscricao_municipal"
+                  value={formData.inscricao_municipal}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                 />
@@ -387,55 +326,7 @@ const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cl
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Nome da Mãe
-                </label>
-                <input
-                  type="text"
-                  name="nome_mae"
-                  value={formData.nome_mae}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Nome do Cônjuge
-                </label>
-                <input
-                  type="text"
-                  name="nome_conjuge"
-                  value={formData.nome_conjuge}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                />
-              </div>
-
-              <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Renda Mensal
-                  </label>
-                  <input
-                    type="text"
-                    name="renda_mensal"
-                    value={formData.renda_mensal}
-                    onChange={handleCurrencyChange}
-                    placeholder="R$ 0,00"
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                  />
-                </div>
-            </div>
-          </div>
-
-          {/* Contato e Endereço */}
-          <div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Contato e Endereço
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Telefone
+                  Telefone Empresa
                 </label>
                 <input
                   type="text"
@@ -450,7 +341,7 @@ const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cl
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Email
+                  Email Empresa
                 </label>
                 <input
                   type="email"
@@ -460,7 +351,79 @@ const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cl
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                 />
               </div>
+            </div>
+          </div>
 
+          {/* Dados do Responsável */}
+          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+              Dados do Responsável
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Nome do Responsável
+                </label>
+                <input
+                  type="text"
+                  name="responsavel_pj_nome"
+                  value={formData.responsavel_pj_nome}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Cargo
+                </label>
+                <input
+                  type="text"
+                  name="responsavel_pj_cargo"
+                  value={formData.responsavel_pj_cargo}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  CPF do Responsável
+                </label>
+                <input
+                  type="text"
+                  name="responsavel_pj_cpf"
+                  value={formData.responsavel_pj_cpf}
+                  onChange={handleCPFChange}
+                  placeholder="000.000.000-00"
+                  maxLength={14}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Telefone do Responsável
+                </label>
+                <input
+                  type="text"
+                  name="responsavel_pj_telefone"
+                  value={formData.responsavel_pj_telefone}
+                  onChange={handlePhoneChange}
+                  placeholder="(00) 00000-0000"
+                  maxLength={15}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Endereço */}
+          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+              Endereço
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   CEP
@@ -476,14 +439,14 @@ const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cl
                 />
               </div>
 
-              <div className="md:col-span-2">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Endereço
+                  Logradouro
                 </label>
                 <input
                   type="text"
-                  name="endereco"
-                  value={formData.endereco}
+                  name="logradouro"
+                  value={formData.logradouro}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                 />
@@ -502,47 +465,7 @@ const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cl
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Bairro
-                  </label>
-                  <input
-                    type="text"
-                    name="Bairro"
-                    value={formData.bairro}
-                    onChange={(e) => setFormData(prev => ({ ...prev, bairro: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Cidade
-                  </label>
-                  <input
-                    type="text"
-                    name="Cidade"
-                    value={formData.cidade}
-                    onChange={(e) => setFormData(prev => ({ ...prev, cidade: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Estado
-                  </label>
-                  <input
-                    type="text"
-                    name="Estado"
-                    value={formData.estado}
-                    onChange={(e) => setFormData(prev => ({ ...prev, estado: e.target.value }))}
-                    maxLength={2}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white uppercase"
-                  />
-                </div>
-              </div>
-
-              <div className="md:col-span-2">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Complemento
                 </label>
@@ -555,9 +478,70 @@ const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cl
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Bairro
+                </label>
+                <input
+                  type="text"
+                  name="bairro"
+                  value={formData.bairro}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Cidade
+                </label>
+                <input
+                  type="text"
+                  name="cidade"
+                  value={formData.cidade}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Estado
+                </label>
+                <input
+                  type="text"
+                  name="estado"
+                  value={formData.estado}
+                  onChange={handleInputChange}
+                  maxLength={2}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white uppercase"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Outras Informações */}
+          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+              Outras Informações
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Faturamento Mensal
+                </label>
+                <input
+                  type="text"
+                  name="renda_mensal"
+                  value={formData.renda_mensal}
+                  onChange={handleCurrencyChange}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                />
+              </div>
+
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Ponto de Referência
+                  Ponto de Referência / Observações
                 </label>
                 <input
                   type="text"
@@ -571,7 +555,7 @@ const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cl
           </div>
 
           {/* Configurações */}
-          <div>
+          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
             <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
               Configurações
             </h3>
@@ -596,32 +580,17 @@ const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cl
                 </select>
               </div>
 
-              <div className="space-y-4">
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    name="menor_idade"
-                    checked={formData.menor_idade}
-                    onChange={handleInputChange}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <label className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
-                    Menor de idade
-                  </label>
-                </div>
-
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    name="ativo"
-                    checked={formData.ativo}
-                    onChange={handleInputChange}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <label className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
-                    Cliente ativo
-                  </label>
-                </div>
+              <div className="flex items-center mt-6">
+                <input
+                  type="checkbox"
+                  name="ativo"
+                  checked={formData.ativo}
+                  onChange={handleInputChange}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                  Cliente ativo
+                </label>
               </div>
             </div>
           </div>
@@ -649,4 +618,4 @@ const EditClienteModal: React.FC<EditClienteModalProps> = ({ isOpen, onClose, cl
   );
 };
 
-export default EditClienteModal;
+export default EditClientePJModal;

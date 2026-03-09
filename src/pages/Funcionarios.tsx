@@ -1,26 +1,23 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Key, ShieldAlert } from 'lucide-react';
+import FuncionarioModal from '@/components/FuncionarioModal';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
   DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Pagination } from '@/components/ui/pagination';
-import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/Modal";
-import FuncionarioModal from '@/components/FuncionarioModal';
-import { 
-  useFuncionarios, 
-  useToggleFuncionarioStatus,
-  useResetFuncionarioPassword,
-  type Funcionario 
-} from '@/hooks/useFuncionarios';
-import { PAGINATION } from '@/lib/constants/pagination';
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  useFuncionarios,
+  useToggleFuncionarioStatus,
+  type Funcionario
+} from '@/hooks/useFuncionarios';
+import { PAGINATION } from '@/lib/constants/pagination';
 import { toast } from '@/utils/toast';
+import { Edit, MoreHorizontal, Plus, Search, ShieldAlert, Trash2 } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 const Funcionarios: React.FC = () => {
   const { user, userType } = useAuth();
@@ -34,16 +31,10 @@ const Funcionarios: React.FC = () => {
   useEffect(() => {
     setCurrentPage(0);
   }, [searchTerm]);
-  
-  // States for Password Reset
-  const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
-  const [newPassword, setNewPassword] = useState('');
-  const [funcionarioToReset, setFuncionarioToReset] = useState<Funcionario | null>(null);
 
   // Queries and Mutations
   const { data: funcionarios = [], isLoading } = useFuncionarios(user?.id);
   const toggleStatusMutation = useToggleFuncionarioStatus();
-  const resetPasswordMutation = useResetFuncionarioPassword();
 
   // Filter and Pagination
   const filteredFuncionarios = useMemo(() => {
@@ -79,38 +70,7 @@ const Funcionarios: React.FC = () => {
     }
   };
 
-  const handleOpenResetPassword = (funcionario: Funcionario) => {
-    setFuncionarioToReset(funcionario);
-    setNewPassword('');
-    setIsResetPasswordOpen(true);
-  };
-
-  const handleResetPassword = async () => {
-    if (!funcionarioToReset || !newPassword) return;
-    
-    try {
-      await resetPasswordMutation.mutateAsync({
-        id: funcionarioToReset.id,
-        senha: newPassword
-      });
-      toast.success('Senha redefinida com sucesso!');
-      setIsResetPasswordOpen(false);
-    } catch (error) {
-      toast.error('Erro ao redefinir senha');
-      console.error(error);
-    }
-  };
-
-  const generateRandomPassword = () => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
-    let password = '';
-    for (let i = 0; i < 12; i++) {
-      password += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    setNewPassword(password);
-  };
-
-  if (userType !== 'admin') {
+  if (userType !== 'admin' && userType !== 'funcionario') {
     return (
       <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
         <ShieldAlert className="w-16 h-16 mb-4" />
@@ -128,137 +88,138 @@ const Funcionarios: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Funcionários</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">Gerencie sua equipe e permissões de acesso</p>
         </div>
-        <button
-          onClick={() => {
-            setSelectedFuncionario(null);
-            setIsModalOpen(true);
-          }}
-          className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg transition-colors shadow-sm hover:shadow-md"
-        >
-          <Plus size={20} />
-          <span>Novo Funcionário</span>
-        </button>
+        <div className="flex gap-3">
+          {userType === 'admin' && (
+            <button
+              onClick={() => {
+                setSelectedFuncionario(null);
+                setIsModalOpen(true);
+              }}
+              className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg transition-colors shadow-sm hover:shadow-md"
+            >
+              <Plus size={20} />
+              <span>Novo Funcionário</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" size={20} />
-          <input
-            type="text"
-            placeholder="Buscar por nome, email ou cargo..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
-          />
-        </div>
-      </div>
+          <div className="flex items-center gap-4 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" size={20} />
+              <input
+                type="text"
+                placeholder="Buscar por nome, email ou cargo..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+              />
+            </div>
+          </div>
 
-      {/* Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-700">
-              <tr>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Nome</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Email / Telefone</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cargo</th>
-                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-              {isLoading ? (
-                [...Array(5)].map((_, i) => (
-                  <tr key={i}>
-                    <td className="px-6 py-4"><Skeleton className="h-4 w-32 dark:bg-gray-700" /></td>
-                    <td className="px-6 py-4"><Skeleton className="h-4 w-40 dark:bg-gray-700" /></td>
-                    <td className="px-6 py-4"><Skeleton className="h-4 w-24 dark:bg-gray-700" /></td>
-                    <td className="px-6 py-4"><Skeleton className="h-6 w-16 mx-auto dark:bg-gray-700" /></td>
-                    <td className="px-6 py-4"><Skeleton className="h-8 w-8 ml-auto dark:bg-gray-700" /></td>
+          {/* Table */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-700">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Nome</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Email / Telefone</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cargo</th>
+                    <th className="px-6 py-4 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ações</th>
                   </tr>
-                ))
-              ) : funcionarios.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-16 text-center text-gray-500 dark:text-gray-400">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <span className="text-lg font-medium text-gray-900 dark:text-gray-100">Não existem funcionários cadastrados</span>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">Clique no botão "Novo Funcionário" para adicionar o primeiro membro da equipe.</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : currentItems.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
-                    Nenhum funcionário encontrado na busca.
-                  </td>
-                </tr>
-              ) : (
-                currentItems.map((func: Funcionario) => (
-                  <tr key={func.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-gray-900 dark:text-white">{func.nome}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="text-gray-900 dark:text-gray-200">{func.email}</span>
-                        {func.telefone && <span className="text-xs text-gray-500 dark:text-gray-400">{func.telefone}</span>}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200">
-                        {func.cargo || 'Não informado'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        func.ativo 
-                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400' 
-                          : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                      }`}>
-                        {func.ativo ? 'Ativo' : 'Inativo'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors outline-none">
-                          <MoreHorizontal size={18} className="text-gray-500 dark:text-gray-400" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48 dark:bg-gray-800 dark:border-gray-700">
-                          <DropdownMenuItem onClick={() => handleEdit(func)} className="gap-2 cursor-pointer dark:focus:bg-gray-700 dark:text-gray-200">
-                            <Edit size={16} /> Editar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleOpenResetPassword(func)} className="gap-2 cursor-pointer dark:focus:bg-gray-700 dark:text-gray-200">
-                            <Key size={16} /> Redefinir Senha
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator className="dark:bg-gray-700" />
-                          <DropdownMenuItem 
-                            onClick={() => handleToggleStatus(func)} 
-                            className={`gap-2 cursor-pointer dark:focus:bg-gray-700 ${func.ativo ? 'text-red-600 focus:text-red-600 dark:text-red-400 dark:focus:text-red-400' : 'text-emerald-600 focus:text-emerald-600 dark:text-emerald-400 dark:focus:text-emerald-400'}`}
-                          >
-                            <Trash2 size={16} /> {func.ativo ? 'Desativar' : 'Ativar'}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {isLoading ? (
+                    [...Array(5)].map((_, i) => (
+                      <tr key={i}>
+                        <td className="px-6 py-4"><Skeleton className="h-4 w-32 dark:bg-gray-700" /></td>
+                        <td className="px-6 py-4"><Skeleton className="h-4 w-40 dark:bg-gray-700" /></td>
+                        <td className="px-6 py-4"><Skeleton className="h-4 w-24 dark:bg-gray-700" /></td>
+                        <td className="px-6 py-4"><Skeleton className="h-6 w-16 mx-auto dark:bg-gray-700" /></td>
+                        <td className="px-6 py-4"><Skeleton className="h-8 w-8 ml-auto dark:bg-gray-700" /></td>
+                      </tr>
+                    ))
+                  ) : funcionarios.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-16 text-center text-gray-500 dark:text-gray-400">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <span className="text-lg font-medium text-gray-900 dark:text-gray-100">Não existem funcionários cadastrados</span>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">Clique no botão "Novo Funcionário" para adicionar o primeiro membro da equipe.</p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : currentItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                        Nenhum funcionário encontrado na busca.
+                      </td>
+                    </tr>
+                  ) : (
+                    currentItems.map((func: Funcionario) => (
+                      <tr key={func.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/50 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="font-medium text-gray-900 dark:text-white">{func.nome}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="text-gray-900 dark:text-gray-200">{func.email}</span>
+                            {func.telefone && <span className="text-xs text-gray-500 dark:text-gray-400">{func.telefone}</span>}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200">
+                            {func.cargo || 'Não informado'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            func.ativo 
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400' 
+                              : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                          }`}>
+                            {func.ativo ? 'Ativo' : 'Inativo'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors outline-none">
+                              <MoreHorizontal size={18} className="text-gray-500 dark:text-gray-400" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48 dark:bg-gray-800 dark:border-gray-700">
+                              <DropdownMenuItem onClick={() => handleEdit(func)} className="gap-2 cursor-pointer dark:focus:bg-gray-700 dark:text-gray-200">
+                                <Edit size={16} /> Editar
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator className="dark:bg-gray-700" />
+                              <DropdownMenuItem 
+                                onClick={() => handleToggleStatus(func)} 
+                                className={`gap-2 cursor-pointer dark:focus:bg-gray-700 ${func.ativo ? 'text-red-600 focus:text-red-600 dark:text-red-400 dark:focus:text-red-400' : 'text-emerald-600 focus:text-emerald-600 dark:text-emerald-400 dark:focus:text-emerald-400'}`}
+                              >
+                                <Trash2 size={16} /> {func.ativo ? 'Desativar' : 'Ativar'}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            totalCount={filteredFuncionarios.length}
-            pageSize={itemsPerPage}
-            onPageChange={setCurrentPage}
-          />
-        )}
-      </div>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalCount={filteredFuncionarios.length}
+                pageSize={itemsPerPage}
+                onPageChange={setCurrentPage}
+              />
+            )}
+          </div>
 
       {/* Create/Edit Modal */}
       <FuncionarioModal 
@@ -269,40 +230,6 @@ const Funcionarios: React.FC = () => {
         }} 
         funcionarioToEdit={selectedFuncionario} 
       />
-
-      {/* Reset Password Dialog */}
-      <Modal 
-        isOpen={isResetPasswordOpen} 
-        onClose={() => setIsResetPasswordOpen(false)}
-        title="Redefinir Senha"
-      >
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <label htmlFor="new-password" className="text-sm font-medium text-gray-700 dark:text-gray-300">Nova Senha</label>
-            <div className="flex gap-2">
-              <input 
-                id="new-password" 
-                type="text" 
-                value={newPassword} 
-                onChange={(e) => setNewPassword(e.target.value)} 
-                placeholder="Digite a nova senha"
-                className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
-              />
-              <Button variant="outline" onClick={generateRandomPassword} title="Gerar senha aleatória" className="dark:bg-gray-700 dark:text-white dark:border-gray-600 dark:hover:bg-gray-600">
-                <Key size={16} />
-              </Button>
-            </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              O funcionário deverá usar esta senha para fazer login.
-            </p>
-          </div>
-          
-          <div className="flex justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setIsResetPasswordOpen(false)} className="dark:bg-gray-700 dark:text-white dark:border-gray-600 dark:hover:bg-gray-600">Cancelar</Button>
-            <Button onClick={handleResetPassword} disabled={!newPassword}>Salvar Nova Senha</Button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 };

@@ -6,8 +6,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Calendar, Eye, MapPin, MoreHorizontal, Package, Search, Trash2, User } from 'lucide-react';
+import { Calendar, Eye, MapPin, MoreHorizontal, Package, Plus, Search, Trash2, User } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import EntregaModal from '../components/ui/EntregaModal';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -22,6 +23,7 @@ import {
 import { EntregaComDetalhes, EntregaService } from '../services/entregaService';
 
 const Entregas: React.FC = () => {
+  const navigate = useNavigate();
   const { adminId } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedVendedor, setSelectedVendedor] = useState<string>('');
@@ -337,6 +339,13 @@ const Entregas: React.FC = () => {
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Entregas</h1>
           <p className="text-gray-600 dark:text-gray-400">Gerencie suas entregas</p>
         </div>
+        <button
+          onClick={() => navigate('/entregas/nova')}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+        >
+          <Plus className="w-5 h-5" />
+          <span>Nova Entrega</span>
+        </button>
       </div>
 
       {/* Filtros */}

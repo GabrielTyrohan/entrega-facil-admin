@@ -1,54 +1,72 @@
+import { NovoClienteModal } from '@/components/NovoClienteModal';
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { PAGINATION } from '@/lib/constants/pagination';
-import { Edit, Eye, MoreHorizontal, Search, Trash2 } from 'lucide-react';
+import { Edit, Eye, MoreHorizontal, Search, Trash2, UserPlus } from 'lucide-react';
 import React, { useState } from 'react';
 import ClienteModal from '../components/ui/ClienteModal';
+import ClientePJModal from '../components/ui/ClientePJModal';
 import EditClienteModal from '../components/ui/EditClienteModal';
+import EditClientePJModal from '../components/ui/EditClientePJModal';
 import { useAuth } from '../contexts/AuthContext';
 import {
-    useClientesByAdmin,
-    useDeleteCliente,
-    type Cliente
+  useClientesByAdmin,
+  useDeleteCliente,
+  type Cliente
 } from '../hooks/useClientes';
 import {
-    useVendedoresByAdmin,
-    type Vendedor
+  useVendedoresByAdmin,
+  type Vendedor
 } from '../hooks/useVendedores';
 
 const Clientes: React.FC = () => {
   const { adminId } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [selectedVendedor, setSelectedVendedor] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(0);
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isNovoClienteOpen, setIsNovoClienteOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [clienteToEdit, setClienteToEdit] = useState<Cliente | null>(null);
   const itemsPerPage = PAGINATION.BACKEND_PAGE_SIZE;
   const [clienteParaExcluir, setClienteParaExcluir] = useState<Cliente | null>(null);
 
+  // Debounce para busca
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
   // Usar hooks de cache para buscar dados
   const { 
-    data: clientesData = [], 
-    isLoading, 
-    error,
-    refetch,
-    totalPages,
-    totalCount
+    data: clientesDataFiltered = [], 
+    isLoading: isLoadingFiltered, 
+    error: errorFiltered,
+    refetch: refetchFiltered,
+    totalPages: totalPagesFiltered,
+    totalCount: totalCountFiltered
   } = useClientesByAdmin(adminId || '', {
     enabled: !!adminId,
     page: currentPage,
     pageSize: itemsPerPage,
-    search: searchTerm || undefined,
+    search: debouncedSearchTerm || undefined,
     vendedor_id: selectedVendedor || undefined
   });
+
+  // Alias variables to satisfy linter usage checks
+  // They are used in render but linter might miss them if used only in JSX
+  const _error = errorFiltered;
+  const _refetch = refetchFiltered;
 
   // Buscar vendedores do admin
   const { 
@@ -56,7 +74,9 @@ const Clientes: React.FC = () => {
   } = useVendedoresByAdmin(adminId || '');
 
   // Tipar os dados corretamente
-  const clientes = clientesData as Cliente[];
+  const clientes = clientesDataFiltered as Cliente[];
+  const isLoadingFinal = isLoadingFiltered;
+  const totalCountFinal = totalCountFiltered;
   const vendedores = vendedoresData as Vendedor[];
   
   // Scroll to top
@@ -67,7 +87,7 @@ const Clientes: React.FC = () => {
   // Reset page
   React.useEffect(() => {
     setCurrentPage(0);
-  }, [searchTerm, selectedVendedor]);
+  }, [debouncedSearchTerm, selectedVendedor]);
 
   // Dados já filtrados e paginados pelo hook
   const currentClientes = clientes; 
@@ -128,7 +148,7 @@ const Clientes: React.FC = () => {
     }
   };
 
-  if (isLoading) {
+  if (isLoadingFinal) {
     return (
       <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -202,7 +222,7 @@ const Clientes: React.FC = () => {
     );
   }
 
-  if (error) {
+  if (_error) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
@@ -221,7 +241,7 @@ const Clientes: React.FC = () => {
               Ocorreu um erro ao buscar os clientes. Tente novamente.
             </p>
             <button 
-              onClick={() => refetch()}
+              onClick={() => _refetch()}
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
             >
               Tentar Novamente
@@ -234,10 +254,19 @@ const Clientes: React.FC = () => {
   return (
     <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Clientes</h1>
-          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">Gerencie seus clientes</p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Clientes</h1>
+            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">Gerencie seus clientes</p>
+          </div>
         </div>
+        <button
+          onClick={() => setIsNovoClienteOpen(true)}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors shadow-sm hover:shadow-md w-full sm:w-auto justify-center"
+        >
+          <UserPlus size={20} />
+          <span>Novo Cliente</span>
+        </button>
       </div>
 
       {/* Filtros */}
@@ -271,7 +300,7 @@ const Clientes: React.FC = () => {
         {/* Informações de paginação */}
         <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
           <span>
-             {totalCount !== undefined ? `${totalCount} clientes encontrados` : 'Carregando...'}
+             {totalCountFinal !== undefined ? `${totalCountFinal} clientes encontrados` : 'Carregando...'}
           </span>
           <span>
             {itemsPerPage} por página
@@ -279,8 +308,21 @@ const Clientes: React.FC = () => {
         </div>
       </div>
 
+      {/* Estado de erro */}
+      {_error && (
+        <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-lg mb-4 flex items-center justify-between">
+          <span>Erro ao carregar clientes. Tente novamente.</span>
+          <button 
+            onClick={() => _refetch()}
+            className="text-sm font-medium hover:underline"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      )}
+
       {/* Tabela de Clientes */}
-      <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}>
+      <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden ${isLoadingFinal ? 'opacity-50 pointer-events-none' : ''}`}>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[800px]">
             <thead className="bg-gray-50 dark:bg-gray-700">
@@ -328,10 +370,9 @@ const Clientes: React.FC = () => {
                         </div>
                         <div className="ml-3 min-w-0 flex-1">
                           <div className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                            {cliente.nome}
-                          </div>
-                          <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">
-                            ID: {cliente.id.slice(0, 8)}...
+                          {cliente.tipo_pessoa === 'PJ'
+                            ? cliente.responsavel_pj_nome
+                            : `${cliente.nome}${cliente.sobrenome ? ' ' + cliente.sobrenome : ''}`}
                           </div>
                           {/* Mobile-only info */}
                           <div className="sm:hidden mt-1 space-y-1">
@@ -350,7 +391,7 @@ const Clientes: React.FC = () => {
                     </td>
                     <td className="px-3 sm:px-6 py-3 sm:py-4 hidden lg:table-cell">
                       <div className="text-sm text-gray-900 dark:text-white max-w-xs truncate">
-                        {`${cliente.endereco || ''}${cliente.numero ? `, ${cliente.numero}` : ''}${cliente.Bairro ? `, ${cliente.Bairro}` : ''}${cliente.Cidade ? `, ${cliente.Cidade}` : ''}${cliente.Estado ? ` - ${cliente.Estado}` : ''}${cliente.cep ? `, CEP: ${cliente.cep}` : ''}${cliente.complemento ? `, ${cliente.complemento}` : ''}`.replace(/^, /g, '') || 'N/A'}
+                        {`${cliente.endereco || ''}${cliente.numero ? `, ${cliente.numero}` : ''}${cliente.Bairro || cliente.bairro ? `, ${cliente.Bairro || cliente.bairro}` : ''}${cliente.Cidade || cliente.cidade ? `, ${cliente.Cidade || cliente.cidade}` : ''}${cliente.Estado || cliente.estado ? ` - ${cliente.Estado || cliente.estado}` : ''}${cliente.cep ? `, CEP: ${cliente.cep}` : ''}${cliente.complemento ? `, ${cliente.complemento}` : ''}`.replace(/^, /g, '') || 'N/A'}
                       </div>
                     </td>
                     <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden md:table-cell">
@@ -396,37 +437,65 @@ const Clientes: React.FC = () => {
       </div>
 
       {/* Paginação */}
-      <div className="flex justify-center px-4">
-        {totalPages > 0 && (
+      {totalPagesFiltered > 1 && (
+        <div className="mt-4 flex justify-center">
           <Pagination
             currentPage={currentPage}
-            totalPages={totalPages || 0}
-            totalCount={totalCount || 0}
-            pageSize={itemsPerPage}
+            totalPages={totalPagesFiltered}
             onPageChange={setCurrentPage}
-            isLoading={isLoading}
+            totalCount={totalCountFinal || 0}
+            pageSize={itemsPerPage}
+            isLoading={isLoadingFinal}
           />
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Modal de visualização do cliente */}
-      <ClienteModal
-        cliente={selectedCliente}
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setSelectedCliente(null);
-        }}
-      />
+      {selectedCliente?.tipo_pessoa === 'PJ' ? (
+        <ClientePJModal
+          cliente={selectedCliente}
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false);
+            setSelectedCliente(null);
+          }}
+        />
+      ) : (
+        <ClienteModal
+          cliente={selectedCliente}
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false);
+            setSelectedCliente(null);
+          }}
+        />
+      )}
 
       {/* Modal de edição do cliente */}
-      <EditClienteModal
-        cliente={clienteToEdit}
-        isOpen={isEditModalOpen}
-        onClose={() => {
-          setIsEditModalOpen(false);
-          setClienteToEdit(null);
-        }}
+      {clienteToEdit?.tipo_pessoa === 'PJ' ? (
+        <EditClientePJModal
+          cliente={clienteToEdit}
+          isOpen={isEditModalOpen}
+          onClose={() => {
+            setIsEditModalOpen(false);
+            setClienteToEdit(null);
+          }}
+        />
+      ) : (
+        <EditClienteModal
+          cliente={clienteToEdit}
+          isOpen={isEditModalOpen}
+          onClose={() => {
+            setIsEditModalOpen(false);
+            setClienteToEdit(null);
+          }}
+        />
+      )}
+
+      {/* Modal de novo cliente */}
+      <NovoClienteModal 
+        isOpen={isNovoClienteOpen} 
+        onClose={() => setIsNovoClienteOpen(false)} 
       />
 
       {clienteParaExcluir && (

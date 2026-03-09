@@ -18,6 +18,7 @@ export interface Permissoes {
   funcionarios: boolean;
   vendedores: boolean;
   configuracoes: boolean;
+  configuracoes_fiscais: boolean;
 }
 
 export interface AdminProfile {
@@ -58,6 +59,7 @@ export interface FuncionarioProfile {
   telefone?: string;
   permissoes: Permissoes;
   ativo: boolean;
+  nome_empresa?: string;
 }
 
 export type UserType = 'admin' | 'funcionario' | null;
@@ -89,6 +91,7 @@ const ADMIN_PERMISSIONS: Permissoes = {
   funcionarios: true,
   vendedores: true,
   configuracoes: true,
+  configuracoes_fiscais: true,
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -99,13 +102,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const queryClient = useQueryClient();
 
   // ===== QUERY PARA PERFIL (com cache) ===== 
-  const { data: userProfile, isLoading: isLoadingProfile, error: profileError } = useQuery({ 
+  const { data: userProfile, error: profileError } = useQuery({ 
     queryKey: [CACHE_KEYS.USER_PROFILE, user?.id], 
     queryFn: async () => { 
       if (!user) return null; 
 
       // 1. Tentar Admin 
-      console.log('🔍 Buscando perfil de admin para:', user.id);
       const { data: admin, error: adminError } = await supabase 
         .from('administradores') 
         .select('*') 
@@ -117,26 +119,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       if (admin) { 
-        console.log('✅ Perfil de admin encontrado:', admin);
+        // Verifica se o admin está com pagamento inativo ou bloqueado
+        if (admin.status_pagamento === 'inativo' || admin.status_pagamento === 'cancelado') {
+          throw new Error('PAGAMENTO_INATIVO');
+        }
         return { ...admin, type: 'admin' } as AdminProfile & { type: 'admin' }; 
       } 
 
-      // 2. Tentar Funcionário 
-      console.log('🔍 Admin não encontrado, buscando funcionário...');
-      const { data: funcionario, error: funcError } = await supabase 
+      // 2. Tentar Funcionário — primeiro verifica se existe (independente do ativo)
+      const { data: funcionarioRaw, error: funcError } = await supabase 
         .from('funcionarios') 
         .select('*') 
         .eq('auth_user_id', user.id) 
-        .eq('ativo', true) 
         .maybeSingle(); 
 
       if (funcError) {
         console.error('❌ Erro ao buscar funcionário:', funcError);
       }
 
-      if (funcionario) { 
-        console.log('✅ Perfil de funcionário encontrado:', funcionario);
-        return { ...funcionario, type: 'funcionario' } as FuncionarioProfile & { type: 'funcionario' }; 
+      // Existe mas está desativado → erro específico
+      if (funcionarioRaw && funcionarioRaw.ativo === false) {
+        throw new Error('ACESSO_DESATIVADO');
+      }
+
+      // Existe e está ativo → retorna perfil
+      if (funcionarioRaw && funcionarioRaw.ativo === true) {
+        // O nome da empresa agora vem diretamente da tabela funcionarios (atualizado via trigger)
+        return { ...funcionarioRaw, type: 'funcionario' } as FuncionarioProfile & { type: 'funcionario' }; 
       } 
 
       console.error('❌ Nenhum perfil encontrado para o usuário');
@@ -181,15 +190,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Log para debug
   useEffect(() => {
-    console.log('🔄 AuthContext State:', { 
-      userType, 
-      adminId, 
-      isLoading: isSessionLoading || (!!user && isLoadingProfile), 
-      hasProfile: !!userProfile 
-    });
-  }, [userType, adminId, isSessionLoading, user, isLoadingProfile, userProfile]);
+  }, [userType, adminId, isSessionLoading, user, userProfile, profileError]);
 
-  const isLoading = isSessionLoading || (!!user && isLoadingProfile);
+  const isLoading = isSessionLoading || (!!user && (!userProfile && !profileError));
 
   // ===== LOGIN =====
   const signIn = async (email: string, password: string) => {
@@ -269,11 +272,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [adminId, queryClient]);
 
-  // Efeito para logout em caso de erro no perfil (não autorizado)
+  // Efeito para logout em caso de erro no perfil (não autorizado/bloqueado)
   useEffect(() => {
     if (profileError) {
       console.error('❌ Erro no perfil:', profileError);
-      toast.error('Erro de autorização. Faça login novamente.');
+      const errorMsg = (profileError as Error).message;
+
+      if (errorMsg === 'ACESSO_DESATIVADO') {
+        toast.error('Seu acesso foi desativado. Entre em contato com o administrador.');
+      } else if (errorMsg === 'PAGAMENTO_INATIVO') {
+        toast.error('Assinatura inativa. Regularize seu pagamento para acessar o sistema.');
+      } else {
+        toast.error('Erro de autorização. Faça login novamente.');
+      }
+
+      // Salva o erro provisoriamente para o LoginPage exibir em seu formulário
+      localStorage.setItem('loginErrorMsg', errorMsg);
       signOut();
     }
   }, [profileError]);

@@ -114,10 +114,54 @@ export const useDashboardSummary = (administrador_id: string, options?: { enable
 
         if (errEntregasAnteriores) throw errEntregasAnteriores;
 
-        const entregas_mes_atual = entregasAtuais?.length || 0;
-        const entregas_mes_anterior = entregasAnteriores?.length || 0;
-        const faturamento_mes_atual = entregasAtuais?.reduce((sum, e) => sum + (e.valor || 0), 0) || 0;
-        const faturamento_mes_anterior = entregasAnteriores?.reduce((sum, e) => sum + (e.valor || 0), 0) || 0;
+        // 2b. Vendas Atacado (Mês Atual e Anterior)
+        const { data: vendasAtacadoAtuais } = await supabase
+          .from('vendas_atacado')
+          .select('valor_total')
+          .eq('administrador_id', administrador_id)
+          .gte('created_at', firstDayCurrent);
+
+        const { data: vendasAtacadoAnteriores } = await supabase
+          .from('vendas_atacado')
+          .select('valor_total')
+          .eq('administrador_id', administrador_id)
+          .gte('created_at', firstDayPrevious)
+          .lte('created_at', lastDayPrevious);
+
+        const faturamento_atacado_atual = vendasAtacadoAtuais
+          ?.reduce((sum, v) => sum + (Number(v.valor_total) || 0), 0) || 0;
+        const faturamento_atacado_anterior = vendasAtacadoAnteriores
+          ?.reduce((sum, v) => sum + (Number(v.valor_total) || 0), 0) || 0;
+        const entregas_atacado_atual = vendasAtacadoAtuais?.length || 0;
+        const entregas_atacado_anterior = vendasAtacadoAnteriores?.length || 0;
+
+        // 2c. Orçamentos PJ Convertidos (Mês Atual e Anterior)
+        const { data: orcamentosAtuais } = await supabase
+          .from('orcamentos_pj')
+          .select('valor_total')
+          .eq('administrador_id', administrador_id)
+          .eq('status', 'convertido')
+          .gte('data_orcamento', firstDayCurrent);
+
+        const { data: orcamentosAnteriores } = await supabase
+          .from('orcamentos_pj')
+          .select('valor_total')
+          .eq('administrador_id', administrador_id)
+          .eq('status', 'convertido')
+          .gte('data_orcamento', firstDayPrevious)
+          .lte('data_orcamento', lastDayPrevious);
+
+        const faturamento_orcamentos_atual = orcamentosAtuais
+          ?.reduce((sum, o) => sum + (Number(o.valor_total) || 0), 0) || 0;
+        const faturamento_orcamentos_anterior = orcamentosAnteriores
+          ?.reduce((sum, o) => sum + (Number(o.valor_total) || 0), 0) || 0;
+        const entregas_orcamentos_atual = orcamentosAtuais?.length || 0;
+        const entregas_orcamentos_anterior = orcamentosAnteriores?.length || 0;
+
+        const entregas_mes_atual = (entregasAtuais?.length || 0) + entregas_atacado_atual + entregas_orcamentos_atual;
+        const entregas_mes_anterior = (entregasAnteriores?.length || 0) + entregas_atacado_anterior + entregas_orcamentos_anterior;
+        const faturamento_mes_atual = (entregasAtuais?.reduce((sum, e) => sum + (e.valor || 0), 0) || 0) + faturamento_atacado_atual + faturamento_orcamentos_atual;
+        const faturamento_mes_anterior = (entregasAnteriores?.reduce((sum, e) => sum + (e.valor || 0), 0) || 0) + faturamento_atacado_anterior + faturamento_orcamentos_anterior;
 
         // 3. Valores em Falta (Geral) - MATCHING DEVEDORES LOGIC
         // Calculates debts from overdue deliveries (dataRetorno < current month)
@@ -153,6 +197,22 @@ export const useDashboardSummary = (administrador_id: string, options?: { enable
           }
         });
 
+        // 3b. Valores em Falta de Vendas Atacado (status pendente ou parcial)
+        const { data: vendasAtacadoEmFalta } = await supabase
+          .from('vendas_atacado')
+          .select('valor_total, valor_pago')
+          .eq('administrador_id', administrador_id)
+          .in('status_pagamento', ['pendente', 'parcial', 'atrasado']);
+
+        vendasAtacadoEmFalta?.forEach((venda: any) => {
+          const total = Number(venda.valor_total) || 0;
+          const pago = Number(venda.valor_pago) || 0;
+          const debito = total - pago;
+          if (debito > 0.01) {
+            valores_em_falta += debito;
+          }
+        });
+
         // 4. Top Vendedores (Calculado)
         const { data: dadosVendedores, error: errTopVendedores } = await supabase
           .from('entregas')
@@ -183,6 +243,29 @@ export const useDashboardSummary = (administrador_id: string, options?: { enable
           const v = vendedoresMap.get(vid);
           v.total_entregas++;
           v.total_vendido += (e.valor || 0);
+        });
+
+        // 4b. Incluir Vendas Atacado no ranking de vendedores
+        const { data: vendasAtacadoVendedores } = await supabase
+          .from('vendas_atacado')
+          .select('vendedor_id, valor_total, vendedores!inner(id, nome)')
+          .eq('administrador_id', administrador_id)
+          .gte('created_at', firstDayCurrent);
+
+        vendasAtacadoVendedores?.forEach((v: any) => {
+          const vid = v.vendedores?.id;
+          if (!vid) return;
+          if (!vendedoresMap.has(vid)) {
+            vendedoresMap.set(vid, {
+              id: vid,
+              nome: v.vendedores.nome || 'Vendedor',
+              total_entregas: 0,
+              total_vendido: 0
+            });
+          }
+          const vend = vendedoresMap.get(vid);
+          vend.total_entregas += 1;
+          vend.total_vendido += Number(v.valor_total) || 0;
         });
 
         const top_vendedores = Array.from(vendedoresMap.values())
@@ -435,33 +518,68 @@ export const useValoresEmFalta = (administrador_id: string, options?: { enabled?
 };
 
 // Hook para faturamento mensal dos últimos 12 meses
-export const useFaturamentoMensal = (administrador_id: string, options?: { enabled?: boolean }) => {
+export const useFaturamentoMensal = (
+  administrador_id: string,
+  options?: { enabled?: boolean }
+) => {
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth() + 1;
-
-  // Calcular range de datas para os últimos 12 meses
   const startDate = new Date(currentYear - 1, currentMonth - 1, 1);
   const endDate = new Date(currentYear, currentMonth, 0);
+  const startStr = startDate.toISOString().split('T')[0];
+  const endStr = endDate.toISOString().split('T')[0];
 
-  const query = supabase
-    .from('pagamentos')
-    .select(`
-      valor,
-      data_pagamento,
-      entregas!inner(
-        vendedores!inner(
-          administrador_id
-        )
-      )
-    `)
-    .eq('entregas.vendedores.administrador_id', administrador_id)
-    .gte('data_pagamento', startDate.toISOString().split('T')[0])
-    .lte('data_pagamento', endDate.toISOString().split('T')[0])
-    .order('data_pagamento', { ascending: true });
+  return useQuery({
+    queryKey: [CACHE_KEYS.FATURAMENTO_MENSAL, administrador_id, startStr, endStr],
+    queryFn: async () => {
+      // Fonte 1: pagamentos de entregas
+      const { data: pagamentosData, error: errPag } = await supabase
+        .from('pagamentos')
+        .select(`
+          valor,
+          data_pagamento,
+          entregas!inner(
+            vendedores!inner(administrador_id)
+          )
+        `)
+        .eq('entregas.vendedores.administrador_id', administrador_id)
+        .gte('data_pagamento', startStr)
+        .lte('data_pagamento', endStr)
+        .order('data_pagamento', { ascending: true });
 
-  return useSupabaseQuery('FATURAMENTO_MENSAL', query, [CACHE_KEYS.FATURAMENTO_MENSAL, administrador_id, startDate.toISOString().split('T')[0], endDate.toISOString().split('T')[0]], {
+      if (errPag) throw errPag;
+
+      // Fonte 2: pagamentos de vendas atacado
+      const { data: atacadoData, error: errAtacado } = await supabase
+        .from('vendas_atacado_pagamentos')
+        .select(`
+          valor,
+          created_at,
+          vendas_atacado!inner(administrador_id)
+        `)
+        .eq('vendas_atacado.administrador_id', administrador_id)
+        .gte('created_at', startStr)
+        .lte('created_at', endStr)
+        .order('created_at', { ascending: true });
+
+      if (errAtacado) throw errAtacado;
+
+      // Normaliza para formato unificado { valor, data_pagamento }
+      const pagamentosNormalizados = (pagamentosData || []).map((p: any) => ({
+        valor: p.valor,
+        data_pagamento: p.data_pagamento,
+      }));
+
+      const atacadoNormalizados = (atacadoData || []).map((p: any) => ({
+        valor: p.valor,
+        data_pagamento: p.created_at.split('T')[0],
+      }));
+
+      return [...pagamentosNormalizados, ...atacadoNormalizados];
+    },
     enabled: options?.enabled && !!administrador_id,
+    staleTime: CACHE_TIMES.DASHBOARD_SUMMARY?.staleTime || 1000 * 60 * 5,
   });
 };
 
@@ -572,7 +690,7 @@ export const usePagamentosMensais = (administrador_id: string, options?: { enabl
   const { data: faturamentoData, isLoading } = useFaturamentoMensal(administrador_id, options);
 
   const processedData = React.useMemo(() => {
-    if (!faturamentoData || isLoading) return [];
+    if (!faturamentoData || isLoading || !Array.isArray(faturamentoData)) return [];
 
     const dataMap = [...months];
     let maxValue = 0;
@@ -609,18 +727,36 @@ export const useEstoqueAlerts = (administrador_id: string, options?: { enabled?:
   return useQuery({
     queryKey: [CACHE_KEYS.VIEW_ESTOQUE_ATUAL, 'baixo', administrador_id],
     queryFn: async () => {
+      // Buscar todos os produtos para filtrar no JS (já que a lógica de "quase vazio" é fixa < 20)
       const { data, error } = await supabase
-        .from('view_estoque_atual')
+        .from('produtos_cadastrado')
         .select('*')
-        .eq('administrador_id', administrador_id)
-        .or('status_estoque.eq.BAIXO,status_estoque.eq.ZERADO')
-        .order('qtd_estoque', { ascending: true });
+        .eq('administrador_id', administrador_id);
 
       if (error) throw error;
-      return data as EstoqueAtual[];
+
+      // Filtrar produtos com estoque <= 0 ou < 20
+      const alertas = (data || [])
+        .filter(p => {
+          const qtd = p.qtd_estoque || 0;
+          return qtd <= 0 || qtd < 20;
+        })
+        .map(p => ({
+          id: p.id,
+          produto_nome: p.produto_nome,
+          qtd_estoque: p.qtd_estoque || 0,
+          estoque_minimo: p.estoque_minimo || 0, // Mantém para referência
+          unidade_medida: p.unidade_medida || 'un',
+          status_estoque: (p.qtd_estoque || 0) <= 0 ? 'ZERADO' : 'BAIXO',
+          administrador_id: p.administrador_id
+        }))
+        .sort((a, b) => a.qtd_estoque - b.qtd_estoque); // Menor estoque primeiro
+
+      return alertas as EstoqueAtual[];
     },
     enabled: options?.enabled && !!administrador_id,
-    staleTime: CACHE_TIMES.DASHBOARD_SUMMARY.staleTime,
+    staleTime: 0, // Dados de estoque devem ser frescos para refletir alterações imediatas
+    refetchOnWindowFocus: true, // Recarregar quando voltar à aba
   });
 };
 
@@ -629,19 +765,34 @@ export const useTotalEntregasPorAdministrador = (administrador_id: string, optio
   return useQuery({
     queryKey: ['TOTAL_ENTREGAS_POR_ADMINISTRADOR', administrador_id],
     queryFn: async () => {
-      // Buscar entregas e seus vendedores
-      const { data, error } = await supabase
+      // 1. Buscar entregas da tabela 'entregas'
+      const { data: entregasData, error: entregasError } = await supabase
         .from('entregas')
         .select('vendedor_id, vendedores!inner(administrador_id)')
         .eq('vendedores.administrador_id', administrador_id);
 
-      if (error) throw error;
+      if (entregasError) throw entregasError;
+
+      // 2. Buscar vendas da tabela 'vendas_atacado'
+      const { data: vendasData, error: vendasError } = await supabase
+        .from('vendas_atacado')
+        .select('vendedor_id')
+        .eq('administrador_id', administrador_id);
+
+      if (vendasError) throw vendasError;
 
       // Agrupar contagem por vendedor_id
       const entregasPorVendedor: Record<string, number> = {};
       
-      data?.forEach((entrega) => {
+      entregasData?.forEach((entrega) => {
         const vendedorId = entrega.vendedor_id;
+        if (vendedorId) {
+          entregasPorVendedor[vendedorId] = (entregasPorVendedor[vendedorId] || 0) + 1;
+        }
+      });
+
+      vendasData?.forEach((venda) => {
+        const vendedorId = venda.vendedor_id;
         if (vendedorId) {
           entregasPorVendedor[vendedorId] = (entregasPorVendedor[vendedorId] || 0) + 1;
         }

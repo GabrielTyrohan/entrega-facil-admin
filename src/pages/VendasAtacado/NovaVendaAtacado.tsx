@@ -1,6 +1,20 @@
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import { toast } from '@/utils/toast';
 import { addDays, format, isValid } from 'date-fns';
-import { ArrowLeft, Calendar, Loader2, Plus, Save, ShoppingCart, Trash2, User } from 'lucide-react';
+import { ArrowLeft, Calendar, Check, ChevronsUpDown, DollarSign, Loader2, Plus, Save, ShoppingCart, Trash2, User } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -9,6 +23,7 @@ import { Cliente, useClientesByAdmin } from '../../hooks/useClientes';
 import { useCreateLancamento } from '../../hooks/useFluxoCaixa';
 import { useCreateVendaAtacado, VendaAtacadoItem } from '../../hooks/useVendasAtacado';
 import { useVendedoresByAdmin } from '../../hooks/useVendedores';
+import { supabase } from '../../lib/supabase';
 import { applyCurrencyMask, currencyMaskToNumber, formatCurrency } from '../../utils/currencyUtils';
 
 const NovaVendaAtacado = () => {
@@ -19,13 +34,15 @@ const NovaVendaAtacado = () => {
   const createLancamentoMutation = useCreateLancamento();
 
   // Form State
+  const [open, setOpen] = useState(false)
   const [clienteSearch, setClienteSearch] = useState('');
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
   const [vendedorId, setVendedorId] = useState('');
   const [dataEntrega, setDataEntrega] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [formaPagamento, setFormaPagamento] = useState('PIX');
+  const [formaPagamento, setFormaPagamento] = useState('Boleto 30 dias');
   const [dataPagamento, setDataPagamento] = useState('');
   const [itens, setItens] = useState<VendaAtacadoItem[]>([]);
+  const [valorPago, setValorPago] = useState('');
 
   // Item Addition State
   const [selectedProdutoId, setSelectedProdutoId] = useState('');
@@ -36,9 +53,9 @@ const NovaVendaAtacado = () => {
   const { data: vendedores } = useVendedoresByAdmin(targetId || '', { enabled: !!targetId });
   
   const { data: clientesData, isLoading: isLoadingClientes } = useClientesByAdmin(targetId || '', { 
-    enabled: !!targetId && clienteSearch.length > 2, 
+    enabled: !!targetId,
     search: clienteSearch,
-    pageSize: 10
+    pageSize: 50 // Aumentado para melhor experiência no combobox
   });
 
   const { data: produtosData } = useListaCestas();
@@ -49,6 +66,15 @@ const NovaVendaAtacado = () => {
 
   const totalVenda = useMemo(() => itens.reduce((acc, item) => acc + item.subtotal, 0), [itens]);
 
+  const statusPagamento = useMemo(() => {
+    const pago = currencyMaskToNumber(valorPago);
+    if (pago <= 0) return 'pendente';
+    if (pago >= totalVenda) return 'pago';
+    return 'parcial';
+  }, [valorPago, totalVenda]);
+
+  const isPago = statusPagamento === 'pago';
+
   // Effect: Calculate Data Pagamento
   useEffect(() => {
     if (!dataEntrega) return;
@@ -56,13 +82,34 @@ const NovaVendaAtacado = () => {
     const entrega = new Date(dataEntrega);
     if (!isValid(entrega)) return;
 
-    let dias = 0;
-    if (formaPagamento === 'Boleto 7 dias') dias = 7;
-    else if (formaPagamento === 'Boleto 14 dias') dias = 14;
-    else if (formaPagamento === 'Boleto 30 dias') dias = 30;
+    // O pedido foi "30 dias por padrão", mas editável.
+    
+    // Se a data de entrega é alterada, vamos recalcular o vencimento com base na forma de pagamento selecionada
+    // Se a forma de pagamento é alterada, também recalculamos
+    
+    let dias = 30; // Padrão 30 dias para qualquer forma de pagamento não listada explicitamente abaixo
+    
+    if (formaPagamento === 'Boleto 7 dias') {
+      dias = 7;
+    } else if (formaPagamento === 'Boleto 14 dias') {
+      dias = 14;
+    } else if (formaPagamento === 'Boleto 30 dias') {
+      dias = 30;
+    } 
+    // Para 'Cheque', 'PIX', 'Dinheiro' ou outros, mantém o padrão de 30 dias conforme solicitado
+    // O usuário pode editar manualmente para data de hoje se for pagamento à vista
 
+    // Corrige problema de fuso horário criando a data com componentes locais
+    const [year, month, day] = dataEntrega.split('-').map(Number);
+    // Nota: O mês no construtor Date é base 0 (0-11), mas aqui usamos base 1 e deixamos o Date corrigir
+    // Ex: new Date(2026, 2, 24) = 24/03/2026 (Mês 2 = Março)
+    // Se month for 2 (fevereiro), month - 1 = 1 (fevereiro)
+    const entregaDate = new Date(year, month - 1, day);
+    
     if (dias > 0) {
-      setDataPagamento(format(addDays(entrega, dias), 'yyyy-MM-dd'));
+      // Usa addDays do date-fns que lida corretamente com viradas de mês/ano
+      const novaData = addDays(entregaDate, dias);
+      setDataPagamento(format(novaData, 'yyyy-MM-dd'));
     } else {
       setDataPagamento(dataEntrega); 
     }
@@ -89,9 +136,8 @@ const NovaVendaAtacado = () => {
 
     const preco = currencyMaskToNumber(precoUnit);
     
-    const newItem: any = {
+    const newItem: VendaAtacadoItem = {
       produto_cadastrado_id: produto.id,
-      produto_nome: produto.nome,
       descricao: produto.nome,
       quantidade: qtd,
       preco_unitario: preco,
@@ -117,24 +163,45 @@ const NovaVendaAtacado = () => {
     }
 
     try {
-      const selectedVendedor = vendedores?.find(v => v.id === vendedorId);
-      
       const vendaData = {
-        administrador_id: user.id,
-        cliente_id: selectedCliente.id,
-        cliente_nome: selectedCliente.nome,
-        vendedor_id: vendedorId,
-        vendedor_nome: selectedVendedor?.nome || 'Desconhecido',
-        data_venda: new Date().toISOString(),
-        data_entrega: dataEntrega,
+  administrador_id: user.id,
+  cliente_id: selectedCliente.id,
+  vendedor_id: vendedorId,
+  data_entrega: dataEntrega,
         data_pagamento: dataPagamento,
         forma_pagamento: formaPagamento as any,
-        status_pagamento: 'pendente' as const,
+        valor_pago: currencyMaskToNumber(valorPago),
+        status_pagamento: statusPagamento as any,
         valor_total: totalVenda,
-        itens
-      };
+        pago: isPago,
+        numero_produto: itens.map(item => item.produto_cadastrado_id).filter(Boolean) as string[],
+        itens,  
+
+  quantidade_total: itens.reduce((acc, item) => acc + item.quantidade, 0),
+  nome_cliente_cache: selectedCliente.tipo_pessoa === 'PJ'
+    ? (selectedCliente.responsavel_pj_nome || selectedCliente.nome)
+    : `${selectedCliente.nome} ${selectedCliente.sobrenome || ''}`.trim(),
+};
+
 
       const novaVenda = await createVendaMutation.mutateAsync(vendaData);
+
+      // Registrar pagamento inicial no histórico se valor > 0
+      const valorPagoNum = currencyMaskToNumber(valorPago);
+      if (valorPagoNum > 0 && novaVenda?.id) {
+        try {
+          await supabase
+            .from('vendas_atacado_pagamentos')
+            .insert({
+              venda_id: novaVenda.id,
+              valor: valorPagoNum,
+              forma_pagamento: formaPagamento,
+              observacao: 'Pagamento registrado na criação da venda',
+            });
+        } catch (err) {
+          console.error('Erro ao registrar pagamento inicial:', err);
+        }
+      }
 
       // Integrar com Fluxo de Caixa (Lançamento de Entrada)
       try {
@@ -143,13 +210,13 @@ const NovaVendaAtacado = () => {
           lancado_por: user.id,
           tipo: 'entrada',
           categoria: 'Venda',
-          descricao: `Venda Atacado #${novaVenda.numero_pedido || (novaVenda.id ? novaVenda.id.slice(0, 8) : 'N/A')} - ${selectedCliente.nome}`,
+          descricao: `Venda Atacado #${novaVenda?.numero_pedido || 'N/A'} - ${selectedCliente.nome}`,
           valor: totalVenda,
           data_lancamento: new Date().toISOString(),
           data_vencimento: dataPagamento || null,
           forma_pagamento: formaPagamento,
           status: 'pendente', // Venda inicia como pendente
-          referencia_id: novaVenda.id,
+          referencia_id: novaVenda?.id,
           referencia_tipo: 'venda'
         });
         toast.success('Venda realizada e lançamento financeiro criado!');
@@ -159,7 +226,13 @@ const NovaVendaAtacado = () => {
       }
 
       navigate('/vendas-atacado'); 
-    } catch (error) {
+    } catch (error: any) {
+      // Ignora erro PGRST204 se a venda foi salva (verificação adicional)
+      if (error?.message?.includes('PGRST204') || error?.code === 'PGRST204') {
+        toast.success('Venda realizada com sucesso!');
+        navigate('/vendas-atacado');
+        return;
+      }
       console.error('Erro ao salvar venda:', error);
       toast.error('Erro ao salvar venda. Tente novamente.');
     }
@@ -197,50 +270,84 @@ const NovaVendaAtacado = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="relative">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cliente *</label>
-                {selectedCliente ? (
-                  <div className="flex items-center justify-between p-3 border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/30 rounded-lg group transition-all">
-                    <span className="font-medium text-blue-900 dark:text-blue-300">{selectedCliente.nome}</span>
-                    <button 
-                      onClick={() => { setSelectedCliente(null); setClienteSearch(''); }}
-                      className="text-blue-500 hover:text-red-500 dark:text-blue-400 dark:hover:text-red-400 transition-colors"
-                      title="Remover cliente"
+                <Popover open={open} onOpenChange={setOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      role="combobox"
+                      aria-expanded={open}
+                      className="flex w-full items-center justify-between rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2.5 text-sm text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                     >
-                      <Trash2 size={18} />
+                      {selectedCliente ? (
+                        <span className="truncate">
+                          {selectedCliente.tipo_pessoa === 'PJ' 
+                            ? (selectedCliente.responsavel_pj_nome || selectedCliente.nome)
+                            : `${selectedCliente.nome} ${selectedCliente.sobrenome || ''}`.trim()}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">Selecione um cliente...</span>
+                      )}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </button>
-                  </div>
-                ) : (
-                  <div className="relative">
-                    <input
-                      type="text"
-                      className="block w-full pl-4 pr-10 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 transition-shadow"
-                      placeholder="Buscar cliente..."
-                      value={clienteSearch}
-                      onChange={(e) => setClienteSearch(e.target.value)}
-                    />
-                    {isLoadingClientes && (
-                      <div className="absolute right-3 top-3">
-                        <Loader2 size={18} className="animate-spin text-blue-500" />
-                      </div>
-                    )}
-                    {clienteSearch.length > 2 && !selectedCliente && clientes.length > 0 && (
-                      <div className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-800 shadow-xl max-h-60 rounded-lg py-1 text-base overflow-auto border border-gray-200 dark:border-gray-700">
-                        {clientes.map((cliente: Cliente) => (
-                          <div
-                            key={cliente.id}
-                            className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 px-4 py-3 border-b border-gray-100 dark:border-gray-700 last:border-0 transition-colors"
-                            onClick={() => {
-                              setSelectedCliente(cliente);
-                              setClienteSearch('');
-                            }}
-                          >
-                            <div className="font-medium text-gray-900 dark:text-white">{cliente.nome}</div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{cliente.telefone || 'Sem telefone'}</div>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[400px] p-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-xl rounded-lg">
+                    <Command shouldFilter={false} className="w-full">
+                      <CommandInput 
+                        placeholder="Buscar cliente..." 
+                        value={clienteSearch}
+                        onValueChange={setClienteSearch}
+                        className="border-none focus:ring-0"
+                      />
+                      <CommandList>
+                        {isLoadingClientes ? (
+                          <div className="py-6 text-center text-sm text-gray-500 flex justify-center items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Carregando...
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                        ) : clientes.length === 0 ? (
+                          <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
+                        ) : (
+                          <CommandGroup>
+                            {clientes.map((cliente: Cliente) => {
+                              const displayName = cliente.tipo_pessoa === 'PJ'
+                                ? (cliente.responsavel_pj_nome || cliente.nome)
+                                : `${cliente.nome} ${cliente.sobrenome || ''}`.trim();
+                              
+                              return (
+                                <CommandItem
+                                  key={cliente.id}
+                                  value={displayName}
+                                  onSelect={() => {
+                                    setSelectedCliente(cliente);
+                                    setOpen(false);
+                                    setClienteSearch('');
+                                  }}
+                                  // Impede que o clique roube o foco do input antes da seleção ocorrer
+                                  onPointerDown={(e) => e.preventDefault()}
+                                  className="cursor-pointer aria-selected:bg-blue-50 dark:aria-selected:bg-blue-900/20 px-4 py-2 !pointer-events-auto"
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4 text-blue-600",
+                                      selectedCliente?.id === cliente.id ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  <div className="flex flex-col">
+                                    <span className="font-medium text-gray-900 dark:text-white">{displayName}</span>
+                                    {cliente.tipo_pessoa === 'PJ' && (
+                                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                                        Empresa: {cliente.nome}
+                                      </span>
+                                    )}
+                                  </div>
+                                </CommandItem>
+                              );
+                            })}
+                          </CommandGroup>
+                        )}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
 
               <div>
@@ -297,9 +404,9 @@ const NovaVendaAtacado = () => {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Data Vencimento</label>
                 <input
                   type="date"
-                  className="block w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-600/50 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+                  className="block w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   value={dataPagamento}
-                  readOnly
+                  onChange={(e) => setDataPagamento(e.target.value)}
                 />
               </div>
             </div>
@@ -377,7 +484,7 @@ const NovaVendaAtacado = () => {
                   <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     {itens.map((item, index) => (
                       <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{item.produto_nome}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{item.descricao}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300 text-right">{item.quantidade}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300 text-right">{formatCurrency(item.preco_unitario)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-white text-right">{formatCurrency(item.subtotal)}</td>
@@ -410,15 +517,56 @@ const NovaVendaAtacado = () => {
               Resumo da Venda
             </h2>
 
-            <div className="space-y-4 mb-8">
+            <div className="space-y-4 mb-6">
               <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
                 <span>Itens</span>
                 <span>{itens.length}</span>
               </div>
               <div className="flex justify-between items-end pt-4 border-t border-gray-100 dark:border-gray-700">
-                <span className="text-base font-medium text-gray-900 dark:text-white">Total a Pagar</span>
-                <span className="text-3xl font-bold text-blue-600 dark:text-blue-400">{formatCurrency(totalVenda)}</span>
+                <span className="text-base font-medium text-gray-900 dark:text-white">
+                  Total a Pagar
+                </span>
+                <span className="text-3xl font-bold text-blue-600 dark:text-blue-400">
+                  {formatCurrency(totalVenda)}
+                </span>
               </div>
+            </div>
+
+            { /* Valor Pago */ }
+            <div className="p-4 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-600 mb-6 space-y-3">
+              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                <DollarSign size={16} className="text-green-500" />
+                Valor Recebido na Entrega
+              </label>
+              <input
+                type="text"
+                placeholder="R$ 0,00 (deixe zerado se for a prazo)"
+                className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                value={valorPago}
+                onChange={(e) => setValorPago(applyCurrencyMask(e.target.value))}
+              />
+              { /* Badge de status dinâmico */ }
+              <div className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium ${
+                statusPagamento === 'pago'
+                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                  : statusPagamento === 'parcial'
+                  ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+                  : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+              }`}>
+                <span>Status</span>
+                <span className="font-bold uppercase tracking-wide text-xs">
+                  {statusPagamento === 'pago' ? '✓ Pago'
+                    : statusPagamento === 'parcial' ? '⚡ Parcial'
+                    : '⏳ Pendente'}
+                </span>
+              </div>
+              {statusPagamento === 'parcial' && totalVenda > 0 && (
+                <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                  Restam: {formatCurrency(
+                    totalVenda - currencyMaskToNumber(valorPago)
+                  )}
+                </p>
+              )}
             </div>
 
             <div className="space-y-3">

@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { User, Shield, Building, MapPin, CreditCard, Save } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Building, CreditCard, MapPin, Save, Shield, User } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
@@ -12,9 +12,6 @@ const Configuracoes: React.FC = () => {
   // Usar userProfile para pegar dados do admin:
   const adminData = userProfile as any;
 
-  const [tipoPessoa, setTipoPessoa] = useState<'fisica' | 'juridica'>(
-    adminData?.tipo_pessoa === 'juridica' ? 'juridica' : 'fisica'
-  );
   const [cpfCnpj, setCpfCnpj] = useState<string>(adminData?.cpf_cnpj || '');
   const [cep, setCep] = useState<string>(adminData?.cep || '');
   const [estado, setEstado] = useState<string>(adminData?.estado || '');
@@ -32,11 +29,6 @@ const Configuracoes: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
-  useEffect(() => {
-    if (adminData?.tipo_pessoa) {
-      setTipoPessoa(adminData.tipo_pessoa === 'juridica' ? 'juridica' : 'fisica');
-    }
-  }, [adminData?.tipo_pessoa]);
 
   useEffect(() => {
     if (adminData?.cpf_cnpj) {
@@ -94,25 +86,11 @@ const Configuracoes: React.FC = () => {
     return cleaned;
   };
 
-  const formatCPF = (cpf: string) => {
-    return cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-  };
 
   const formatCNPJ = (cnpj: string) => {
     return cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
   };
 
-  const formatCpfCnpj = (value?: string) => {
-    if (!value) return '';
-    
-    const cleaned = value.replace(/\D/g, '');
-    
-    if (tipoPessoa === 'fisica') {
-      return formatCPF(cleaned);
-    } else {
-      return formatCNPJ(cleaned);
-    }
-  };
 
   const formatCEP = (value: string) => {
     const cleaned = value.replace(/\D/g, '');
@@ -136,16 +114,6 @@ const Configuracoes: React.FC = () => {
     'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
   ];
 
-  const handleCpfCnpjChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    const cleaned = value.replace(/\D/g, '');
-    
-    // Limita o número de dígitos baseado no tipo de pessoa
-    const maxLength = tipoPessoa === 'fisica' ? 11 : 14;
-    if (cleaned.length <= maxLength) {
-      setCpfCnpj(cleaned);
-    }
-  };
 
   const handleTelefoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -170,7 +138,6 @@ const Configuracoes: React.FC = () => {
     }
 
     const hasChanges = 
-      tipoPessoa !== (adminData?.tipo_pessoa || '') ||
       cpfCnpj !== (adminData?.cpf_cnpj || '') ||
       cep !== (adminData?.cep || '') ||
       estado !== (adminData?.estado || '') ||
@@ -199,7 +166,6 @@ const Configuracoes: React.FC = () => {
       const { error } = await supabase
         .from('administradores')
         .update({
-          tipo_pessoa: tipoPessoa,
           cpf_cnpj: cpfCnpj,
           cep,
           estado,
@@ -346,18 +312,7 @@ const Configuracoes: React.FC = () => {
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Telefone Secundário
-              </label>
-              <input
-                type="text"
-                value={formatPhone(telefoneSecundario)}
-                onChange={handleTelefoneSecundarioChange}
-                placeholder="(11) 99999-9999"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-              />
-            </div>
+
 
           </div>
         </div>
@@ -427,7 +382,7 @@ const Configuracoes: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Nome da Empresa
+              Razão Social
             </label>
             <input
               type="text"
@@ -438,33 +393,30 @@ const Configuracoes: React.FC = () => {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Tipo de Pessoa
+              CNPJ
             </label>
-            <select
-              value={tipoPessoa}
+            <input
+              type="text"
+              value={formatCNPJ(cpfCnpj.replace(/\D/g, '').slice(0, 14))}
               onChange={(e) => {
-                setTipoPessoa(e.target.value as 'fisica' | 'juridica');
-                setCpfCnpj('');
+                const cleaned = e.target.value.replace(/\D/g, '').slice(0, 14);
+                setCpfCnpj(cleaned);
               }}
+              placeholder="00.000.000/0000-00"
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-            >
-              <option value="fisica">Pessoa Física</option>
-              <option value="juridica">Pessoa Jurídica</option>
-            </select>
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              {tipoPessoa === 'fisica' ? 'CPF' : 'CNPJ'}
+              Telefone da Empresa
             </label>
-            <div className="relative">
-              <input
-                type="text"
-                value={formatCpfCnpj(cpfCnpj)}
-                onChange={handleCpfCnpjChange}
-                placeholder={tipoPessoa === 'fisica' ? 'Digite o CPF' : 'Digite o CNPJ'}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-              />
-            </div>
+            <input
+              type="text"
+              value={formatPhone(telefoneSecundario)}
+              onChange={handleTelefoneSecundarioChange}
+              placeholder="(11) 99999-9999"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+            />
           </div>
         </div>
       </div>

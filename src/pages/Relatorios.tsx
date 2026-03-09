@@ -1,40 +1,40 @@
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { useQuery } from '@tanstack/react-query';
 import DOMPurify from 'dompurify';
 import {
-    BarChart3,
-    Calendar,
-    CreditCard,
-    DollarSign,
-    FileText,
-    Filter,
-    Info,
-    MoreHorizontal,
-    Package,
-    Printer,
-    TrendingUp,
-    Truck,
-    Users
+  BarChart3,
+  Calendar,
+  CreditCard,
+  DollarSign,
+  FileText,
+  Filter,
+  Info,
+  MoreHorizontal,
+  Package,
+  Printer,
+  TrendingUp,
+  Truck,
+  Users
 } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useCountUp } from '../hooks/useCountUp';
-import { useEntregas } from '../hooks/useEntregas';
-import { usePagamentos } from '../hooks/usePagamentos';
 import { useProdutos } from '../hooks/useProdutos';
 import { useVendedoresByAdmin, Vendedor } from '../hooks/useVendedores';
+import { supabase } from '../lib/supabase';
 import { subtractDaysUTC3, toUTC3 } from '../utils/dateUtils';
 
 const Relatorios: React.FC = () => {
   const { user, adminId } = useAuth();
   const [selectedPeriod, setSelectedPeriod] = useState('30'); // dias
-  const [selectedReport, setSelectedReport] = useState<'vendas' | 'vendedores' | 'entregas' | 'produtos'>('vendas');
+  const [selectedReport, setSelectedReport] = useState<'vendas' | 'vendedores' | 'entregas' | 'produtos' | 'financeiro' | 'fluxo_pagamentos' | 'vendas_atacado_pj'>('vendas');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
 
@@ -46,20 +46,134 @@ const Relatorios: React.FC = () => {
   // Hooks para buscar dados com administrador_id
   const administrador_id = adminId || undefined;
   
-  // Adicionar verificação de erro e loading
-  const { data: pagamentos = [], isLoading: isLoadingPagamentos, error: errorPagamentos } = usePagamentos({ 
-    enabled: !!administrador_id,
-    administrador_id 
+  // Queries manuais para substituir hooks paginados (limitados a 50 itens)
+  // Agora buscamos até 10000 registros para garantir cobertura anual
+  const { data: pagamentos = [], isLoading: isLoadingPagamentos, error: errorPagamentos } = useQuery({
+    queryKey: ['pagamentos_all', administrador_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('pagamentos')
+        .select(`
+          *,
+          entregas!inner(
+            id,
+            vendedor_id,
+            cliente_id,
+            produto_id,
+            valor,
+            data_entrega,
+            vendedores!inner(id, nome, administrador_id),
+            clientes(id, nome),
+            produtos(id, nome)
+          )
+        `)
+        .eq('entregas.vendedores.administrador_id', administrador_id)
+        .order('data_pagamento', { ascending: false })
+        .limit(10000);
+        
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!administrador_id
   });
-  const { data: entregas = [], isLoading: isLoadingEntregas, error: errorEntregas } = useEntregas({ 
-    enabled: !!administrador_id,
-    administrador_id 
+
+  const { data: entregas = [], isLoading: isLoadingEntregas, error: errorEntregas } = useQuery({
+    queryKey: ['entregas_all', administrador_id],
+    queryFn: async () => {
+      // 1. Buscar IDs dos vendedores do admin
+      const { data: vendedores, error: vErr } = await supabase
+        .from('vendedores')
+        .select('id')
+        .eq('administrador_id', administrador_id);
+      
+      if (vErr) throw vErr;
+      const vendedorIds = vendedores?.map(v => v.id) || [];
+      
+      if (vendedorIds.length === 0) return [];
+
+      // 2. Buscar entregas
+      const { data, error } = await supabase
+        .from('entregas')
+        .select(`
+          id, data_entrega, cliente_id, vendedor_id, valor, status_entrega, status_pagamento,
+          cliente:clientes(id, nome, sobrenome, telefone, endereco, numero, "Bairro", "Cidade", "Estado", cep, complemento, cpf),
+          vendedor:vendedores(id, nome, administrador_id)
+        `)
+        .in('vendedor_id', vendedorIds)
+        .order('data_entrega', { ascending: false })
+        .limit(10000);
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!administrador_id
   });
+
   const { data: vendedores = [], isLoading: isLoadingVendedores, error: errorVendedores } = useVendedoresByAdmin(administrador_id || '', { 
     enabled: !!administrador_id
   });
   const { data: produtos = [], isLoading: isLoadingProdutos, error: errorProdutos } = useProdutos({ 
     enabled: !!administrador_id
+  });
+
+  // Queries manuais para hooks que não existem ou não suportam os parâmetros necessários
+  // Importante: Remover o filtro de data (.gte) das queries iniciais para buscar TODO o histórico
+  // O filtro de data será aplicado localmente no useMemo 'dadosPeriodo'
+  const { data: vendasAtacado = [] } = useQuery({ 
+    queryKey: ['vendas_atacado', administrador_id], 
+    queryFn: async () => { 
+      // Buscar até 10000 registros para garantir cobertura anual
+      const { data } = await supabase 
+        .from('vendas_atacado') 
+        .select('*, vendas_atacado_pagamentos(*)') 
+        .eq('administrador_id', administrador_id)
+        .order('created_at', { ascending: false })
+        .limit(10000);
+      return data || []; 
+    }, 
+    enabled: !!administrador_id 
+  }); 
+  
+  const { data: acertosDiarios = [] } = useQuery({ 
+    queryKey: ['acertos_diarios', administrador_id], 
+    queryFn: async () => { 
+      const { data } = await supabase 
+        .from('acertos_diarios') 
+        .select('*') 
+        .eq('administrador_id', administrador_id)
+        .order('data_acerto', { ascending: false })
+        .limit(10000);
+      return data || []; 
+    }, 
+    enabled: !!administrador_id 
+  }); 
+  
+  const { data: lancamentosCaixa = [] } = useQuery({ 
+    queryKey: ['lancamentos_caixa', administrador_id], 
+    queryFn: async () => { 
+      const { data } = await supabase 
+        .from('lancamentos_caixa') 
+        .select('*') 
+        .eq('administrador_id', administrador_id)
+        .order('data_lancamento', { ascending: false })
+        .limit(10000);
+      return data || []; 
+    }, 
+    enabled: !!administrador_id 
+  }); 
+  
+  const { data: orcamentosPJ = [] } = useQuery({ 
+    queryKey: ['orcamentos_pj', administrador_id], 
+    queryFn: async () => { 
+      const { data } = await supabase 
+        .from('orcamentos_pj') 
+        .select('*') 
+        .eq('administrador_id', administrador_id)
+        .order('data_criacao', { ascending: false })
+        .limit(10000);
+      return data || []; 
+    }, 
+    enabled: !!administrador_id 
   });
 
   // Verificar se há erros
@@ -68,49 +182,97 @@ const Relatorios: React.FC = () => {
 
   // Calcular período usando UTC-3 - MOVER ANTES DOS EARLY RETURNS
   const periodoDias = parseInt(selectedPeriod);
+  
+  // Usar subtractDaysUTC3 para obter a data de início em UTC-3
+  // Isso garante que estamos comparando datas no mesmo fuso horário
   const dataInicio = subtractDaysUTC3(new Date(), periodoDias);
+
 
   // Filtrar dados por período usando UTC-3
   const dadosPeriodo = useMemo(() => {
     try {
       // Verificar se os dados existem antes de filtrar
       if (!Array.isArray(pagamentos) || !Array.isArray(entregas)) {
-        return { pagamentos: [], entregas: [] };
+        return { 
+          pagamentos: [], 
+          entregas: [], 
+          vendasAtacado: [], 
+          acertosDiarios: [], 
+          lancamentosCaixa: [], 
+          orcamentosPJ: [] 
+        };
       }
 
-      // Primeiro, filtrar pagamentos por período (data_pagamento) usando UTC-3
-      const pagamentosFiltrados = pagamentos.filter((p: Record<string, unknown>) => {
+      // Função auxiliar para verificar se uma data está dentro do período
+      const isDateInPeriod = (dateString: string | null | undefined) => {
+        if (!dateString) return false;
         try {
-          if (!p?.data_pagamento) return false;
-          const dataPagamento = toUTC3(new Date(p.data_pagamento as string));
-          return dataPagamento >= dataInicio;
-        } catch (error) {
-          console.warn('Erro ao processar data de pagamento:', p, error);
+          // Converter a data do banco para UTC-3
+          const dataItem = toUTC3(new Date(dateString));
+          // Comparar timestamps para garantir precisão
+          return dataItem.getTime() >= dataInicio.getTime();
+        } catch (e) {
+          console.warn('Erro ao processar data:', dateString);
           return false;
         }
-      });
+      };
+
+      // 1. Pagamentos de Entregas (Cestas)
+      const pagamentosFiltrados = pagamentos.filter((p: Record<string, unknown>) => 
+        isDateInPeriod(p?.data_pagamento as string)
+      );
       
-      // Depois, filtrar entregas que têm pagamentos no período
       const entregasComPagamentos = pagamentosFiltrados.map((p: Record<string, unknown>) => p.entrega_id).filter(Boolean);
       const entregasFiltradas = entregas.filter((e: Record<string, unknown>) => 
         entregasComPagamentos.includes(e?.id)
       );
 
+      // 2. Vendas Atacado - Usar data_entrega ou created_at
+      const vendasAtacadoFiltradas = vendasAtacado.filter((v: any) => 
+        isDateInPeriod(v.data_entrega || v.created_at)
+      );
+
+      // 3. Acertos Diários
+      const acertosFiltrados = acertosDiarios.filter((a: any) => 
+        isDateInPeriod(a.data_acerto || a.created_at)
+      );
+
+      // 4. Lançamentos Caixa (Entradas e Saídas)
+      const caixaFiltrado = lancamentosCaixa.filter((l: any) => 
+        isDateInPeriod(l.data_lancamento || l.created_at)
+      );
+
+      // 5. Orçamentos PJ (apenas Aprovados contam como venda)
+      const orcamentosFiltrados = orcamentosPJ.filter((o: any) => 
+        isDateInPeriod(o.data_aprovacao || o.data_criacao) && (o.status === 'aprovado' || o.status === 'convertido')
+      );
+
       return {
         pagamentos: pagamentosFiltrados,
-        entregas: entregasFiltradas
+        entregas: entregasFiltradas,
+        vendasAtacado: vendasAtacadoFiltradas,
+        acertosDiarios: acertosFiltrados,
+        lancamentosCaixa: caixaFiltrado,
+        orcamentosPJ: orcamentosFiltrados
       };
     } catch (error) {
       console.error('Erro ao filtrar dados por período:', error);
-      return { pagamentos: [], entregas: [] };
+      return { 
+        pagamentos: [], 
+        entregas: [], 
+        vendasAtacado: [], 
+        acertosDiarios: [], 
+        lancamentosCaixa: [], 
+        orcamentosPJ: [] 
+      };
     }
-  }, [pagamentos, entregas, dataInicio]);
+  }, [pagamentos, entregas, vendasAtacado, acertosDiarios, lancamentosCaixa, orcamentosPJ, dataInicio]);
 
-  // Calcular métricas de vendas
+  // Calcular métricas de vendas e financeiras
   const metricas = useMemo(() => {
     try {
       // Verificar se dadosPeriodo existe e tem dados válidos
-      if (!dadosPeriodo?.entregas || !dadosPeriodo?.pagamentos) {
+      if (!dadosPeriodo) {
         return {
           totalVendas: 0,
           totalPagamentos: 0,
@@ -118,10 +280,19 @@ const Relatorios: React.FC = () => {
           entregasPagas: 0,
           entregasPendentes: 0,
           vendedorPerformance: [],
-          produtoVendas: []
+          produtoVendas: [],
+          // Novos campos financeiros
+          totalVendasAtacado: 0,
+          totalRecebidoAtacado: 0,
+          totalEntradasCaixa: 0,
+          totalSaidasCaixa: 0,
+          totalVendasAcertos: 0,
+          saldoLiquidoAcertos: 0,
+          totalOrcamentosAprovados: 0
         };
       }
 
+      // --- Métricas Originais (Entregas/Cestas) ---
       // Total de vendas baseado no valor das entregas (não dos pagamentos)
       const totalVendasEntregas = dadosPeriodo.entregas.reduce((sum: number, e: Record<string, unknown>) => {
         return sum + (parseFloat(e?.valor as string) || 0);
@@ -150,14 +321,40 @@ const Relatorios: React.FC = () => {
           // Considerar paga se o total de pagamentos for igual ou maior que o valor da entrega
           return totalPagamentosEntrega >= (parseFloat(entrega.valor as string) || 0);
         } catch (error) {
-          console.warn('Erro ao processar entrega:', entrega, error);
           return false;
         }
       }).length;
       
       const entregasPendentes = totalEntregas - entregasPagas;
 
-      // Performance por vendedor - corrigindo cálculo de vendas
+      // --- Métricas Financeiras Adicionais ---
+      
+      // Vendas Atacado
+      const totalVendasAtacado = dadosPeriodo.vendasAtacado.reduce((sum: number, v: any) => sum + (Number(v.valor_total) || 0), 0);
+      const totalRecebidoAtacado = dadosPeriodo.vendasAtacado.reduce((sum: number, v: any) => {
+        const pagamentos = v.vendas_atacado_pagamentos || [];
+        return sum + pagamentos.reduce((s: number, p: any) => s + (Number(p.valor) || 0), 0);
+      }, 0);
+
+      // Caixa
+      const totalEntradasCaixa = dadosPeriodo.lancamentosCaixa
+        .filter((l: any) => l.tipo === 'entrada' && l.status === 'pago')
+        .reduce((sum: number, l: any) => sum + (Number(l.valor) || 0), 0);
+      
+      const totalSaidasCaixa = dadosPeriodo.lancamentosCaixa
+        .filter((l: any) => l.tipo === 'saida' && l.status === 'pago')
+        .reduce((sum: number, l: any) => sum + (Number(l.valor) || 0), 0);
+
+      // Acertos
+      const totalVendasAcertos = dadosPeriodo.acertosDiarios.reduce((sum: number, a: any) => sum + (Number(a.valor_total_vendas) || 0), 0);
+      const saldoLiquidoAcertos = dadosPeriodo.acertosDiarios.reduce((sum: number, a: any) => sum + (Number(a.saldo_liquido) || 0), 0);
+
+      // Orçamentos PJ aprovados
+      const totalOrcamentosAprovados = dadosPeriodo.orcamentosPJ
+        .filter((o: any) => o.status === 'aprovado' || o.status === 'convertido')
+        .reduce((sum: number, o: any) => sum + (Number(o.valor_total) || 0), 0);
+
+      // Performance por vendedor
       const vendedorPerformance = Array.isArray(vendedores) ? vendedores.map((vendedor: Vendedor) => {
         try {
           if (!vendedor?.id) return null;
@@ -183,18 +380,13 @@ const Relatorios: React.FC = () => {
             try {
               if (!entrega?.id || !entrega?.valor) return false;
               
-              // Buscar todos os pagamentos relacionados a esta entrega
               const pagamentosEntrega = dadosPeriodo.pagamentos.filter((p: Record<string, unknown>) => p?.entrega_id === entrega.id);
-              
-              // Somar todos os pagamentos desta entrega
               const totalPagamentosEntrega = pagamentosEntrega.reduce((sum: number, p: Record<string, unknown>) => {
                 return sum + (parseFloat(String(p?.valor)) || 0);
               }, 0);
               
-              // Considerar paga se o total de pagamentos for igual ou maior que o valor da entrega
               return totalPagamentosEntrega >= (parseFloat(String(entrega.valor)) || 0);
             } catch (error) {
-              console.warn('Erro ao processar entrega do vendedor:', entrega, error);
               return false;
             }
           }).length;
@@ -204,48 +396,7 @@ const Relatorios: React.FC = () => {
             nome: vendedor.nome || 'Nome não informado',
             totalEntregas,
             totalVendas,
-            totalPagamentos: totalPagamentosVendedor, // Usando pagamentos reais, mas o user pediu totalVendas em algum ponto? O user disse "totalPagamentos: totalVendas" no input mas acho que foi exemplo. Vou manter o cálculo real se possível ou seguir a instrução literal? 
-            // O user input: totalPagamentos: totalVendas, // Ajustar conforme necessário
-            // O código original calculava totalPagamentosVendedor.
-            // Vou manter totalPagamentosVendedor que é mais correto, a menos que o user queira forçar. 
-            // "totalPagamentos: totalVendas, // Ajustar conforme necessário" -> parece placeholder.
-            // Mas vou seguir a instrução "DEPOIS" que ele deu explicitamente.
-            // Ele disse: "totalPagamentos: totalVendas, // Ajustar conforme necessário"
-            // No bloco "DEPOIS" ele define:
-            /*
-               const entregasVendedor = entregas?.filter(e => e.vendedor_id === vendedor.id) || []; 
-               const totalEntregas = entregasVendedor.length; 
-               const totalVendas = entregasVendedor.reduce((sum, e) => sum + (e.valor || 0), 0); 
-               const entregasPagas = entregasVendedor.filter(e => e.pago).length; 
-             
-               return { 
-                 id: vendedor.id, 
-                 nome: vendedor.nome, 
-                 totalEntregas, 
-                 totalVendas, 
-                 totalPagamentos: totalVendas, // Ajustar conforme necessário 
-                 entregasPagas, 
-                 taxaConversao: totalEntregas > 0 
-                   ? ((entregasPagas / totalEntregas) * 100).toFixed(1) + '%' 
-                   : '0%', 
-               }; 
-            */
-            // O código original tem lógica de pagamento mais complexa.
-            // Vou adaptar para usar a lógica do user mas mantendo a robustez onde der.
-            // O user está simplificando o código original que era bem complexo com try/catch aninhados.
-            // A instrução "DEPOIS" sugere substituir o bloco todo.
-            
-            // Vou usar a lógica exata do user para o map, mas adaptando para usar `dadosPeriodo` que já está filtrado, ou usar `entregas` raw se for o que ele quer. 
-            // O user usou `entregas?.filter` -> parece referir-se à variável `entregas` do hook.
-            // Mas o código atual usa `dadosPeriodo.entregas`.
-            // Se eu usar `entregas` do hook, perco o filtro de data.
-            // O user mandou: "Dentro do componente (linha ~161): const vendedoresComEstatisticas = ..."
-            // Mas no código atual, isso está dentro de um `useMemo` complexo (`metricas`).
-            // Se eu substituir o map dentro do `metricas`, tenho que usar `dadosPeriodo.entregas` para manter consistência com o filtro de data.
-            
-            // O user forneceu um snippet simplificado.
-            // Vou aplicar a tipagem `Vendedor` e a estrutura de retorno que ele pediu, mas mantendo a lógica de cálculo correta usando `dadosPeriodo`.
-            
+            totalPagamentos: totalPagamentosVendedor,
             entregasPagas,
             taxaConversao: totalEntregas > 0 
               ? ((entregasPagas / totalEntregas) * 100).toFixed(1) + '%' 
@@ -257,19 +408,17 @@ const Relatorios: React.FC = () => {
         }
       }).filter(Boolean) : [];
 
-      // Produtos mais vendidos - corrigindo cálculo
+      // Produtos mais vendidos
       const produtoVendas = Array.isArray(produtos) ? produtos.map((produto: Record<string, unknown>) => {
         try {
           if (!produto?.id) return null;
           
           const entregasProduto = dadosPeriodo.entregas.filter((e: Record<string, unknown>) => e?.produto_id === produto.id);
           
-          // Calcular vendas baseado no valor das entregas do produto
           const totalVendasProduto = entregasProduto.reduce((sum: number, e: Record<string, unknown>) => {
             return sum + (parseFloat(e?.valor as string) || 0);
           }, 0);
           
-          // Calcular pagamentos recebidos das entregas do produto
           const pagamentosProduto = dadosPeriodo.pagamentos.filter((p: Record<string, unknown>) => {
             return entregasProduto.some((e: Record<string, unknown>) => e?.id === p?.entrega_id);
           });
@@ -299,7 +448,15 @@ const Relatorios: React.FC = () => {
         entregasPagas,
         entregasPendentes,
         vendedorPerformance: vendedorPerformance.sort((a: any, b: any) => (b.totalVendas as number) - (a.totalVendas as number)),
-        produtoVendas: produtoVendas // Removido .slice(0, 10) para permitir paginação completa
+        produtoVendas: produtoVendas,
+        // Novos campos
+        totalVendasAtacado,
+        totalRecebidoAtacado,
+        totalEntradasCaixa,
+        totalSaidasCaixa,
+        totalVendasAcertos,
+        saldoLiquidoAcertos,
+        totalOrcamentosAprovados
       };
     } catch (error) {
       console.error('Erro ao calcular métricas:', error);
@@ -310,7 +467,14 @@ const Relatorios: React.FC = () => {
         entregasPagas: 0,
         entregasPendentes: 0,
         vendedorPerformance: [],
-        produtoVendas: []
+        produtoVendas: [],
+        totalVendasAtacado: 0,
+        totalRecebidoAtacado: 0,
+        totalEntradasCaixa: 0,
+        totalSaidasCaixa: 0,
+        totalVendasAcertos: 0,
+        saldoLiquidoAcertos: 0,
+        totalOrcamentosAprovados: 0
       };
     }
   }, [dadosPeriodo, vendedores, produtos, entregas, pagamentos]);
@@ -443,6 +607,13 @@ const Relatorios: React.FC = () => {
     }).format(value);
   };
 
+  // Calcular total geral de receitas
+  const totalGeralReceitas = metricas.totalVendas + 
+    metricas.totalVendasAtacado + 
+    metricas.totalEntradasCaixa + 
+    metricas.totalVendasAcertos + 
+    metricas.totalOrcamentosAprovados;
+
   const handlePrint = () => {
     window.print();
   };
@@ -503,7 +674,7 @@ const Relatorios: React.FC = () => {
         const nomeClienteDireto = escapeText(((p?.entregas as any)?.clientes?.nome) || '');
         // Fallback: buscar a entrega correspondente deste pagamento dentro das entregas do vendedor e pegar o nome do cliente
         const entregaMatch = entregasVendedor.find((e: any) => e?.id === p?.entrega_id);
-        const nomeClienteEntrega = escapeText(((entregaMatch?.cliente as any)?.nome) || entregaMatch?.cliente_nome || '');
+        const nomeClienteEntrega = escapeText(((entregaMatch?.cliente as any)?.nome) || (entregaMatch as any)?.cliente_nome || '');
         const nomeCliente = nomeClienteDireto || nomeClienteEntrega || 'N/A';
 
         return `
@@ -543,7 +714,7 @@ const Relatorios: React.FC = () => {
             <div class="card">Total de Vendas: <strong>${formatCurrency(Number(vendedor.totalVendas) || 0)}</strong></div>
             <div class="card">Total de Pagamentos: <strong>${formatCurrency(Number(vendedor.totalPagamentos) || 0)}</strong></div>
             <div class="card">Entregas Pagas: <strong>${Number(vendedor.entregasPagas) || 0}</strong></div>
-            <div class="card">Taxa de Conversão: <strong>${String(vendedor.taxaConversao || '0')}%</strong></div>
+            <div clas: <strong>${String(vendedor.taxaConversao || '0')}%</strong></div>
           </div>
 
           <h2>Entregas</h2>
@@ -656,6 +827,27 @@ const Relatorios: React.FC = () => {
     selectedReport === 'vendedores' ? metricas.vendedorPerformance :
     selectedReport === 'produtos' ? metricas.produtoVendas :
     selectedReport === 'entregas' ? dadosPeriodo.entregas :
+    selectedReport === 'fluxo_pagamentos' ? [
+      ...dadosPeriodo.pagamentos.map((p: any) => ({ ...p, _tipo: 'entrega' })),
+      ...dadosPeriodo.vendasAtacado.flatMap((v: any) => 
+        (v.vendas_atacado_pagamentos || []).map((p: any) => ({ 
+          ...p, 
+          _tipo: 'atacado', 
+          _pedido: v.numero_pedido, 
+          _cliente: v.nome_cliente_cache 
+        }))
+      )
+    ].sort((a: any, b: any) => 
+      new Date(b.data_pagamento || b.created_at).getTime() - 
+      new Date(a.data_pagamento || a.created_at).getTime()
+    ) :
+    selectedReport === 'vendas_atacado_pj' ? [
+      ...dadosPeriodo.vendasAtacado.map((v: any) => ({ ...v, _tipo: 'atacado' })),
+      ...dadosPeriodo.orcamentosPJ.map((o: any) => ({ ...o, _tipo: 'pj' }))
+    ].sort((a: any, b: any) => 
+      new Date(b.data_entrega || b.data_orcamento || b.created_at).getTime() - 
+      new Date(a.data_entrega || a.data_orcamento || a.created_at).getTime()
+    ) :
     []
   );
 
@@ -791,13 +983,16 @@ const Relatorios: React.FC = () => {
               </div>
               <select
                 value={selectedReport}
-                onChange={(e) => setSelectedReport(e.target.value as 'vendas' | 'vendedores' | 'entregas' | 'produtos')}
+                onChange={(e) => setSelectedReport(e.target.value as any)}
                 className="w-full sm:w-auto px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm dark:bg-gray-700 dark:text-white touch-manipulation"
               >
                 <option value="vendas">Vendas</option>
                 <option value="vendedores">Performance de Vendedores</option>
                 <option value="entregas">Entregas</option>
                 <option value="produtos">Produtos</option>
+                <option value="financeiro">Financeiro Consolidado</option>
+                <option value="fluxo_pagamentos">Fluxo de Pagamentos</option>
+                <option value="vendas_atacado_pj">Vendas Atacado & PJ</option>
               </select>
             </div>
           </div>
@@ -877,6 +1072,264 @@ const Relatorios: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {selectedReport === 'financeiro' && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+            <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white flex items-center">
+                <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5 mr-2 no-print" />
+                Relatório Financeiro Consolidado
+              </h2>
+            </div>
+            <div className="p-4 sm:p-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Receitas */}
+                <div>
+                  <h3 className="text-lg font-medium text-green-700 dark:text-green-400 mb-4 border-b pb-2">Receitas</h3>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 dark:text-gray-400">Total Vendas (Entregas)</span>
+                      <span className="font-semibold text-gray-900 dark:text-white">{formatCurrency(metricas.totalVendas)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 dark:text-gray-400">Total Vendas Atacado</span>
+                      <span className="font-semibold text-gray-900 dark:text-white">{formatCurrency(metricas.totalVendasAtacado)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 dark:text-gray-400">Orçamentos PJ Aprovados</span>
+                      <span className="font-semibold text-gray-900 dark:text-white">{formatCurrency(metricas.totalOrcamentosAprovados)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 dark:text-gray-400">Total Vendas Acertos</span>
+                      <span className="font-semibold text-gray-900 dark:text-white">{formatCurrency(metricas.totalVendasAcertos)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 dark:text-gray-400">Entradas no Caixa</span>
+                      <span className="font-semibold text-gray-900 dark:text-white">{formatCurrency(metricas.totalEntradasCaixa)}</span>
+                    </div>
+                    <div className="pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                      <span className="font-bold text-gray-900 dark:text-white">TOTAL GERAL RECEITAS</span>
+                      <span className="font-bold text-green-600 dark:text-green-400 text-lg">{formatCurrency(totalGeralReceitas)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Despesas e Outros */}
+                <div>
+                  <h3 className="text-lg font-medium text-red-700 dark:text-red-400 mb-4 border-b pb-2">Despesas & Outros</h3>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 dark:text-gray-400">Saídas no Caixa</span>
+                      <span className="font-semibold text-gray-900 dark:text-white">{formatCurrency(metricas.totalSaidasCaixa)}</span>
+                    </div>
+                    
+                    <h3 className="text-lg font-medium text-blue-700 dark:text-blue-400 mt-8 mb-4 border-b pb-2">Fluxo de Caixa Real (Recebido)</h3>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 dark:text-gray-400">Recebido de Entregas</span>
+                      <span className="font-semibold text-gray-900 dark:text-white">{formatCurrency(metricas.totalPagamentos)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 dark:text-gray-400">Recebido de Atacado</span>
+                      <span className="font-semibold text-gray-900 dark:text-white">{formatCurrency(metricas.totalRecebidoAtacado)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 dark:text-gray-400">Saldo Líquido Acertos</span>
+                      <span className="font-semibold text-gray-900 dark:text-white">{formatCurrency(metricas.saldoLiquidoAcertos)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {selectedReport === 'fluxo_pagamentos' && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+            <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white flex items-center">
+                  <CreditCard className="w-5 h-5 mr-2 no-print" />
+                  Fluxo de Pagamentos — Últimos {selectedPeriod} dias
+                </h2>
+                <div className="flex flex-wrap gap-3 text-sm">
+                  <span className="bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-400 px-3 py-1 rounded-full font-medium">
+                    Entregas: {formatCurrency(metricas.totalPagamentos)}
+                  </span>
+                  <span className="bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-400 px-3 py-1 rounded-full font-medium">
+                    Atacado: {formatCurrency(metricas.totalRecebidoAtacado)}
+                  </span>
+                  <span className="bg-purple-100 dark:bg-purple-900/20 text-purple-800 dark:text-purple-400 px-3 py-1 rounded-full font-medium">
+                    Total: {formatCurrency(metricas.totalPagamentos + metricas.totalRecebidoAtacado)}
+                  </span>
+                </div>
+              </div>
+              {totalItems > 0 && (
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 no-print">
+                  Mostrando {startIndex + 1} a {Math.min(endIndex, totalItems)} de {totalItems} pagamentos
+                </p>
+              )}
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 print-table">
+                <thead className="bg-gray-50 dark:bg-gray-700">
+                  <tr>
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Data</th>
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Canal</th>
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Referência</th>
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Forma Pgto</th>
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Valor</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  {currentItems.length === 0 ? (
+                    <tr><td colSpan={5} className="px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400">Nenhum pagamento encontrado no período</td></tr>
+                  ) : currentItems.map((item: any, index: number) => (
+                    <tr key={String(item.id || index)} className="animate-fade-in-up" style={{ animationDelay: `${index * 50}ms` }}>
+                      <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm text-gray-900 dark:text-white whitespace-nowrap">
+                        {item.data_pagamento ? new Date(item.data_pagamento).toLocaleDateString('pt-BR') : item.created_at ? new Date(item.created_at).toLocaleDateString('pt-BR') : '—'}
+                      </td>
+                      <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${item._tipo === 'atacado' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400' : 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'}`}>
+                          {item._tipo === 'atacado' ? 'Atacado' : 'Entrega'}
+                        </span>
+                      </td>
+                      <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm text-gray-900 dark:text-white">
+                        {item._tipo === 'atacado' ? `Pedido #${item._pedido || '—'} — ${item._cliente || 'Cliente'}` : `Entrega ${item.entrega_id ? String(item.entrega_id).slice(0, 8) + '...' : '—'}`}
+                      </td>
+                      <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm text-gray-900 dark:text-white">{item.forma_pagamento || '—'}</td>
+                      <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm font-semibold text-gray-900 dark:text-white">{formatCurrency(Number(item.valor) || 0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination currentPage={currentPage} totalPages={totalPages} totalCount={totalItems} pageSize={itemsPerPage} onPageChange={(page) => setCurrentPage(page)} />
+          </div>
+        )}
+
+        {selectedReport === 'vendas_atacado_pj' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Pedidos Atacado</p>
+                <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
+                  {dadosPeriodo.vendasAtacado.length}
+                </p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white mt-1">
+                  {formatCurrency(metricas.totalVendasAtacado)}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Recebido: {formatCurrency(metricas.totalRecebidoAtacado)}
+                </p>
+              </div>
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Orçamentos PJ Aprovados</p>
+                <p className="text-xl font-bold text-purple-600 dark:text-purple-400">
+                  {dadosPeriodo.orcamentosPJ.length}
+                </p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white mt-1">
+                  {formatCurrency(metricas.totalOrcamentosAprovados)}
+                </p>
+              </div>
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">A Receber Atacado</p>
+                <p className="text-xl font-bold text-red-500 dark:text-red-400">
+                  {formatCurrency(metricas.totalVendasAtacado - metricas.totalRecebidoAtacado)}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  ({dadosPeriodo.vendasAtacado.filter((v: any) => v.status_pagamento !== 'pago').length} pendentes)
+                </p>
+              </div>
+            </div>
+            
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+      <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
+          <BarChart3 className="w-5 h-5 mr-2 no-print" />
+          Pedidos Atacado & Orçamentos PJ — Últimos {selectedPeriod} dias
+        </h2>
+        {totalItems > 0 && (
+          <span className="text-xs text-gray-500 no-print">
+            {startIndex + 1}–{Math.min(endIndex, totalItems)} de {totalItems}
+          </span>
+        )}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 print-table">
+          <thead className="bg-gray-50 dark:bg-gray-700">
+            <tr>
+              <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Data</th>
+              <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
+              <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nº</th>
+              <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente</th>
+              <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Valor Total</th>
+              <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pago</th>
+              <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+            {currentItems.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-6 py-8 text-center text-sm text-gray-500">
+                  Nenhum registro encontrado no período
+                </td>
+              </tr>
+            ) : currentItems.map((item: any, index: number) => (
+              <tr key={String(item.id || index)} className="animate-fade-in-up" style={{ animationDelay: `${index * 50}ms` }}>
+                <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm text-gray-900 dark:text-white whitespace-nowrap">
+                  {item._tipo === 'atacado' 
+                    ? (item.data_entrega ? new Date(item.data_entrega).toLocaleDateString('pt-BR') : '—') 
+                    : (item.data_orcamento ? new Date(item.data_orcamento).toLocaleDateString('pt-BR') : '—')}
+                </td>
+                <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm">
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                    item._tipo === 'atacado' 
+                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400' 
+                      : 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400'
+                  }`}>
+                    {item._tipo === 'atacado' ? 'Atacado' : 'Orç. PJ'}
+                  </span>
+                </td>
+                <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm text-gray-900 dark:text-white">
+                  {item._tipo === 'atacado' ? `#${item.numero_pedido || '—'}` : `#${item.numero_orcamento || '—'}`}
+                </td>
+                <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm text-gray-900 dark:text-white">
+                  {item._tipo === 'atacado' ? (item.nome_cliente_cache || '—') : (item.cliente_nome || '—')}
+                </td>
+                <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm font-semibold text-gray-900 dark:text-white">
+                  {formatCurrency(Number(item.valor_total) || 0)}
+                </td>
+                <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm text-gray-900 dark:text-white">
+                  {item._tipo === 'atacado' ? formatCurrency(Number(item.valor_pago) || 0) : '—'}
+                </td>
+                <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm">
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                    item.status_pagamento === 'pago' || item.status === 'convertido' || item.status === 'aprovado'
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+                      : item.status_pagamento === 'atrasado' || item.status === 'rejeitado'
+                      ? 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
+                      : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
+                  }`}>
+                    {item._tipo === 'atacado' 
+                      ? (item.status_pagamento || 'pendente') 
+                      : (item.status || 'pendente')}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Pagination 
+        currentPage={currentPage} 
+        totalPages={totalPages} 
+        totalCount={totalItems} 
+        pageSize={itemsPerPage} 
+        onPageChange={(page) => setCurrentPage(page)} 
+      />
+    </div>
+          </div>
+        )}
 
         {/* Conteúdo do Relatório */}
         {selectedReport === 'vendas' && (
@@ -1023,7 +1476,7 @@ const Relatorios: React.FC = () => {
                         {vendedor.entregasPagas}
                       </td>
                       <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm text-gray-900 dark:text-white">
-                        {vendedor.taxaConversao}%
+                        {vendedor.taxaConversao}
                       </td>
                       <td className="px-3 sm:px-6 py-4 text-right no-print">
                         <DropdownMenu>
@@ -1190,7 +1643,7 @@ const Relatorios: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {currentItems.map((entrega: Record<string, unknown>, index: number) => (
+                  {currentItems.map((entrega: any, index: number) => (
                     <tr 
                       key={String(entrega.id || Math.random())}
                       className="animate-fade-in-up"

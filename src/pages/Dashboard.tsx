@@ -3,13 +3,13 @@ import { useCountUp } from '@/hooks/useCountUp';
 import { useDashboard } from '@/hooks/useDashboard';
 import { EstoqueAtual } from '@/types/estoque';
 import {
-    Activity,
-    AlertTriangle,
-    ArrowRight,
-    DollarSign,
-    TrendingUp,
-    Truck,
-    Users
+  Activity,
+  AlertTriangle,
+  ArrowRight,
+  DollarSign,
+  TrendingUp,
+  Truck,
+  Users
 } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -34,13 +34,14 @@ const Badge = ({ children, variant }: { children: React.ReactNode, variant: 'def
 const EstoqueAlertsCard: React.FC<{ data: EstoqueAtual[], isLoading: boolean }> = ({ 
   data, 
   isLoading 
-}) => (
-  <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 h-full">
-    <div className="flex items-center justify-between mb-4">
+}) => {
+  return (
+  <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 h-96 overflow-hidden flex flex-col">
+    <div className="flex items-center justify-between mb-4 flex-shrink-0">
       <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
         <AlertTriangle className="w-5 h-5 text-yellow-500" />
         Alertas de Estoque
-        {!isLoading && data.length > 0 && (
+        {!isLoading && data && data.length > 0 && (
           <span className="bg-red-100 text-red-800 text-xs font-medium mr-2 px-2.5 py-0.5 rounded dark:bg-red-900 dark:text-red-300">
             {data.length}
           </span>
@@ -53,7 +54,7 @@ const EstoqueAlertsCard: React.FC<{ data: EstoqueAtual[], isLoading: boolean }> 
     </div>
     
     {isLoading ? (
-      <div className="space-y-4">
+      <div className="space-y-4 overflow-y-auto pr-2">
         {[...Array(3)].map((_, i) => (
           <div key={i} className="flex items-center justify-between">
             <div className="flex items-center min-w-0 flex-1">
@@ -67,11 +68,11 @@ const EstoqueAlertsCard: React.FC<{ data: EstoqueAtual[], isLoading: boolean }> 
         ))}
       </div>
     ) : (
-      <div className="space-y-3 sm:space-y-4">
-        {data.length > 0 ? data.slice(0, 5).map((produto, index) => (
+      <div className="space-y-3 sm:space-y-4 overflow-y-auto pr-2 h-full">
+        {data && data.length > 0 ? data.map((produto, index) => (
           <div 
             key={produto.id} 
-            className="flex items-center justify-between animate-fade-in-up"
+            className="flex items-center justify-between animate-fade-in-up border-b border-gray-100 dark:border-gray-700 pb-2 last:border-0 last:pb-0"
             style={{ animationDelay: `${index * 150}ms` }}
           >
             <div className="flex items-center min-w-0 flex-1">
@@ -79,17 +80,27 @@ const EstoqueAlertsCard: React.FC<{ data: EstoqueAtual[], isLoading: boolean }> 
                 <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white truncate">
                   {produto.produto_nome}
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                  Estoque Mínimo: {produto.estoque_minimo} {produto.unidade_medida}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className={`text-xs font-medium truncate ${
+                    produto.status_estoque === 'ZERADO' 
+                      ? 'text-red-600 dark:text-red-400' 
+                      : 'text-orange-600 dark:text-orange-400'
+                  }`}>
+                    {produto.status_estoque === 'ZERADO' 
+                      ? 'Estoque Esgotado' 
+                      : 'Estoque Abaixo do Mínimo'}
+                  </p>
+                </div>
               </div>
             </div>
-            <Badge variant={produto.status_estoque === 'ZERADO' ? 'destructive' : 'warning'}>
-              {produto.qtd_estoque} {produto.unidade_medida}
-            </Badge>
+            <div className="flex flex-col items-end">
+              <Badge variant={produto.status_estoque === 'ZERADO' ? 'destructive' : 'warning'}>
+                {produto.qtd_estoque} {produto.unidade_medida}
+              </Badge>
+            </div>
           </div>
         )) : (
-          <div className="flex flex-col items-center justify-center py-8 text-center">
+          <div className="flex flex-col items-center justify-center py-8 text-center h-full">
              <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-3">
                <TrendingUp className="w-6 h-6 text-green-600 dark:text-green-400" />
              </div>
@@ -101,6 +112,7 @@ const EstoqueAlertsCard: React.FC<{ data: EstoqueAtual[], isLoading: boolean }> 
     )}
   </div>
 );
+};
 
 // ===== INTERFACES ===== 
 interface StatCardProps { 
@@ -188,7 +200,7 @@ const FaturamentoMensalChart: React.FC<{ data: MonthData[], isLoading: boolean }
 
   if (isLoading) { 
     return ( 
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700"> 
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 h-96"> 
         <Skeleton className="h-5 w-48 mb-4" /> 
         <div className="h-48 sm:h-64 flex items-end justify-between space-x-1 sm:space-x-2"> 
           {[...Array(12)].map((_, i) => ( 
@@ -209,8 +221,8 @@ const FaturamentoMensalChart: React.FC<{ data: MonthData[], isLoading: boolean }
   } 
 
   return ( 
-    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 relative"> 
-      <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-4"> 
+    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 relative h-96 flex flex-col"> 
+      <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-4 flex-shrink-0"> 
         Faturamento Mensal 
       </h3> 
       
@@ -234,7 +246,7 @@ const FaturamentoMensalChart: React.FC<{ data: MonthData[], isLoading: boolean }
         </div> 
       )} 
       
-      <div className="h-48 sm:h-64 flex items-end justify-between space-x-1 sm:space-x-2 relative"> 
+      <div className="flex-1 flex items-end justify-between space-x-1 sm:space-x-2 relative min-h-0"> 
         {data.map((item, index) => ( 
           <div 
             key={index} 
@@ -260,7 +272,7 @@ const FaturamentoMensalChart: React.FC<{ data: MonthData[], isLoading: boolean }
         ))} 
       </div> 
       
-      <div className="flex justify-between mt-2 text-xs text-gray-500 dark:text-gray-400"> 
+      <div className="flex justify-between mt-2 text-xs text-gray-500 dark:text-gray-400 flex-shrink-0"> 
         {data.map((item, index) => ( 
           <span key={index} className="flex-shrink-0">{item.month}</span> 
         ))} 
@@ -281,13 +293,13 @@ const TopVendedoresCard: React.FC<{ data: TopVendedor[], isLoading: boolean }> =
   data, 
   isLoading 
 }) => ( 
-  <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700"> 
-    <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-4"> 
+  <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 h-96 overflow-hidden flex flex-col"> 
+    <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-4 flex-shrink-0"> 
       Top Vendedores 
     </h3> 
     
     {isLoading ? ( 
-      <div className="space-y-4"> 
+      <div className="space-y-4 overflow-y-auto pr-2"> 
         {[...Array(5)].map((_, i) => ( 
           <div key={i} className="flex items-center justify-between"> 
             <div className="flex items-center min-w-0 flex-1"> 
@@ -302,8 +314,8 @@ const TopVendedoresCard: React.FC<{ data: TopVendedor[], isLoading: boolean }> =
         ))} 
       </div> 
     ) : ( 
-      <div className="space-y-3 sm:space-y-4"> 
-        {data.length > 0 ? data.map((seller, index) => ( 
+      <div className="space-y-3 sm:space-y-4 overflow-y-auto pr-2"> 
+        {data.length > 0 ? data.slice(0, 5).map((seller, index) => ( 
           <div 
             key={index} 
             className="flex items-center justify-between animate-fade-in-up" 
@@ -331,7 +343,7 @@ const TopVendedoresCard: React.FC<{ data: TopVendedor[], isLoading: boolean }> =
             </span> 
           </div> 
         )) : ( 
-          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400"> 
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 text-center"> 
             Nenhum vendedor encontrado 
           </p> 
         )} 
@@ -475,24 +487,23 @@ const Dashboard: React.FC = () => {
          ))} 
        </div> 
  
-       {/* Charts Section */} 
-       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 sm:gap-8"> 
-         <div className="grid grid-cols-1 gap-6 sm:gap-8">
-            <FaturamentoMensalChart 
-              data={faturamentoMensalData} 
-              isLoading={someLoading && !charts} 
-            /> 
-            <TopVendedoresCard 
-              data={vendedores || []} 
-              isLoading={someLoading && !vendedores} 
-            />
-         </div>
-         
-         <div className="grid grid-cols-1 gap-6 sm:gap-8 content-start">
-            <EstoqueAlertsCard
-              data={estoqueAlerts || []}
-              isLoading={someLoading && !estoqueAlerts}
-            />
+       {/* Charts Section - Full width chart on top */} 
+       <div className="space-y-6 sm:space-y-8">
+         <FaturamentoMensalChart 
+           data={faturamentoMensalData} 
+           isLoading={someLoading && !charts} 
+         />
+
+         {/* Bottom row: Vendedores + Estoque side by side */}
+         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 sm:gap-8">
+           <TopVendedoresCard 
+             data={vendedores || []} 
+             isLoading={someLoading && !vendedores} 
+           />
+           <EstoqueAlertsCard
+             data={estoqueAlerts || []}
+             isLoading={someLoading && !estoqueAlerts}
+           />
          </div>
        </div> 
      </div> 

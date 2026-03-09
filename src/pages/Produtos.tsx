@@ -8,7 +8,7 @@ import { Pagination } from "@/components/ui/pagination";
 import ProdutoModal from '@/components/ui/ProdutoModal';
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Edit, Eye, Filter, MoreHorizontal, Package, Plus, Search, Trash2 } from 'lucide-react';
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   useDeleteProduto,
@@ -26,9 +26,13 @@ const categorias = [
   'Outros'
 ];
 
+const normalizar = (str: string) =>
+  str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
 const Produtos: React.FC = () => {
-  const { isLoading: authLoading, userType, adminId } = useAuth();
+  const { isLoading: authLoading, userType, adminId, user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todas');
   const [selectedProduto, setSelectedProduto] = useState<Produto | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -37,15 +41,30 @@ const Produtos: React.FC = () => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [produtoParaExcluir, setProdutoParaExcluir] = useState<Produto | null>(null);
 
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      // Normaliza antes de enviar ao hook (remove acentos, minúscula)
+      setDebouncedSearchTerm(normalizar(searchTerm.trim()));
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
   // Usar hooks de cache para buscar produtos
   const {
     data: produtosData = [],
+    count: totalCount,
     isLoading: productsLoading,
     error,
     refetch
-  } = useProdutos();
+  } = useProdutos({
+    page: currentPage,
+    pageSize: itemsPerPage,
+    searchTerm: debouncedSearchTerm,
+    categoria: selectedCategory
+  });
 
-  const isLoading = authLoading || productsLoading;
+  // isLoading considera carregamento da auth, dos produtos E se temos usuário mas ainda sem adminId
+  const isLoading = authLoading || productsLoading || (!!user && !adminId);
 
   // Buscar categorias disponíveis (removido - não utilizado)
   // const { data: categoriasDisponiveis = [] } = useProdutoCategories();
@@ -55,6 +74,19 @@ const Produtos: React.FC = () => {
 
   // Tipar os dados corretamente
   const produtos = produtosData as Produto[];
+
+  // Filtro local complementar para multi-palavras (ex: "arroz 5kg")
+  const produtosFiltrados = React.useMemo(() => {
+    if (!searchTerm.trim()) return produtos;
+    const termos = normalizar(searchTerm.trim()).split(/\s+/);
+    return produtos.filter(p => {
+      const campos =
+        normalizar(p.produto_nome) + ' ' +
+        normalizar(p.produto_cod) + ' ' +
+        normalizar(p.categoria || '');
+      return termos.every(termo => campos.includes(termo));
+    });
+  }, [produtos, searchTerm]);
 
   // Função para calcular itens por página baseado no tamanho da tela
   const calculateItemsPerPage = () => {
@@ -87,18 +119,28 @@ const Produtos: React.FC = () => {
     const handleResize = () => {
       const newItemsPerPage = calculateItemsPerPage();
       setItemsPerPage(newItemsPerPage);
-
-      // Ajustar página atual se necessário
-      const maxPage = Math.ceil(produtos.length / newItemsPerPage);
-      if (currentPage > maxPage && maxPage > 0) {
-        setCurrentPage(maxPage);
-      }
+      
+      // Resetar para a primeira página se mudar o tamanho da página, 
+      // pois o cálculo de maxPage mudaria
+      // setCurrentPage(1); // Opcional, mas mais seguro
     };
 
     handleResize(); // Calcular inicial
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [produtos.length]);
+  }, []);
+
+  // Lógica de paginação
+  const totalPages = Math.ceil((totalCount || 0) / itemsPerPage);
+  
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentProdutos = produtosFiltrados;
+
+  // Reset página quando filtro mudar
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedCategory]);
 
   // Renderização de Debug para caso de lista vazia
   if (!isLoading && produtos.length === 0 && userType === 'funcionario') {
@@ -131,37 +173,6 @@ const Produtos: React.FC = () => {
       </div>
     );
   }
-
-  // Filtrar produtos usando useMemo para otimização
-  const filteredProdutos = useMemo(() => {
-    let filtered = produtos;
-
-    // Filtro por categoria
-    if (selectedCategory !== 'Todas') {
-      filtered = filtered.filter((produto: Produto) => produto.categoria === selectedCategory);
-    }
-
-    // Filtro por busca
-    if (searchTerm) {
-      filtered = filtered.filter((produto: Produto) =>
-        produto.produto_nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        produto.produto_cod?.toString().toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    return filtered;
-  }, [produtos, searchTerm, selectedCategory]);
-
-  // Lógica de paginação
-  const totalPages = Math.ceil(filteredProdutos.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentProdutos = filteredProdutos.slice(startIndex, endIndex);
-
-  // Reset página quando filtro mudar
-  React.useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, selectedCategory]);
 
   const handleViewProduto = (produto: Produto) => {
     setSelectedProduto(produto);
@@ -375,19 +386,19 @@ const Produtos: React.FC = () => {
       </div>
 
       {/* Lista de Produtos Única */}
-      {filteredProdutos.length > 0 ? (
+      {produtos.length > 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white flex items-center">
               <Package className="w-4 sm:w-5 h-4 sm:h-5 mr-2 text-blue-600 dark:text-blue-400" />
-              {selectedCategory === 'Todas' ? 'Todos os Produtos' : selectedCategory} ({filteredProdutos.length})
+              {selectedCategory === 'Todas' ? 'Todos os Produtos' : selectedCategory} ({totalCount || 0})
             </h2>
           </div>
 
           {/* Informações de paginação */}
           <div className="px-4 sm:px-6 py-2 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
             <span>
-              Mostrando {startIndex + 1} a {Math.min(endIndex, filteredProdutos.length)} de {filteredProdutos.length} produtos
+              Mostrando {startIndex + 1} a {Math.min(endIndex, totalCount || 0)} de {totalCount || 0} produtos
             </span>
             <span>
               {itemsPerPage} por página
@@ -550,7 +561,7 @@ const Produtos: React.FC = () => {
         <Pagination
           currentPage={currentPage - 1}
           totalPages={totalPages}
-          totalCount={filteredProdutos.length}
+          totalCount={totalCount || 0}
           pageSize={itemsPerPage}
           onPageChange={(page) => setCurrentPage(page + 1)}
         />

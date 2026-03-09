@@ -11,28 +11,54 @@ export type Produto = ProdutoCadastrado;
 export const useProdutos = (options?: {
   enabled?: boolean;
   categoria?: string;
+  page?: number;
+  pageSize?: number;
+  searchTerm?: string;
 }) => {
   const { adminId } = useAuth();
   const targetId = adminId;
+  const page = options?.page || 1;
+  const pageSize = options?.pageSize || 1000;
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
 
-  const query = supabase
+  let query = supabase
     .from('produtos_cadastrado')
-    .select('*')
-    .eq('administrador_id', targetId!)
-    .eq('ativo', true)
-    .order('produto_nome');
+    .select('*', { count: 'exact' });
+
+  if (targetId) {
+    query = query.eq('administrador_id', targetId);
+  } else {
+    // Se não tiver adminId, não deve retornar nada
+    query = query.eq('administrador_id', '00000000-0000-0000-0000-000000000000');
+  }
+
+  query = query.eq('ativo', true);
 
   // Filtros opcionais
-  if (options?.categoria) {
-    query.eq('categoria', options.categoria);
+  if (options?.categoria && options.categoria !== 'Todas') {
+    query = query.eq('categoria', options.categoria);
   }
+
+  if (options?.searchTerm) {
+    // Busca por nome ou código
+    query = query.or(`produto_nome.ilike.%${options.searchTerm}%,produto_cod.ilike.%${options.searchTerm}%`);
+  }
+
+  query = query.order('produto_nome').range(from, to);
 
   return useSupabaseQuery(
     'PRODUTOS',
     query,
-    [CACHE_KEYS.PRODUTOS, targetId, { categoria: options?.categoria }],
+    [CACHE_KEYS.PRODUTOS, targetId, { 
+      categoria: options?.categoria, 
+      page, 
+      pageSize, 
+      searchTerm: options?.searchTerm 
+    }],
     {
       enabled: (options?.enabled ?? true) && !!targetId,
+      refetchOnMount: true,
     }
   );
 };

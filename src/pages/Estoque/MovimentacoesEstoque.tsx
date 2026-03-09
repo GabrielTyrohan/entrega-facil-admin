@@ -1,6 +1,6 @@
 import { format } from 'date-fns';
-import { Filter, Plus, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Check, Filter, Plus, Search, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/Modal';
@@ -50,8 +50,37 @@ export default function MovimentacoesEstoque() {
     observacoes: '',
   });
 
+  // Combobox State
+  const [comboboxOpen, setComboboxOpen] = useState(false);
+  const [comboboxSearch, setComboboxSearch] = useState('');
+  const comboboxRef = useRef<HTMLDivElement>(null);
+
   // Hooks
   const { data: produtos } = useProdutos();
+
+  // Close combobox when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (comboboxRef.current && !comboboxRef.current.contains(event.target as Node)) {
+        setComboboxOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Filter products for combobox
+  const filteredProducts = useMemo(() => {
+    if (!produtos) return [];
+    if (!comboboxSearch) return produtos;
+    return produtos.filter((prod: any) => 
+      prod.produto_nome.toLowerCase().includes(comboboxSearch.toLowerCase())
+    );
+  }, [produtos, comboboxSearch]);
+
+  const selectedProduct = useMemo(() => {
+    return produtos?.find((p: any) => p.id === ajusteData.produtoId);
+  }, [produtos, ajusteData.produtoId]);
   const { 
     movimentacoes, 
     isLoading, 
@@ -333,20 +362,65 @@ export default function MovimentacoesEstoque() {
         title="Registrar Ajuste Manual"
       >
         <div className="space-y-4">
-          <div className="space-y-2">
+          <div className="space-y-2 relative" ref={comboboxRef}>
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Produto</label>
-            <select
-              className="w-full h-10 px-3 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={ajusteData.produtoId}
-              onChange={(e) => setAjusteData(prev => ({ ...prev, produtoId: e.target.value }))}
+            <div 
+              className="w-full h-10 px-3 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm flex items-center justify-between cursor-pointer focus-within:ring-2 focus-within:ring-blue-500"
+              onClick={() => {
+                setComboboxOpen(!comboboxOpen);
+                if (!comboboxOpen) setComboboxSearch('');
+              }}
             >
-              <option value="">Selecione um produto...</option>
-              {produtos?.map((prod: any) => (
-                <option key={prod.id} value={prod.id}>
-                  {prod.produto_nome} (Atual: {prod.qtd_estoque})
-                </option>
-              ))}
-            </select>
+              <span className={selectedProduct ? 'text-gray-900 dark:text-white' : 'text-gray-500'}>
+                {selectedProduct 
+                  ? `${selectedProduct.produto_nome} (Atual: ${selectedProduct.qtd_estoque})` 
+                  : 'Selecione ou pesquise um produto...'}
+              </span>
+              <Search className="w-4 h-4 text-gray-400" />
+            </div>
+
+            {comboboxOpen && (
+              <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-60 overflow-hidden flex flex-col">
+                <div className="p-2 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800">
+                  <input
+                    type="text"
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-900 dark:text-white"
+                    placeholder="Buscar produto..."
+                    value={comboboxSearch}
+                    onChange={(e) => setComboboxSearch(e.target.value)}
+                    autoFocus
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+                <div className="overflow-y-auto flex-1">
+                  {filteredProducts.length === 0 ? (
+                    <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                      Nenhum produto encontrado.
+                    </div>
+                  ) : (
+                    filteredProducts.map((prod: any) => (
+                      <div
+                        key={prod.id}
+                        className={`px-4 py-2 text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center justify-between ${
+                          ajusteData.produtoId === prod.id ? 'bg-blue-50 dark:bg-blue-900/30' : ''
+                        }`}
+                        onClick={() => {
+                          setAjusteData(prev => ({ ...prev, produtoId: prod.id }));
+                          setComboboxOpen(false);
+                        }}
+                      >
+                        <span className="text-gray-900 dark:text-white">
+                          {prod.produto_nome} <span className="text-gray-500 text-xs ml-1">(Estoque: {prod.qtd_estoque})</span>
+                        </span>
+                        {ajusteData.produtoId === prod.id && (
+                          <Check className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">

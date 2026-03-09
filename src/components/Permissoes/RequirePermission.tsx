@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react';
-import { useAuth, Permissoes } from '../../contexts/AuthContext';
-import { Navigate } from 'react-router-dom';
 import { toast } from '@/utils/toast';
+import React, { useEffect } from 'react';
+import { Navigate } from 'react-router-dom';
+import { Permissoes, useAuth } from '../../contexts/AuthContext';
 
 interface Props {
   permission: keyof Permissoes;
@@ -11,16 +11,16 @@ interface Props {
 }
 
 export const RequirePermission: React.FC<Props> = ({ permission, children, fallback = null, redirectTo }) => {
-  const { permissions, userType, loading } = useAuth();
+  const { permissions, userType, isLoading } = useAuth();
   const hasPermission = userType === 'admin' || (permissions && permissions[permission]);
 
   useEffect(() => {
-    if (!loading && !hasPermission && redirectTo) {
+    if (!isLoading && !hasPermission && redirectTo) {
        toast.error('Você não tem permissão para acessar esta área.');
     }
-  }, [loading, hasPermission, redirectTo]);
+  }, [isLoading, hasPermission, redirectTo]);
 
-  if (loading) {
+  if (isLoading) {
       return null;
   }
 

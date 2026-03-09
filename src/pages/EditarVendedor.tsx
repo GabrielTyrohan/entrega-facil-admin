@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, User, Mail, Phone, MapPin, Calendar, FileText, CreditCard, Key } from 'lucide-react';
+import { ArrowLeft, Calendar, CreditCard, FileText, Key, Mail, MapPin, Phone, Save, User } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { VendedorService } from '../services/vendedorService';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import { VendedorService } from '../services/vendedorService';
 import { toast } from '../utils/toast';
 
 interface DadosBancarios {
@@ -17,7 +17,9 @@ interface DadosBancarios {
 const EditarVendedor: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const { user } = useAuth();
+  const { user, adminId } = useAuth();
+  const targetId = adminId || user?.id; // Usa adminId se for funcionário, ou user.id se for admin
+
   const [formData, setFormData] = useState({
     nome: '',
     email: '',
@@ -69,10 +71,10 @@ const EditarVendedor: React.FC = () => {
   // Carregar dados do vendedor
   useEffect(() => {
     const carregarVendedor = async () => {
-      if (!id || !user?.id) return;
+      if (!id || !targetId) return;
       
       try {
-        const vendedorService = new VendedorService(user.id);
+        const vendedorService = new VendedorService(targetId);
         const vendedor = await vendedorService.getById(id);
         
         if (!vendedor) {

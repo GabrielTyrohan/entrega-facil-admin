@@ -163,30 +163,6 @@ export class ProdutoService {
     }
   }
 
-  // Criar novo produto
-  async createProduto(produtoData: CreateProdutoData): Promise<ProdutoCadastrado> {
-    try {
-      const { data, error } = await supabase
-        .from('produtos_cadastrado')
-        .insert([{
-          ...produtoData,
-          administrador_id: this.adminId
-        }])
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Erro ao criar produto:', error);
-        throw new Error('Erro ao criar produto');
-      }
-
-      return data;
-    } catch {
-      // Error handling without logging sensitive data
-      throw new Error('Erro no serviço de produtos');
-    }
-  }
-
   // Buscar produtos por administrador
   async getProdutosByAdmin(): Promise<ProdutoCadastrado[]> {
     try {
@@ -236,25 +212,32 @@ export class ProdutoService {
   // Atualizar produto
   async updateProduto(id: string, produtoData: Partial<CreateProdutoData>): Promise<ProdutoCadastrado> {
     try {
+      const { 
+        administrador_id, 
+        created_at, 
+        valor_estoque, 
+        ...updateData 
+      } = produtoData as any;
+
       const { data, error } = await supabase
         .from('produtos_cadastrado')
         .update({
-          ...produtoData
+          ...updateData,
+          updated_at: new Date().toISOString()
         })
         .eq('id', id)
-        .eq('administrador_id', this.adminId)
         .select()
         .single();
 
       if (error) {
         console.error('Erro ao atualizar produto:', error);
-        throw new Error('Erro ao atualizar produto');
+        throw error;
       }
 
       return data;
-    } catch {
-      // Error handling without logging sensitive data
-      throw new Error('Erro no serviço de produtos');
+    } catch (error: any) {
+      console.error('Erro ao atualizar produto:', error);
+      throw new Error(error.message || 'Erro no serviço de produtos');
     }
   }
 
@@ -264,8 +247,7 @@ export class ProdutoService {
       const { error } = await supabase
         .from('produtos_cadastrado')
         .delete()
-        .eq('id', id)
-        .eq('administrador_id', this.adminId);
+        .eq('id', id);
 
       if (error) {
         console.error('Erro ao deletar produto:', error);

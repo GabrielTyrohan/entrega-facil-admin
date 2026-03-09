@@ -13,6 +13,7 @@ import {
   ClipboardList,
   CreditCard,
   DollarSign,
+  FileKey,
   FileText,
   LayoutDashboard,
   MessageSquare,
@@ -96,6 +97,12 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
       icon: <ShoppingBasket className="w-5 h-5" />,
       group: 'Catálogo'
     },
+    {
+      path: '/entregas/avulsas',
+      label: 'Entregas Avulsas',
+      icon: <Truck className="w-5 h-5" />,
+      group: 'Catálogo'
+    },
     
     // ESTOQUE
     {
@@ -169,6 +176,14 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
       label: 'Tabela de Preços',
       icon: <Receipt className="w-5 h-5" />,
       permission: 'vendas_atacado',
+      group: 'Comercial'
+    },
+    {
+      path: '/configuracoes-fiscais',
+      label: 'Configuração Fiscal',
+      icon: <FileKey className="w-5 h-5" />,
+      permission: 'configuracoes_fiscais',
+      adminOnly: true,
       group: 'Comercial'
     },
     

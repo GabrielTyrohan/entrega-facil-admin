@@ -21,7 +21,9 @@ import { useAuth } from '../contexts/AuthContext';
 
 const Vendedores: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, adminId } = useAuth();
+  const targetId = adminId || user?.id; // Usa adminId se for funcionário, ou user.id se for admin
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedVendedor, setSelectedVendedor] = useState<Vendedor | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -40,8 +42,8 @@ const Vendedores: React.FC = () => {
   const deleteVendedorMutation = useDeleteVendedor();
   
   // Hook para total de entregas por vendedor
-  const { data: entregasPorVendedor = {}, isLoading: isLoadingEntregas } = useTotalEntregasPorAdministrador(user?.id || '', {
-    enabled: !!user?.id
+  const { data: entregasPorVendedor = {}, isLoading: isLoadingEntregas } = useTotalEntregasPorAdministrador(targetId || '', {
+    enabled: !!targetId
   });
 
   // Handlers para as ações do dropdown
@@ -331,7 +333,7 @@ const Vendedores: React.FC = () => {
                         {vendedor.ativo ? 'Ativo' : 'Inativo'}
                       </span>
                     </td>
-                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white hidden lg:table-cell">
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden lg:table-cell">
                        {isLoadingEntregas ? (
                          <div className="animate-pulse bg-gray-200 dark:bg-gray-600 h-4 w-8 rounded"></div>
                        ) : (

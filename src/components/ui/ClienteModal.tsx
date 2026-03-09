@@ -1,8 +1,8 @@
+import { Calendar, CreditCard, DollarSign, FileText, Mail, MapPin, Phone, Shield, User, Users, X } from 'lucide-react';
 import React from 'react';
-import { X, Mail, Phone, Calendar, MapPin, User, CreditCard, FileText, Users, DollarSign, Shield } from 'lucide-react';
 import type { Cliente } from '../../hooks/useClientes';
-import { useVendedor } from '../../hooks/useVendedores';
 import { useResponsaveisPorCliente, type Responsavel } from '../../hooks/useResponsaveis';
+import { useVendedor } from '../../hooks/useVendedores';
 
 interface ClienteModalProps {
   cliente: Cliente | null;
@@ -266,7 +266,7 @@ const ClienteModal: React.FC<ClienteModalProps> = ({ cliente, isOpen, onClose })
                   <div className="min-w-0 flex-1">
                     <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Endereço Completo</p>
                     <p className="text-sm sm:text-base text-gray-900 dark:text-white font-medium break-words">
-                      {`${cliente.endereco || ''}${cliente.numero ? `, ${cliente.numero}` : ''}${cliente.Bairro ? `, ${cliente.Bairro}` : ''}${cliente.Cidade ? `, ${cliente.Cidade}` : ''}${cliente.Estado ? ` - ${cliente.Estado}` : ''}${cliente.cep ? `, CEP: ${cliente.cep}` : ''}${cliente.complemento ? `, ${cliente.complemento}` : ''}`.replace(/^, /g, '') || 'N/A'}
+                      {`${cliente.endereco || ''}${cliente.numero ? `, ${cliente.numero}` : ''}${cliente.Bairro || cliente.bairro ? `, ${cliente.Bairro || cliente.bairro}` : ''}${cliente.Cidade || cliente.cidade ? `, ${cliente.Cidade || cliente.cidade}` : ''}${cliente.Estado || cliente.estado ? ` - ${cliente.Estado || cliente.estado}` : ''}${cliente.cep ? `, CEP: ${cliente.cep}` : ''}${cliente.complemento ? `, ${cliente.complemento}` : ''}`.replace(/^, /g, '') || 'N/A'}
                     </p>
                   </div>
                 </div>

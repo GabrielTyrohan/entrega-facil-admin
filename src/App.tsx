@@ -13,10 +13,13 @@ import Configuracoes from './pages/Configuracoes';
 import Dashboard from './pages/Dashboard';
 import Devedores from './pages/Devedores';
 import EditarVendedor from './pages/EditarVendedor';
+import EntregaAvulsa from './pages/EntregaAvulsa';
 import Entregas from './pages/Entregas';
 import MovimentacoesEstoque from './pages/Estoque/MovimentacoesEstoque';
 import RelatorioEstoque from './pages/Estoque/RelatorioEstoque';
+import NovaEntrega from './pages/NovaEntrega';
 
+import EditarCesta from './pages/EditarCesta';
 import LoginPage from './pages/LoginPage';
 import NovaCesta from './pages/NovaCesta';
 import NovoProduto from './pages/NovoProduto';
@@ -28,17 +31,20 @@ import Suporte from './pages/Suporte';
 import Vendedores from './pages/Vendedores';
 
 // Novos componentes e permissões
+import { Toaster } from 'sonner';
 import { RequirePermission } from './components/Permissoes/RequirePermission';
 import ListaAcertos from './pages/AcertosDiarios/ListaAcertos';
 import NovoAcerto from './pages/AcertosDiarios/NovoAcerto';
 import FluxoCaixa from './pages/Caixa/FluxoCaixa';
 import LancamentoCaixa from './pages/Caixa/LancamentoCaixa';
+import ConfiguracoesFiscais from './pages/ConfiguracoesFiscais';
 import FuncionarioConfig from './pages/FuncionarioConfig';
 import Funcionarios from './pages/Funcionarios';
 import DetalhesOrcamento from './pages/orcamentos/DetalhesOrcamento';
 import ListaOrcamentos from './pages/orcamentos/ListaOrcamentos';
 import NovoOrcamento from './pages/orcamentos/NovoOrcamento';
 import TabelaAtacado from './pages/TabelaPrecos/TabelaAtacado';
+import DetalhesVendaAtacado from './pages/VendasAtacado/DetalhesVendaAtacado';
 import ListaVendas from './pages/VendasAtacado/ListaVendas';
 import NovaVendaAtacado from './pages/VendasAtacado/NovaVendaAtacado';
 
@@ -68,6 +74,8 @@ function App() {
   }, []);
 
   return (
+    <>
+     <Toaster position="top-right" richColors />
     <ErrorBoundary>
       <ThemeProvider>
         <AuthProvider>
@@ -89,8 +97,11 @@ function App() {
                         <Route path="/produtos/novo" element={<NovoProduto />} />
                         <Route path="/produtos/cestas" element={<CestasVendedor />} />
                         <Route path="/produtos/cestas/nova" element={<NovaCesta />} />
+                        <Route path="/produtos/cestas/editar/:id" element={<EditarCesta />} />
                         <Route path="/clientes" element={<Clientes />} />
                         <Route path="/entregas" element={<Entregas />} />
+                        <Route path="/entregas/nova" element={<NovaEntrega />} />
+                        <Route path="/entregas/avulsas" element={<EntregaAvulsa />} />
                         <Route path="/pagamentos" element={<Pagamentos />} />
                         <Route path="/devedores" element={<Devedores />} />
                         <Route path="/produtos" element={<Produtos />} />
@@ -146,6 +157,11 @@ function App() {
                             <NovaVendaAtacado />
                           </RequirePermission>
                         } />
+                        <Route path="/vendas-atacado/:id" element={
+                          <RequirePermission permission="vendas_atacado" redirectTo="/dashboard">
+                            <DetalhesVendaAtacado />
+                          </RequirePermission>
+                        } />
                         
                         <Route path="/acertos-diarios" element={
                           <RequirePermission permission="acertos" redirectTo="/dashboard">
@@ -175,6 +191,12 @@ function App() {
                           </RequirePermission>
                         } />
 
+                        <Route path="/configuracoes-fiscais" element={
+                          <RequirePermission permission="configuracoes_fiscais" redirectTo="/dashboard">
+                            <ConfiguracoesFiscais />
+                          </RequirePermission>
+                        } />
+
                       </Routes>
                     </MainLayout>
                   </ProtectedRoute>
@@ -185,6 +207,7 @@ function App() {
         </AuthProvider>
       </ThemeProvider>
     </ErrorBoundary>
+    </>
   );
 }
 

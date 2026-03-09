@@ -15,7 +15,9 @@ import {
   XCircle
 } from 'lucide-react';
 import React, { useRef } from 'react';
+import Barcode from 'react-barcode';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useReactToPrint } from 'react-to-print';
 
 const DetalhesOrcamento: React.FC = () => {
   const { id } = useParams();
@@ -57,6 +59,27 @@ const DetalhesOrcamento: React.FC = () => {
   const updateOrcamento = useUpdateOrcamentoPJ();
   const printRef = useRef<HTMLDivElement>(null);
 
+  const { data: notasVinculadas } = useQuery({
+    queryKey: ['notas-fiscais-orcamento', id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('notas_fiscais')
+        .select('*')
+        .eq('referencia_tipo', 'orcamento')
+        .eq('referencia_id', id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!id,
+    refetchOnMount: true,
+    staleTime: 0,
+  });
+
+  const notaAutorizada = notasVinculadas?.find((n: any) => n.status === 'autorizada') || notasVinculadas?.[0];
+
+  const formatarChave = (chave: string) => chave.match(/.{1,4}/g)?.join(' ') ?? chave;
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -68,40 +91,12 @@ const DetalhesOrcamento: React.FC = () => {
     return new Date(dateString).toLocaleDateString('pt-BR');
   };
 
-  const handlePrint = async () => {
-    if (!printRef.current || !orcamento) return;
-
-    try {
-      // @ts-ignore
-      const html2pdf = (await import('html2pdf.js')).default;
-      const element = printRef.current;
-      const opt = { 
-        margin: 0, 
-        filename: `orcamento_nfe_${orcamento.numero_orcamento}.pdf`, 
-        image: { type: 'jpeg' as const, quality: 0.98 },  
-        html2canvas: { 
-          scale: 2, 
-          useCORS: true, 
-          scrollY: 0, 
-          windowWidth: 794, 
-          windowHeight: 1123, 
-          letterRendering: true 
-        }, 
-        jsPDF: { 
-          unit: 'mm', 
-          format: 'a4', 
-          orientation: 'portrait' as const, 
-          compress: true 
-        }, 
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] } 
-      };
-
-      await html2pdf().set(opt).from(element).save();
-    } catch (error) {
-      console.error('Erro ao gerar PDF:', error);
-      toast.error('Erro ao gerar PDF');
-    }
-  };
+  const handlePrint = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: `orcamento_nfe_${orcamento?.numero_orcamento || 'documento'}`,
+    onBeforePrint: async () => { toast.info('Preparando impressão...'); },
+    onAfterPrint: () => { toast.success('Pronto!'); },
+  });
 
   const handleEmail = () => {
     toast.info('Envio por email em breve!');
@@ -209,6 +204,23 @@ const DetalhesOrcamento: React.FC = () => {
 
   return (
     <div className="p-4 sm:p-6 space-y-6 animate-in fade-in duration-500">
+      <style>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 0;
+          }
+          #invoice-print-area {
+            width: 210mm;
+            background: white !important;
+            margin: 0 auto;
+          }
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+        }
+      `}</style>
       {/* Header de Ações */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-4">
@@ -278,6 +290,7 @@ const DetalhesOrcamento: React.FC = () => {
       <div className="rounded-lg shadow-lg overflow-auto border border-gray-200 dark:border-gray-700 flex justify-center bg-gray-50 dark:bg-gray-900 py-8">
         <div 
           ref={printRef} 
+          id="invoice-print-area"
           className="bg-white text-gray-900 shadow-xl mx-auto" 
           style={{ 
             width: '210mm', 
@@ -290,8 +303,8 @@ const DetalhesOrcamento: React.FC = () => {
         >
           {/* Layout Estilo DANFE */}
           <div 
-            className="border-2 border-gray-800 text-[9px] font-sans leading-tight" 
-            style={{ padding: '8mm' }} 
+            className="border-2 border-gray-800 text-[9px] font-sans leading-tight flex flex-col" 
+            style={{ padding: '8mm', minHeight: '100%' }} 
           >
             
             {/* Header: Emitente e DANFE */}
@@ -338,14 +351,28 @@ const DetalhesOrcamento: React.FC = () => {
                 </div>
 
                 {/* Chave */}
-                <div style={{ width: '37%' }} className="p-2 flex flex-col gap-1 justify-center">
-                  <div style={{ height: '35px' }} className="bg-gray-200 flex items-center justify-center text-gray-400 text-[7px]">
-                    (CÓDIGO DE BARRAS)
+                <div style={{ width: '37%' }} className="flex flex-col gap-1 justify-center p-2">
+                  <div className="flex justify-center items-center w-full mb-1">
+                    {notaAutorizada?.chave_acesso ? (
+                      <Barcode
+                        value={notaAutorizada.chave_acesso}
+                        format="CODE128"
+                        width={1}
+                        height={35}
+                        fontSize={0}
+                        margin={0}
+                        background="transparent"
+                      />
+                    ) : (
+                      <div className="bg-gray-200 flex items-center justify-center text-gray-400 text-[7px]" style={{ height: '35px', width: '100%' }}>
+                        (NOTA NÃO EMITIDA)
+                      </div>
+                    )}
                   </div>
                   <div>
                     <div className="font-bold text-[7px]">CHAVE DE ACESSO</div>
                     <div className="bg-gray-100 p-1 text-center text-[7px] font-mono break-all leading-tight">
-                      3523 01{orcamento.id.replace(/\D/g, '').padEnd(34, '0').slice(0, 34)} 55 001 000
+                      {notaAutorizada?.chave_acesso ? formatarChave(notaAutorizada.chave_acesso) : 'Nota ainda não emitida'}
                     </div>
                   </div>
                   <div className="text-[6px] text-center leading-tight">
@@ -417,7 +444,7 @@ const DetalhesOrcamento: React.FC = () => {
                </div>
                <div style={{ width: '16.67%' }} className="p-1 border-b border-gray-800">
                   <div className="font-bold">DATA SAÍDA/ENTRADA</div>
-                  <div>{orcamento.data_saida ? formatDate(orcamento.data_saida) : ''}</div>
+                  <div>{orcamento.dataSaida ? formatDate(orcamento.dataSaida) : ''}</div>
                </div>
 
                {/* Linha 3 */}
@@ -439,7 +466,7 @@ const DetalhesOrcamento: React.FC = () => {
                </div>
                <div style={{ width: '16.67%' }} className="p-1">
                    <div className="font-bold">HORA SAÍDA</div>
-                   <div>{orcamento.hora_saida || ''}</div>
+                   <div>{orcamento.horaSaida || ''}</div>
                </div>
             </div>
 
@@ -543,7 +570,7 @@ const DetalhesOrcamento: React.FC = () => {
             <div className="bg-gray-100 p-1 font-bold border-b border-gray-800 text-[8px]">
                DADOS DO PRODUTO / SERVIÇO
             </div>
-            <div style={{ minHeight: '280px' }}>
+            <div className="flex-1" style={{ minHeight: '100px' }}>
                <table className="w-full text-[7px] border-collapse">
                   <thead>
                      <tr className="border-b border-gray-800">
@@ -564,9 +591,9 @@ const DetalhesOrcamento: React.FC = () => {
                   <tbody>
                      {orcamento.itens?.map((item, index) => (
                         <tr key={item.id} className="border-b border-gray-200">
-                           <td className="p-1 border-r border-gray-200 text-[7px]">{index + 1}</td>
+                           <td className="p-1 border-r border-gray-200 text-[7px]">{item.produto?.produto_cod || index + 1}</td>
                            <td className="p-1 border-r border-gray-200 text-[7px] truncate" style={{ maxWidth: '200px' }}>{item.descricao}</td>
-                           <td className="p-1 border-r border-gray-200 text-center text-[7px]">000</td>
+                           <td className="p-1 border-r border-gray-200 text-center text-[7px]">{item.produto?.ncm || '00000000'}</td>
                            <td className="p-1 border-r border-gray-200 text-center text-[7px]">5102</td>
                            <td className="p-1 border-r border-gray-200 text-center text-[7px]">UN</td>
                            <td className="p-1 border-r border-gray-200 text-right text-[7px]">{item.quantidade}</td>

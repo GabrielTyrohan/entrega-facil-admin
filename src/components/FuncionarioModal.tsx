@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { X, User, Mail, Phone, Briefcase, Lock, Eye, EyeOff } from 'lucide-react';
+import { Briefcase, Eye, EyeOff, Lock, Mail, Phone, User, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useCreateFuncionario, useUpdateFuncionario, Funcionario } from '../hooks/useFuncionarios';
+import { Funcionario, useCreateFuncionario, useUpdateFuncionario } from '../hooks/useFuncionarios';
 import { toast } from '../utils/toast';
 
 interface FuncionarioModalProps {
@@ -20,7 +20,7 @@ const DEFAULT_PERMISSIONS = {
 };
 
 const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, funcionarioToEdit }) => {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const createMutation = useCreateFuncionario();
   const updateMutation = useUpdateFuncionario();
   
@@ -32,12 +32,25 @@ const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, fu
   const [showPassword, setShowPassword] = useState(false);
   const [permissions, setPermissions] = useState(DEFAULT_PERMISSIONS);
 
+  // Função para formatar telefone
+  const formatTelefone = (value: string) => {
+    const numbers = value.replace(/\D/g, '');
+    if (numbers.length <= 2) return numbers;
+    if (numbers.length <= 6) return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`;
+    if (numbers.length <= 10) return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 6)}-${numbers.slice(6)}`;
+    return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7, 11)}`;
+  };
+
+  const handleTelefoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setTelefone(formatTelefone(e.target.value));
+  };
+
   useEffect(() => {
     if (isOpen) {
         if (funcionarioToEdit) {
             setNome(funcionarioToEdit.nome);
             setEmail(funcionarioToEdit.email);
-            setTelefone(funcionarioToEdit.telefone || '');
+            setTelefone(formatTelefone(funcionarioToEdit.telefone || ''));
             setCargo(funcionarioToEdit.cargo || '');
             setPermissions({ ...DEFAULT_PERMISSIONS, ...funcionarioToEdit.permissoes });
             setSenha(''); 
@@ -47,7 +60,15 @@ const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, fu
             setTelefone('');
             setCargo('');
             setPermissions(DEFAULT_PERMISSIONS);
-            setSenha(Math.floor(100000 + Math.random() * 900000).toString());
+            const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            const guaranteed = [
+              'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)],
+              'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)],
+              '0123456789'[Math.floor(Math.random() * 10)],
+            ];
+            const rest = Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]);
+            const generated = [...guaranteed, ...rest].sort(() => Math.random() - 0.5).join('');
+            setSenha(generated);
         }
     }
   }, [funcionarioToEdit, isOpen]);
@@ -91,7 +112,7 @@ const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, fu
           id: funcionarioToEdit.id,
           nome,
           email,
-          telefone,
+          telefone: telefone.replace(/\D/g, ''), // Remove máscara para salvar
           cargo,
           permissoes: permissions
         });
@@ -99,10 +120,11 @@ const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, fu
       } else {
         await createMutation.mutateAsync({
           administrador_id: user?.id,
+          nome_empresa: (userProfile as any)?.nome_empresa || null,
           nome,
           email,
           senha,
-          telefone,
+          telefone: telefone.replace(/\D/g, ''), // Remove máscara para salvar
           cargo,
           permissoes: permissions
         });
@@ -145,7 +167,8 @@ const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, fu
                             type="text"
                             value={nome}
                             onChange={e => setNome(e.target.value)}
-                            className="w-full pl-10 pr-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            placeholder="Ex: João da Silva"
+                            className="w-full pl-10 pr-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
                             required
                         />
                     </div>
@@ -158,7 +181,8 @@ const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, fu
                             type="email"
                             value={email}
                             onChange={e => setEmail(e.target.value)}
-                            className="w-full pl-10 pr-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            placeholder="Ex: joao@empresa.com"
+                            className="w-full pl-10 pr-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
                             required
                         />
                     </div>
@@ -171,8 +195,10 @@ const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, fu
                             <input
                                 type="text"
                                 value={telefone}
-                                onChange={e => setTelefone(e.target.value)}
-                                className="w-full pl-10 pr-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                onChange={handleTelefoneChange}
+                                maxLength={15}
+                                placeholder="Ex: (11) 99999-9999"
+                                className="w-full pl-10 pr-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
                             />
                         </div>
                     </div>
@@ -184,7 +210,8 @@ const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, fu
                                 type="text"
                                 value={cargo}
                                 onChange={e => setCargo(e.target.value)}
-                                className="w-full pl-10 pr-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                placeholder="Ex: Vendedor"
+                                className="w-full pl-10 pr-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
                             />
                         </div>
                     </div>
@@ -199,7 +226,8 @@ const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, fu
                                 type={showPassword ? "text" : "password"}
                                 value={senha}
                                 onChange={e => setSenha(e.target.value)}
-                                className="w-full pl-10 pr-10 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                placeholder="Crie uma senha segura"
+                                className="w-full pl-10 pr-10 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
                                 required
                             />
                              <button

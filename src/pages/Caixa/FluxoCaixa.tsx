@@ -1,29 +1,35 @@
 import { format, isAfter, parseISO, subDays } from 'date-fns';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
-  AlertCircle,
-  DollarSign,
-  Download,
-  FileText,
-  Plus,
-  Trash2,
-  TrendingDown,
-  TrendingUp
+    AlertCircle,
+    Check,
+    ChevronLeft,
+    ChevronRight,
+    DollarSign,
+    Download,
+    FileText,
+    Plus,
+    Trash2,
+    TrendingDown,
+    TrendingUp
 } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import XLSX from 'xlsx-js-style';
 import { useAuth } from '../../contexts/AuthContext';
-import { useDeleteLancamento, useFluxoCaixa, useFluxoCaixaStats } from '../../hooks/useFluxoCaixa';
+import { useDeleteLancamento, useFluxoCaixa, useFluxoCaixaStats, useUpdateLancamento } from '../../hooks/useFluxoCaixa';
 import { formatCurrency } from '../../utils/currencyUtils';
 
 const FluxoCaixa = () => {
-  const { adminId } = useAuth();
+  const { adminId, userProfile } = useAuth();
   const [dateRange, setDateRange] = useState({
     startDate: subDays(new Date(), 30).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0]
   });
   const [tipoFiltro, setTipoFiltro] = useState('todos');
+  const [currentPage, setCurrentPage] = useState(0);
+  const ITEMS_PER_PAGE = 15;
   
   const { data: stats, isLoading: statsLoading } = useFluxoCaixaStats(
     adminId || '',
@@ -31,17 +37,19 @@ const FluxoCaixa = () => {
     dateRange.endDate
   );
 
-  const { data: lancamentos, isLoading: listLoading, refetch } = useFluxoCaixa(
+  const { data: lancamentos, isLoading: listLoading, refetch, totalCount, totalPages } = useFluxoCaixa(
     adminId || '',
     {
       startDate: dateRange.startDate,
       endDate: dateRange.endDate,
       tipo: tipoFiltro,
-      pageSize: 15 // Mostrar os últimos 15 lançamentos
+      page: currentPage,
+      pageSize: ITEMS_PER_PAGE
     }
   );
 
   const deleteMutation = useDeleteLancamento();
+  const updateMutation = useUpdateLancamento();
 
   const handleDelete = async (id: string) => {
     if (window.confirm('Tem certeza que deseja excluir este lançamento?')) {
@@ -50,93 +58,107 @@ const FluxoCaixa = () => {
     }
   };
 
+  const handleConfirmarPagamento = async (id: string) => {
+    if (window.confirm('Confirmar pagamento deste lançamento?')) {
+      await updateMutation.mutateAsync({ id, status: 'pago' });
+      refetch();
+    }
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 0 && newPage < totalPages) {
+      setCurrentPage(newPage);
+    }
+  };
+
   const handleExport = () => {
     if (!lancamentos.length) return;
 
-    const dataToExport = lancamentos.map(l => ({
-      Data: format(parseISO(l.data_lancamento), 'dd/MM/yyyy'),
-      Tipo: l.tipo.toUpperCase(),
-      Categoria: l.categoria,
-      Descrição: l.descricao,
-      Valor: Number(l.valor),
-      'Forma Pagamento': l.forma_pagamento,
-      Status: l.status.toUpperCase(),
-      Vencimento: l.data_vencimento ? format(parseISO(l.data_vencimento), 'dd/MM/yyyy') : '-'
-    }));
+    const doc = new jsPDF();
 
-    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    // Nome da Empresa
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text(userProfile?.nome_empresa || 'Minha Empresa', 14, 15);
 
-    // Ajustar largura das colunas automaticamente com base no conteúdo
-    const colWidths = Object.keys(dataToExport[0]).map(key => {
-      const maxContentLength = Math.max(
-        ...dataToExport.map(row => String(row[key as keyof typeof row] || '').length),
-        key.length
-      );
-      // Aumentei um pouco o limite máximo e o padding
-      return { wch: Math.min(Math.max(maxContentLength + 5, 12), 120) };
-    });
+    // Título
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Relatório de Fluxo de Caixa', 14, 23);
 
-    ws['!cols'] = colWidths;
+    // Período e Data de Emissão
+    doc.setFontSize(10);
+    doc.text(`Período: ${format(parseISO(dateRange.startDate), 'dd/MM/yyyy')} a ${format(parseISO(dateRange.endDate), 'dd/MM/yyyy')}`, 14, 30);
+    doc.text(`Gerado em: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 35);
 
-    // Estilos
-    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:A1');
+    // Resumo Financeiro
+    const startY = 45;
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Resumo do Período', 14, startY);
     
-    const headerStyle = {
-      font: { bold: true, color: { rgb: "FFFFFF" }, sz: 12 },
-      fill: { fgColor: { rgb: "2F75B5" } }, // Azul mais escuro para cabeçalho
-      alignment: { horizontal: "center", vertical: "center", wrapText: true },
-      border: {
-        top: { style: "thin", color: { rgb: "000000" } },
-        bottom: { style: "medium", color: { rgb: "000000" } }, // Borda inferior mais grossa no cabeçalho
-        left: { style: "thin", color: { rgb: "000000" } },
-        right: { style: "thin", color: { rgb: "000000" } }
-      }
-    };
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Total Entradas: ${formatCurrency(stats?.totalEntradas || 0)}`, 14, startY + 8);
+    doc.text(`Total Saídas: ${formatCurrency(stats?.totalSaidas || 0)}`, 14, startY + 14);
+    
+    const saldo = stats?.saldo || 0;
+    doc.setTextColor(saldo >= 0 ? 0 : 200, saldo >= 0 ? 100 : 0, 0); // Verde ou Vermelho
+    doc.text(`Saldo: ${formatCurrency(saldo)}`, 14, startY + 20);
+    doc.setTextColor(0, 0, 0); // Reset cor
 
-    const baseDataStyle = {
-      font: { sz: 11 },
-      alignment: { vertical: "center", wrapText: true }, // Alinhamento vertical centralizado e quebra de linha
-      border: {
-        top: { style: "thin", color: { rgb: "000000" } },
-        bottom: { style: "thin", color: { rgb: "000000" } },
-        left: { style: "thin", color: { rgb: "000000" } },
-        right: { style: "thin", color: { rgb: "000000" } }
-      }
-    };
+    doc.text(`Contas a Pagar: ${formatCurrency(stats?.contasAPagar || 0)}`, 100, startY + 8);
 
-    const currencyStyle = {
-      ...baseDataStyle,
-      alignment: { ...baseDataStyle.alignment, horizontal: "center" },
-      numFmt: '"R$ "#,##0.00'
-    };
+    // Tabela de Lançamentos
+    const tableData = lancamentos.map(l => [
+      format(parseISO(l.data_lancamento), 'dd/MM/yyyy'),
+      l.categoria,
+      l.tipo.toUpperCase(),
+      formatCurrency(Number(l.valor)),
+      l.forma_pagamento,
+      l.status.toUpperCase()
+    ]);
 
-    const centerStyle = {
-      ...baseDataStyle,
-      alignment: { ...baseDataStyle.alignment, horizontal: "center" }
-    };
-
-    for (let R = range.s.r; R <= range.e.r; ++R) {
-      for (let C = range.s.c; C <= range.e.c; ++C) {
-        const cell_address = XLSX.utils.encode_cell({ r: R, c: C });
-        if (!ws[cell_address]) continue;
-
-        if (R === 0) {
-          ws[cell_address].s = headerStyle;
-        } else {
-          // Colunas: 0=Data, 1=Tipo, 2=Categoria, 3=Descrição, 4=Valor, 5=Forma Pagamento, 6=Status, 7=Vencimento
-          if (C === 4) { // Valor
-            ws[cell_address].s = currencyStyle;
-          } else {
-            // Todas as outras colunas centralizadas (Data, Tipo, Categoria, Descrição, Forma Pagamento, Status, Vencimento)
-            ws[cell_address].s = centerStyle;
+    autoTable(doc, {
+      startY: startY + 28,
+      head: [['Data', 'Categoria', 'Tipo', 'Valor', 'Pagamento', 'Status']],
+      body: tableData,
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+      columnStyles: {
+        0: { cellWidth: 25 }, // Data
+        1: { cellWidth: 'auto' }, // Categoria
+        2: { cellWidth: 25 }, // Tipo
+        3: { cellWidth: 35, halign: 'right' }, // Valor
+        4: { cellWidth: 35 }, // Pagamento
+        5: { cellWidth: 25 } // Status
+      },
+      didParseCell: function(data) {
+        // Colorir valores e status
+        if (data.section === 'body') {
+          if (data.column.index === 2) { // Tipo (agora índice 2)
+            const tipo = data.cell.raw as string;
+            if (tipo === 'SAIDA') {
+              data.cell.styles.textColor = [220, 38, 38]; // Red
+            } else {
+              data.cell.styles.textColor = [22, 163, 74]; // Green
+            }
+          }
+          if (data.column.index === 3) { // Valor (agora índice 3)
+             // Manter cor padrão ou seguir a lógica do tipo
+             const rowRaw = data.row.raw as unknown[];
+             const tipo = rowRaw[2] as string; // Acessa o valor da coluna Tipo (índice 2) com cast seguro
+             if (tipo === 'SAIDA') {
+               data.cell.styles.textColor = [220, 38, 38];
+             } else {
+               data.cell.styles.textColor = [22, 163, 74];
+             }
           }
         }
       }
-    }
+    });
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Fluxo de Caixa");
-    XLSX.writeFile(wb, `fluxo_caixa_${dateRange.startDate}_${dateRange.endDate}.xlsx`);
+    doc.save(`fluxo_caixa_${dateRange.startDate}_${dateRange.endDate}.pdf`);
   };
 
   const isBoletoVencido = (lancamento: any) => {
@@ -357,6 +379,15 @@ const FluxoCaixa = () => {
                       </td>
                       <td className="px-6 py-4 text-center">
                         <div className="flex justify-center gap-2">
+                          {item.status === 'pendente' && (
+                            <button
+                              onClick={() => handleConfirmarPagamento(item.id)}
+                              className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300"
+                              title="Confirmar Pagamento"
+                            >
+                              <Check size={18} />
+                            </button>
+                          )}
                           {item.anexo_url && (
                             <a 
                               href={item.anexo_url} 
@@ -370,8 +401,12 @@ const FluxoCaixa = () => {
                           )}
                           <button
                             onClick={() => handleDelete(item.id)}
-                            className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-                            title="Excluir"
+                            disabled={item.status === 'pago'}
+                            className={`title="Excluir" ${
+                              item.status === 'pago' 
+                                ? 'text-gray-400 cursor-not-allowed dark:text-gray-600' 
+                                : 'text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300'
+                            }`}
                           >
                             <Trash2 size={18} />
                           </button>
@@ -384,6 +419,57 @@ const FluxoCaixa = () => {
             </tbody>
           </table>
         </div>
+        
+        {/* Paginação */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-6 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
+            <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+              Mostrando {Math.min((currentPage * ITEMS_PER_PAGE) + 1, totalCount)} a {Math.min((currentPage + 1) * ITEMS_PER_PAGE, totalCount)} de {totalCount} resultados
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 0}
+                className="p-1 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum = i;
+                  if (totalPages > 5) {
+                    if (currentPage > 2 && currentPage < totalPages - 2) {
+                      pageNum = currentPage - 2 + i;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 5 + i;
+                    }
+                  }
+                  
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => handlePageChange(pageNum)}
+                      className={`w-8 h-8 flex items-center justify-center rounded-md text-sm font-medium transition-colors ${
+                        currentPage === pageNum
+                          ? 'bg-blue-600 text-white'
+                          : 'hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300'
+                      }`}
+                    >
+                      {pageNum + 1}
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages - 1}
+                className="p-1 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronRight size={20} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

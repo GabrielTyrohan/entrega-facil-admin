@@ -10,6 +10,7 @@ export const CACHE_KEYS = {
   ORCAMENTOS_PJ: 'orcamentos_pj',
   TABELA_PRECOS: 'tabela_precos',
   VENDAS_ATACADO: 'vendas_atacado',
+  VENDA_ATACADO_DETALHES: 'VENDA_ATACADO_DETALHES',
   ACERTOS_DIARIOS: 'acertos_diarios',
   USER_PROFILE: 'user_profile',
   FLUXO_CAIXA: 'fluxo_caixa',
@@ -55,6 +56,7 @@ export const CACHE_KEYS = {
   SUPORTE_SOLICITACOES: 'suporte_solicitacoes',
   SUPORTE_MENSAGENS: 'suporte_mensagens',
   SISTEMA_STATUS: 'sistema_status',
+  NOTAS_FISCAIS: 'notas_fiscais',
   // Legacy/Compatibility
   STATS: 'dashboard-stats',
 } as const;
@@ -149,6 +151,7 @@ export const CACHE_TIMES = {
   SUPORTE_SOLICITACOES: DEFAULT_CACHE_CONFIG,
   SUPORTE_MENSAGENS: DEFAULT_CACHE_CONFIG,
   SISTEMA_STATUS: DEFAULT_CACHE_CONFIG,
+  NOTAS_FISCAIS: DEFAULT_CACHE_CONFIG,
   // Compatibility
   STATS: DEFAULT_CACHE_CONFIG,
 } as const;

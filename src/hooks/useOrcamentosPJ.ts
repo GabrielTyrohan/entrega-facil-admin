@@ -1,7 +1,7 @@
-import { useSupabaseQuery } from '@/lib/supabaseCache';
-import { supabase } from '@/lib/supabase';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CACHE_KEYS } from '@/lib/constants/queryKeys';
+import { supabase } from '@/lib/supabase';
+import { useSupabaseQuery } from '@/lib/supabaseCache';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 export interface OrcamentoPJItem {
   id: string;
@@ -13,6 +13,10 @@ export interface OrcamentoPJItem {
   margem_percentual: number;
   valor_venda_unitario: number;
   valor_total: number;
+  produto?: {
+    ncm: string;
+    produto_cod: string;
+  };
 }
 
 export interface OrcamentoPJ {
@@ -22,11 +26,12 @@ export interface OrcamentoPJ {
   cliente_id: string;
   cliente_nome: string;
   data_orcamento: string;
-  data_saida?: string;
-  hora_saida?: string;
+  dataSaida?: string;
+  horaSaida?: string;
   status: 'pendente' | 'aprovado' | 'rejeitado' | 'convertido';
   valor_total: number;
   margem_lucro_geral: number;
+  forma_pagamento?: string;
   itens?: OrcamentoPJItem[];
   created_at?: string;
   updated_at?: string;
@@ -102,14 +107,14 @@ export const useOrcamentosPJ = (
 export const useOrcamentoPJById = (id: string, options?: { enabled?: boolean }) => {
   const query = supabase
     .from('orcamentos_pj')
-    .select('*, itens:orcamentos_pj_itens(*)')
+    .select('*, itens:orcamentos_pj_itens(*, produto:produtos_cadastrado(ncm, produto_cod))')
     .eq('id', id)
     .single();
 
   return useSupabaseQuery<OrcamentoPJ>(
     'ORCAMENTOS_PJ',
     query,
-    [CACHE_KEYS.ORCAMENTOS_PJ, 'detail', id],
+    [CACHE_KEYS.ORCAMENTOS_PJ, 'detail', id, 'v2'], // Added version to force cache refresh
     { enabled: options?.enabled !== false && !!id }
   );
 };
