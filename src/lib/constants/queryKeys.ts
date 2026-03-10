@@ -5,6 +5,7 @@ export const CACHE_KEYS = {
   ENTREGAS: 'entregas',
   PAGAMENTOS: 'pagamentos',
   CESTAS: 'cestas',
+  CESTAS_BASE: 'cestas_base',
   RESPONSAVEIS: 'responsaveis',
   FUNCIONARIOS: 'funcionarios',
   ORCAMENTOS_PJ: 'orcamentos_pj',
@@ -93,6 +94,10 @@ export const CACHE_TIMES = {
   ENTREGAS: DEFAULT_CACHE_CONFIG,
   PAGAMENTOS: DEFAULT_CACHE_CONFIG,
   CESTAS: DEFAULT_CACHE_CONFIG,
+  CESTAS_BASE: {
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+  },
   RESPONSAVEIS: {
     staleTime: 10 * 60 * 1000, // 10 minutos
     gcTime: 30 * 60 * 1000,    // 30 minutos

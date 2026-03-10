@@ -6,7 +6,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { toast } from '@/utils/toast';
-import { AlertCircle, AlertTriangle, Calendar, CheckCircle2, Edit, Eye, Filter, Loader2, MoreHorizontal, Package, Plus, Search, ShoppingBasket, Trash2, User, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Calendar, CheckCircle2, Edit, Eye, Filter, Loader2, MoreHorizontal, Package, PackagePlus, Plus, Search, ShoppingBasket, Trash2, User, X } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -234,12 +234,12 @@ const CestasVendedor: React.FC = () => {
           <p className="text-gray-600 dark:text-gray-400">Gerencie as cestas de produtos dos vendedores</p>
         </div>
         <div className="flex items-center space-x-3">
-          <button 
-            onClick={() => navigate('/entregas/avulsas')}
-            className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
+          <button
+            onClick={() => navigate('/produtos/cestas-base')}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 gap-2 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
           >
-            <Package className="w-4 h-4" />
-            <span>Entrega Avulsa</span>
+            <PackagePlus className="w-4 h-4" />
+            Cestas Base
           </button>
           <button 
             onClick={() => navigate('/produtos/cestas/nova')}

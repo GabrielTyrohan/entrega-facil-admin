@@ -18,6 +18,7 @@ import {
   LayoutDashboard,
   MessageSquare,
   Package,
+  PackagePlus,
   Receipt,
   Settings,
   ShoppingBasket,
@@ -30,6 +31,7 @@ import {
 } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import packageJson from '../../../package.json';
 
 interface MenuItem {
   path: string;
@@ -95,6 +97,12 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
       path: '/produtos/cestas',
       label: 'Cestas',
       icon: <ShoppingBasket className="w-5 h-5" />,
+      group: 'Catálogo'
+    },
+    {
+      path: '/produtos/cestas-base',
+      label: 'Cestas Base',
+      icon: <PackagePlus className="w-5 h-5" />,
       group: 'Catálogo'
     },
     {
@@ -380,7 +388,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
         {/* Footer fixo do sidebar */}
         <div className="flex-shrink-0 p-4 border-t border-gray-200 dark:border-gray-700">
           <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-            Versão 2.2.0
+            Versão {packageJson.version}
           </p>
         </div>
       </aside>

@@ -2,25 +2,26 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { toast } from '@/utils/toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowLeft,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  ClipboardList,
-  Edit2,
-  Loader2,
-  Minus,
-  Package,
-  Plus,
-  Search,
-  ShoppingBasket,
-  Trash2,
-  User,
-  X,
+    ArrowLeft,
+    Check,
+    ChevronDown,
+    ChevronRight,
+    ClipboardList,
+    Edit2,
+    Loader2,
+    Minus,
+    Package,
+    Plus,
+    Search,
+    ShoppingBasket,
+    Trash2,
+    User,
+    X,
 } from 'lucide-react';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useProdutos } from '../hooks/useProdutos';
 import { useVendedoresByAdmin } from '../hooks/useVendedores';
 import { supabase } from '../lib/supabase';
 
@@ -76,6 +77,9 @@ const fmt = (n: number) =>
 const fmtDate = (s: string) =>
   new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+const normalizar = (str: string) =>
+  str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 const EntregaAvulsa: React.FC = () => {
@@ -103,7 +107,12 @@ const EntregaAvulsa: React.FC = () => {
   // ── New delivery form ─────────────────────────────────────────────────────
   const [vendedorSelecionado, setVendedorSelecionado] = useState<Vendedor | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [filtroEstoque, setFiltroEstoque] = useState<'todos' | 'emEstoque'>('todos');
+  const [produtosFiltrados, setProdutosFiltrados] = useState<Produto[]>([]);
+  const [paginaAtual, setPaginaAtual] = useState(1);
+  const PRODUTOS_POR_PAGINA = 9;
+
   const [itens, setItens] = useState<ItemAvulso[]>([]);
   const [observacao, setObservacao] = useState('');
   const [isConfirmando, setIsConfirmando] = useState(false);
@@ -141,22 +150,41 @@ const EntregaAvulsa: React.FC = () => {
   const invalidateHistory = () => queryClient.invalidateQueries({ queryKey: ['entregas_avulsas_historico', adminId] });
 
   // ── Products search (new delivery) ────────────────────────────────────────
-  const { data: produtos = [], isLoading: loadingProdutos } = useQuery<Produto[]>({
-    queryKey: ['produtos_avulsa', adminId, searchTerm],
-    queryFn: async () => {
-      if (!adminId || searchTerm.trim().length < 2) return [];
-      const { data, error } = await supabase
-        .from('produtos_cadastrado')
-        .select('id, produto_nome, produto_cod, categoria, qtd_estoque, preco_unt')
-        .eq('administrador_id', adminId).eq('ativo', true)
-        .ilike('produto_nome', `%${searchTerm.trim()}%`)
-        .order('produto_nome').limit(20);
-      if (error) throw error;
-      return data ?? [];
-    },
-    enabled: !!adminId && searchTerm.trim().length >= 2,
-    staleTime: 1000 * 30,
-  });
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
+
+  const { data: produtos = [], isLoading: loadingProdutos } = useProdutos({
+    enabled: !!adminId,
+    searchTerm: debouncedSearchTerm
+  }) as { data: Produto[], isLoading: boolean };
+
+  const isBuscando = loadingProdutos || searchTerm !== debouncedSearchTerm;
+
+  useEffect(() => {
+    let filtered: Produto[] = produtos;
+
+    if (filtroEstoque === 'emEstoque') {
+      filtered = filtered.filter(p => p.qtd_estoque > 0);
+    }
+
+    if (searchTerm.trim()) {
+      const termos = normalizar(searchTerm.trim()).split(/\s+/);
+      filtered = filtered.filter(p => {
+        const campos =
+          normalizar(p.produto_nome) + ' ' +
+          normalizar(p.produto_cod || '') + ' ' +
+          normalizar(p.categoria || '');
+        return termos.every(termo => campos.includes(termo));
+      });
+    }
+
+    setProdutosFiltrados(filtered);
+    setPaginaAtual(1);
+  }, [produtos, searchTerm, filtroEstoque]);
 
   // ── Products search (edit modal) ──────────────────────────────────────────
   const { data: produtosEdit = [], isLoading: loadingProdutosEdit } = useQuery<Produto[]>({
@@ -176,7 +204,6 @@ const EntregaAvulsa: React.FC = () => {
     staleTime: 1000 * 30,
   });
 
-  const produtosVisiveis = filtroEstoque === 'emEstoque' ? produtos.filter(p => p.qtd_estoque > 0) : produtos;
   const totalUnidades = itens.reduce((acc, i) => acc + i.quantidade, 0);
   const totalValor = itens.reduce((acc, i) => acc + i.quantidade * i.produto.preco_unt, 0);
   const produtoJaAdicionado = useCallback((id: string) => itens.some(i => i.produto.id === id), [itens]);
@@ -490,57 +517,235 @@ const EntregaAvulsa: React.FC = () => {
           </div>
 
           {/* Produtos */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-              <Package className="w-5 h-5 mr-2 text-green-600 dark:text-green-400" /> Adicionar Produtos
-            </h2>
-            <div className="flex flex-wrap items-center gap-2 mb-3">
-              <div className="relative flex-1 min-w-0">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input type="text" placeholder="Buscar produto (mínimo 2 letras)..." value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-sm" />
-              </div>
-              <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
-                {(['todos', 'emEstoque'] as const).map(f => (
-                  <button key={f} type="button" onClick={() => setFiltroEstoque(f)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${filtroEstoque === f ? (f === 'emEstoque' ? 'bg-white dark:bg-gray-600 text-green-700 dark:text-green-400 shadow-sm' : 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm') : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
-                    {f === 'todos' ? 'Todos' : 'Com Estoque'}
+          {/* Produtos GRID AVANÇADO */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 p-6 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
+                <Package className="w-5 h-5 mr-2 text-green-600 dark:text-green-400" />
+                Produtos Disponíveis
+                <span className="ml-2 text-sm font-normal text-gray-400 dark:text-gray-500">
+                  ({produtosFiltrados.length} produto{produtosFiltrados.length !== 1 ? 's' : ''})
+                </span>
+              </h2>
+              <div className="flex items-center gap-2">
+                {/* Filtro de estoque */}
+                <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setFiltroEstoque('todos')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                      filtroEstoque === 'todos'
+                        ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                    }`}
+                  >
+                    Todos
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => setFiltroEstoque('emEstoque')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                      filtroEstoque === 'emEstoque'
+                        ? 'bg-white dark:bg-gray-600 text-green-700 dark:text-green-400 shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                    }`}
+                  >
+                    Com Estoque
+                  </button>
+                </div>
+                {/* Buscador */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Buscar produtos..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm w-full sm:w-auto"
+                  />
+                </div>
               </div>
             </div>
-            {searchTerm.trim().length >= 2 && (
-              <div className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden mb-4">
-                {loadingProdutos ? <div className="p-4 space-y-2">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
-                  : produtosVisiveis.length === 0 ? <div className="p-4 text-center text-sm text-gray-500 dark:text-gray-400">Nenhum produto encontrado.</div>
-                  : (
-                    <div className="divide-y divide-gray-100 dark:divide-gray-700 max-h-56 overflow-y-auto">
-                      {produtosVisiveis.map(produto => {
-                        const jaAdicionado = produtoJaAdicionado(produto.id);
-                        const semEstoque = produto.qtd_estoque <= 0;
-                        return (
-                          <button key={produto.id} type="button" onClick={() => handleAdicionarProduto(produto)} disabled={jaAdicionado || semEstoque}
-                            className={`w-full text-left px-4 py-3 flex items-center justify-between text-sm transition-colors ${jaAdicionado ? 'bg-green-50 dark:bg-green-900/20 cursor-not-allowed' : semEstoque ? 'opacity-50 cursor-not-allowed bg-white dark:bg-gray-800' : 'hover:bg-blue-50 dark:hover:bg-blue-900/10 bg-white dark:bg-gray-800'}`}>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-gray-900 dark:text-white truncate">{produto.produto_nome}</p>
-                              <p className="text-xs text-gray-500 dark:text-gray-400">{produto.produto_cod} • {produto.categoria}</p>
+
+            <div className="p-6">
+              {(() => {
+                const totalPaginas = Math.ceil(produtosFiltrados.length / PRODUTOS_POR_PAGINA);
+                const inicio = (paginaAtual - 1) * PRODUTOS_POR_PAGINA;
+                const produtosPagina = produtosFiltrados.slice(inicio, inicio + PRODUTOS_POR_PAGINA);
+                
+                return (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {isBuscando ? (
+                        Array.from({ length: 6 }).map((_, i) => (
+                          <div key={i} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 animate-pulse">
+                            <div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-3/4 mb-2" />
+                            <div className="h-3 bg-gray-200 dark:bg-gray-600 rounded w-1/2 mb-4" />
+                            <div className="flex justify-between items-center mb-3">
+                              <div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-1/4" />
+                              <div className="h-5 bg-gray-200 dark:bg-gray-600 rounded-full w-14" />
                             </div>
-                            <div className="flex items-center gap-3 ml-3 flex-shrink-0">
-                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${produto.qtd_estoque > 10 ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400' : produto.qtd_estoque > 0 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400' : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'}`}>{produto.qtd_estoque} un.</span>
-                              <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">R$ {fmt(produto.preco_unt)}</span>
-                              {jaAdicionado ? <Check className="w-4 h-4 text-green-500" /> : semEstoque ? <span className="text-xs text-red-500">Sem estoque</span> : <Plus className="w-4 h-4 text-blue-500" />}
+                            <div className="h-8 bg-gray-200 dark:bg-gray-600 rounded w-full mt-4" />
+                          </div>
+                        ))
+                      ) : produtosPagina.length === 0 ? (
+                        <div className="col-span-1 md:col-span-2 lg:col-span-3 text-center py-10 text-gray-500 dark:text-gray-400">
+                          <Package className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                          <p>Nenhum produto encontrado na busca.</p>
+                        </div>
+                      ) : (
+                        produtosPagina.map(produto => {
+                          const isAdded = produtoJaAdicionado(produto.id);
+                          return (
+                            <div
+                              key={produto.id}
+                              className={`border rounded-lg p-4 transition-colors ${
+                                isAdded
+                                  ? 'border-green-300 bg-green-50 dark:border-green-600 dark:bg-green-900/20'
+                                  : 'border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-500 bg-white dark:bg-gray-800'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex-1 pr-2">
+                                  <h3 className="font-medium text-gray-900 dark:text-white text-sm line-clamp-2" title={produto.produto_nome}>
+                                    {produto.produto_nome}
+                                  </h3>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                    {produto.produto_cod || 'S/N'} {produto.categoria ? `• ${produto.categoria}` : ''}
+                                  </p>
+                                </div>
+                                {isAdded && <Check className="w-4 h-4 text-green-600 dark:text-green-400" />}
+                              </div>
+
+                              <div className="flex items-center justify-between mb-3">
+                                <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                  {fmt(produto.preco_unt)}
+                                </span>
+                                <span className={`text-xs px-2 py-1 rounded-full ${
+                                  produto.qtd_estoque > 10
+                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+                                    : produto.qtd_estoque > 0
+                                    ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
+                                    : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
+                                }`}>
+                                  {produto.qtd_estoque} un.
+                                </span>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleAdicionarProduto(produto)}
+                                disabled={isAdded || produto.qtd_estoque === 0 || produto.preco_unt <= 0}
+                                className={`w-full py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                                  isAdded
+                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 cursor-not-allowed'
+                                    : produto.preco_unt <= 0
+                                    ? 'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500 cursor-not-allowed border border-gray-200 dark:border-gray-600'
+                                    : produto.qtd_estoque === 0
+                                    ? 'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500 cursor-not-allowed'
+                                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                                }`}
+                              >
+                                {isAdded ? (
+                                  'Adicionado'
+                                ) : produto.preco_unt <= 0 ? (
+                                  'Valor zerado'
+                                ) : produto.qtd_estoque === 0 ? (
+                                  'Sem estoque'
+                                ) : (
+                                  'Incluir na Entrega'
+                                )}
+                              </button>
                             </div>
-                          </button>
-                        );
-                      })}
+                          );
+                        })
+                      )}
                     </div>
-                  )}
-              </div>
-            )}
+
+                    {/* Paginação */}
+                    {totalPaginas > 1 && (
+                      <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Página {paginaAtual} de {totalPaginas} &bull; {produtosFiltrados.length} produto{produtosFiltrados.length !== 1 ? 's' : ''}
+                        </p>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setPaginaAtual(1)}
+                            disabled={paginaAtual === 1}
+                            className="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          >
+                            «
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPaginaAtual(p => Math.max(1, p - 1))}
+                            disabled={paginaAtual === 1}
+                            className="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          >
+                            ‹
+                          </button>
+                          {Array.from({ length: totalPaginas }, (_, i) => i + 1)
+                            .filter(p => p === 1 || p === totalPaginas || Math.abs(p - paginaAtual) <= 1)
+                            .reduce<(number | '...')[]>((acc, p, idx, arr) => {
+                              if (idx > 0 && typeof arr[idx - 1] === 'number' && (p as number) - (arr[idx - 1] as number) > 1) {
+                                acc.push('...');
+                              }
+                              acc.push(p);
+                              return acc;
+                            }, [])
+                            .map((p, idx) =>
+                              p === '...' ? (
+                                <span key={`ellipsis-${idx}`} className="px-1 text-xs text-gray-400">…</span>
+                              ) : (
+                                <button
+                                  key={p}
+                                  type="button"
+                                  onClick={() => setPaginaAtual(p as number)}
+                                  className={`px-2.5 py-1 text-xs rounded border transition-colors ${
+                                    paginaAtual === p
+                                      ? 'bg-blue-600 border-blue-600 text-white'
+                                      : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                  }`}
+                                >
+                                  {p}
+                                </button>
+                              )
+                            )
+                          }
+                          <button
+                            type="button"
+                            onClick={() => setPaginaAtual(p => Math.min(totalPaginas, p + 1))}
+                            disabled={paginaAtual === totalPaginas}
+                            className="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          >
+                            ›
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPaginaAtual(totalPaginas)}
+                            disabled={paginaAtual === totalPaginas}
+                            className="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          >
+                            »
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+
+          {/* Itens adicionados card */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700 mb-6">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+              <ShoppingBasket className="w-5 h-5 mr-2 text-purple-600 dark:text-purple-400" /> Itens na Entrega
+            </h2>
             {itens.length === 0 ? (
               <div className="text-center py-8 text-gray-400 dark:text-gray-500 text-sm border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
-                <Package className="w-8 h-8 mx-auto mb-2 opacity-40" /><p>Busque e adicione produtos acima</p>
+                <Package className="w-8 h-8 mx-auto mb-2 opacity-40" /><p>Adicione acima os produtos da entrega</p>
               </div>
             ) : (
               <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden divide-y divide-gray-100 dark:divide-gray-700">

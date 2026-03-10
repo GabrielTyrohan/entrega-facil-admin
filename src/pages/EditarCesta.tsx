@@ -419,10 +419,12 @@ const EditarCesta: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => adicionarProduto(produto)}
-                          disabled={produtoJaAdicionado(produto.id) || produto.qtd_estoque === 0 || totalProdutos >= limiteMaximo}
+                          disabled={produtoJaAdicionado(produto.id) || produto.qtd_estoque === 0 || totalProdutos >= limiteMaximo || produto.preco_unt <= 0}
                           className={`w-full py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
                             produtoJaAdicionado(produto.id)
                               ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 cursor-not-allowed'
+                              : produto.preco_unt <= 0
+                              ? 'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500 cursor-not-allowed border border-gray-200 dark:border-gray-600'
                               : produto.qtd_estoque === 0 || totalProdutos >= limiteMaximo
                               ? 'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500 cursor-not-allowed'
                               : 'bg-blue-600 hover:bg-blue-700 text-white'
@@ -430,6 +432,8 @@ const EditarCesta: React.FC = () => {
                         >
                           {produtoJaAdicionado(produto.id)
                             ? 'Adicionado'
+                            : produto.preco_unt <= 0
+                            ? 'Valor zerado'
                             : produto.qtd_estoque === 0
                             ? 'Sem estoque'
                             : totalProdutos >= limiteMaximo
