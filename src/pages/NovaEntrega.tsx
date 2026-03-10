@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Building2, Check, ChevronLeft, ChevronRight, Package, Search, ShoppingCart, User } from 'lucide-react';
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Package, Search, ShoppingCart, User } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -32,7 +32,7 @@ const NovaEntrega: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-  const [productSearchTerm, setProductSearchTerm] = useState('');
+  const [cestaSelecionadaId, setCestaSelecionadaId] = useState<string>('');
   
   // Debounce para busca de clientes
   React.useEffect(() => {
@@ -49,34 +49,46 @@ const NovaEntrega: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Data Hooks
-  // Usando useClientesByAdmin para busca avançada de clientes (igual a Clientes.tsx)
-  const { data: clientes = [], isLoading: isLoadingClientes } = useClientesByAdmin(adminId || '', {
+  // Usando useClientesByAdmin para busca avançada de clientes
+  const { data: clientesResp = [], isLoading: isLoadingClientes } = useClientesByAdmin(adminId || '', {
     enabled: currentStep === 1 && !!adminId,
     search: debouncedSearchTerm || undefined,
-    pageSize: 50
+    pageSize: 100
   });
 
-  // Busca direta na tabela produtos_cadastrado (solicitação explícita para não usar tabela 'produtos')
-  const { data: produtos = [], isLoading: isLoadingProdutos } = useQuery({
-    queryKey: ['produtos_cadastrado_entrega', adminId],
+  const clientesPF = useMemo(() => {
+    // Garantir formato de array caso seja paginação
+    const arr = Array.isArray(clientesResp) ? clientesResp : (clientesResp as any)?.data || [];
+    return arr.filter((c: any) => c.tipo_pessoa === 'PF');
+  }, [clientesResp]);
+
+  // Busca cestas base (ao invés de produtos soltos)
+  const { data: cestasBase = [], isLoading: loadingCestas } = useQuery({
+    queryKey: ['cestas_base_nova_entrega', adminId],
     queryFn: async () => {
       if (!adminId) return [];
       
       const { data, error } = await supabase
-        .from('produtos_cadastrado')
-        .select('*')
+        .from('cestas_base')
+        .select(`
+          *,
+          cestas_base_itens(
+            *,
+            produtos_cadastrado(id, produto_nome, preco_unt, qtd_estoque, unidade_medida, categoria)
+          )
+        `)
         .eq('administrador_id', adminId)
         .eq('ativo', true)
-        .order('produto_nome');
+        .order('nome');
         
       if (error) {
-        console.error('Erro ao buscar produtos:', error);
+        console.error('Erro ao buscar cestas base:', error);
         throw error;
       }
       
       return data || [];
     },
-    enabled: (currentStep === 2 || currentStep === 3) && !!adminId,
+    enabled: currentStep >= 2 && !!adminId,
     staleTime: 1000 * 60 * 5 // 5 minutos
   });
 
@@ -84,17 +96,27 @@ const NovaEntrega: React.FC = () => {
     enabled: currentStep === 3
   });
 
-  // Filter products
-  const filteredProdutos = useMemo(() => {
-    if (!productSearchTerm) return produtos;
-    const lowerTerm = productSearchTerm.toLowerCase();
-    return produtos.filter((p: any) => 
-      p.produto_nome.toLowerCase().includes(lowerTerm) || 
-      p.produto_cod?.toLowerCase().includes(lowerTerm)
-    );
-  }, [produtos, productSearchTerm]);
+  const cestaSelecionada = useMemo(() => {
+    return cestasBase.find((c: any) => c.id === cestaSelecionadaId);
+  }, [cestasBase, cestaSelecionadaId]);
 
-  // Calculate Total
+  // Atualiza os produtos quando a cesta for alterada
+  React.useEffect(() => {
+    if (cestaSelecionada) {
+      const novosItens = (cestaSelecionada.cestas_base_itens || [])
+        .map((item: any) => ({
+          produtoId: item.produtos_cadastrado.id,
+          produtoNome: item.produtos_cadastrado.produto_nome,
+          quantidade: item.quantidade,
+          precoUnitario: item.produtos_cadastrado.preco_unt
+        }));
+      setCartItems(novosItens);
+    } else {
+      setCartItems([]);
+    }
+  }, [cestaSelecionada]);
+
+  // Resumo de items
   const totalValue = useMemo(() => {
     return cartItems.reduce((acc, item) => acc + (item.quantidade * item.precoUnitario), 0);
   }, [cartItems]);
@@ -254,13 +276,12 @@ const NovaEntrega: React.FC = () => {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
         {isLoadingClientes ? (
           <div className="p-8 text-center text-gray-500">Carregando clientes...</div>
-        ) : clientes.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">Nenhum cliente encontrado.</div>
+        ) : clientesPF.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">Nenhum cliente PF encontrado.</div>
         ) : (
           <div className="divide-y divide-gray-200 dark:divide-gray-700 max-h-[60vh] overflow-y-auto">
-            {clientes.map((cliente: any) => {
-              const isPJ = cliente.tipo_pessoa === 'PJ';
-              const nome = isPJ ? (cliente.nome_fantasia || cliente.razao_social || cliente.responsavel_pj_nome) : cliente.nome;
+            {clientesPF.map((cliente: any) => {
+              const nome = `${cliente.nome} ${cliente.sobrenome || ''}`.trim();
               
               return (
               <button
@@ -269,25 +290,15 @@ const NovaEntrega: React.FC = () => {
                 className="w-full text-left p-3 sm:p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center justify-between group"
               >
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0 ${isPJ ? 'bg-blue-600' : 'bg-green-600'}`}>
-                    {isPJ ? <Building2 className="w-5 h-5" /> : <User className="w-5 h-5" />}
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0 bg-green-600">
+                    <User className="w-5 h-5" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <h3 className="text-sm font-medium text-gray-900 dark:text-white truncate">
                         {nome}
                       </h3>
-                      {isPJ && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                          PJ
-                        </span>
-                      )}
                     </div>
-                    {isPJ && cliente.responsavel_pj_nome && (
-                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
-                        Resp: {cliente.responsavel_pj_nome}
-                      </p>
-                    )}
                     <div className="flex flex-col sm:flex-row sm:items-center text-xs sm:text-sm text-gray-500 dark:text-gray-400 gap-1 sm:gap-2 mt-0.5">
                       <span className="truncate">
                         {formatPhoneNumber(cliente.telefone)}
@@ -309,28 +320,19 @@ const NovaEntrega: React.FC = () => {
   );
 
   const renderStep2 = () => {
-    const isPJ = selectedCliente?.tipo_pessoa === 'PJ';
-    const nome = isPJ ? (selectedCliente?.nome_fantasia || selectedCliente?.razao_social || selectedCliente?.responsavel_pj_nome) : selectedCliente?.nome;
+    const nome = `${selectedCliente?.nome} ${selectedCliente?.sobrenome || ''}`.trim();
 
     return (
     <div className="space-y-4">
       <div className="flex justify-between items-center bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
         <div className="flex items-center space-x-3">
-          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0 ${isPJ ? 'bg-blue-600' : 'bg-green-600'}`}>
-             {isPJ ? <Building2 className="w-5 h-5" /> : <User className="w-5 h-5" />}
+          <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0 bg-green-600">
+             <User className="w-5 h-5" />
           </div>
           <div className="flex flex-col">
             <span className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
               Cliente: {nome}
-              {isPJ && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                  PJ
-                </span>
-              )}
             </span>
-            {isPJ && selectedCliente?.responsavel_pj_nome && (
-               <span className="text-xs text-gray-500 dark:text-gray-400">Resp: {selectedCliente.responsavel_pj_nome}</span>
-            )}
           </div>
         </div>
         <button 
@@ -341,22 +343,26 @@ const NovaEntrega: React.FC = () => {
         </button>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-        <input
-          type="text"
-          placeholder="Buscar produtos..."
-          className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-          value={productSearchTerm}
-          onChange={(e) => setProductSearchTerm(e.target.value)}
-        />
-      </div>
-
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 sticky top-0 z-10">
-          <div className="flex justify-between items-center mb-2">
-            <span className="font-medium text-gray-700 dark:text-gray-300">Produtos Disponíveis</span>
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 sticky top-0 z-10 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center">
+              <Package className="w-4 h-4 mr-2" />
+              Selecionar Cesta
+            </label>
+            <select
+              value={cestaSelecionadaId}
+              onChange={(e) => setCestaSelecionadaId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+              disabled={loadingCestas}
+            >
+              <option value="">{loadingCestas ? 'Carregando cestas...' : 'Selecione uma Cesta...'}</option>
+              {cestasBase.map((cesta: any) => (
+                <option key={cesta.id} value={cesta.id}>{cesta.nome} - R$ {cesta.preco}</option>
+              ))}
+            </select>
           </div>
+
           <div className="flex items-center justify-between bg-blue-100 dark:bg-blue-900/40 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
             <div className="flex items-center space-x-2">
               <ShoppingCart className="w-5 h-5 text-blue-600 dark:text-blue-400" />
@@ -370,11 +376,13 @@ const NovaEntrega: React.FC = () => {
           </div>
         </div>
         
-        {isLoadingProdutos ? (
-          <div className="p-8 text-center text-gray-500">Carregando produtos...</div>
-        ) : (
-          <div className="divide-y divide-gray-200 dark:divide-gray-700 max-h-[50vh] overflow-y-auto">
-            {filteredProdutos.map((produto: any) => {
+        {cestaSelecionadaId ? (
+          <div className="divide-y divide-gray-200 dark:divide-gray-700 max-h-[40vh] overflow-y-auto">
+            {cestaSelecionada?.cestas_base_itens.length === 0 && (
+               <div className="p-8 text-center text-gray-500">Esta cesta está vazia.</div>
+            )}
+            {cestaSelecionada?.cestas_base_itens.map((item: any) => {
+              const produto = item.produtos_cadastrado;
               const quantity = getProductQuantity(produto.id);
               return (
                 <div key={produto.id} className={`p-4 flex items-center justify-between ${quantity > 0 ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
@@ -390,6 +398,7 @@ const NovaEntrega: React.FC = () => {
                   
                   <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-1 shadow-sm border border-gray-200 dark:border-gray-700">
                     <button
+                      type="button"
                       onClick={() => handleQuantityChange(produto, quantity - 1)}
                       className="w-10 h-10 rounded-md bg-white dark:bg-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400 disabled:opacity-50 disabled:hover:bg-white transition-colors shadow-sm border border-gray-200 dark:border-gray-600"
                       disabled={quantity <= 0}
@@ -404,6 +413,7 @@ const NovaEntrega: React.FC = () => {
                       min="0"
                     />
                     <button
+                      type="button"
                       onClick={() => handleQuantityChange(produto, quantity + 1)}
                       className="w-10 h-10 rounded-md bg-blue-600 flex items-center justify-center text-white hover:bg-blue-700 shadow-sm transition-colors"
                     >
@@ -413,6 +423,11 @@ const NovaEntrega: React.FC = () => {
                 </div>
               );
             })}
+          </div>
+        ) : (
+          <div className="p-12 text-center text-gray-500 flex flex-col items-center">
+            <Package className="w-10 h-10 text-gray-400 mb-2 opacity-50" />
+            <p>Selecione uma Cesta Base acima para ver os produtos disponíveis.</p>
           </div>
         )}
       </div>
@@ -442,7 +457,7 @@ const NovaEntrega: React.FC = () => {
               Cliente
             </h3>
             <p className="text-gray-700 dark:text-gray-300 font-medium">
-              {selectedCliente?.tipo_pessoa === 'PJ' ? selectedCliente?.responsavel_pj_nome : selectedCliente?.nome}
+              {`${selectedCliente?.nome} ${selectedCliente?.sobrenome || ''}`.trim()}
             </p>
             <p className="text-sm text-gray-500">{selectedCliente?.endereco}, {selectedCliente?.numero}</p>
             <p className="text-sm text-gray-500">{selectedCliente?.Cidade} - {selectedCliente?.Estado}</p>

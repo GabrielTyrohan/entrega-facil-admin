@@ -204,19 +204,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       if (error) throw error;
       if (!data.user) throw new Error('Credenciais inválidas');
-      
+
+      // ── Verificação antecipada: funcionário desativado?
+      // Checar antes de deixar o fluxo de autenticação completar.
+      const { data: funcionario, error: funcError } = await supabase
+        .from('funcionarios')
+        .select('ativo')
+        .eq('auth_user_id', data.user.id)
+        .maybeSingle();
+
+      if (!funcError && funcionario && funcionario.ativo === false) {
+        // Faz sign out imediatamente para não criar sessão ativa
+        await supabase.auth.signOut();
+        throw new Error('ACESSO_DESATIVADO');
+      }
+
       // O listener onAuthStateChange vai capturar o login e disparar o useQuery
       toast.success(`Bem-vindo!`);
     } catch (error: any) {
       console.error('❌ Erro no login:', error);
-      
+
+      // Repassar erros já formatados
+      if (error.message === 'ACESSO_DESATIVADO') throw error;
+
       // Mensagens de erro específicas
       if (error.message.includes('Invalid login credentials')) {
         throw new Error('E-mail ou senha incorretos');
       } else if (error.message.includes('não autorizado')) {
         throw new Error('Você não tem permissão para acessar o sistema');
       }
-      
+
       throw error;
     }
   };

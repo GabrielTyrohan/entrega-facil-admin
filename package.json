@@ -1,7 +1,7 @@
 {
   "name": "entrega-admin",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "main": "electron/main.cjs",
   "homepage": "./",
@@ -47,7 +47,8 @@
       "provider": "github",
       "owner": "GabrielTyrohan",
       "repo": "entrega-facil-admin",
-      "private": true
+      "private": true,
+      "releaseType": "release"
     }
   },
   "scripts": {

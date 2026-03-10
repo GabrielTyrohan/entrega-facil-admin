@@ -19,9 +19,12 @@ import MovimentacoesEstoque from './pages/Estoque/MovimentacoesEstoque';
 import RelatorioEstoque from './pages/Estoque/RelatorioEstoque';
 import NovaEntrega from './pages/NovaEntrega';
 
+import CestasBase from './pages/CestasBase';
 import EditarCesta from './pages/EditarCesta';
+import EditarCestaBase from './pages/EditarCestaBase';
 import LoginPage from './pages/LoginPage';
 import NovaCesta from './pages/NovaCesta';
+import NovaCestaBase from './pages/NovaCestaBase';
 import NovoProduto from './pages/NovoProduto';
 import NovoVendedor from './pages/NovoVendedor';
 import Pagamentos from './pages/Pagamentos';
@@ -98,6 +101,9 @@ function App() {
                         <Route path="/produtos/cestas" element={<CestasVendedor />} />
                         <Route path="/produtos/cestas/nova" element={<NovaCesta />} />
                         <Route path="/produtos/cestas/editar/:id" element={<EditarCesta />} />
+                        <Route path="/produtos/cestas-base" element={<CestasBase />} />
+                        <Route path="/produtos/cestas-base/nova" element={<NovaCestaBase />} />
+                        <Route path="/produtos/cestas-base/editar/:id" element={<EditarCestaBase />} />
                         <Route path="/clientes" element={<Clientes />} />
                         <Route path="/entregas" element={<Entregas />} />
                         <Route path="/entregas/nova" element={<NovaEntrega />} />
