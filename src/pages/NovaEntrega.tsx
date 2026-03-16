@@ -104,12 +104,15 @@ const NovaEntrega: React.FC = () => {
   React.useEffect(() => {
     if (cestaSelecionada) {
       const novosItens = (cestaSelecionada.cestas_base_itens || [])
-        .map((item: any) => ({
-          produtoId: item.produtos_cadastrado.id,
-          produtoNome: item.produtos_cadastrado.produto_nome,
-          quantidade: item.quantidade,
-          precoUnitario: item.produtos_cadastrado.preco_unt
-        }));
+        .map((item: any) => {
+          const produto = item.produtos_cadastrado || {};
+          return {
+            produtoId: produto.id || item.produto_cadastrado_id || item.id,
+            produtoNome: produto.produto_nome || 'Produto Indisponível',
+            quantidade: item.quantidade,
+            precoUnitario: produto.preco_unt || 0
+          };
+        });
       setCartItems(novosItens);
     } else {
       setCartItems([]);
@@ -382,7 +385,13 @@ const NovaEntrega: React.FC = () => {
                <div className="p-8 text-center text-gray-500">Esta cesta está vazia.</div>
             )}
             {cestaSelecionada?.cestas_base_itens.map((item: any) => {
-              const produto = item.produtos_cadastrado;
+              const baseProduto = item.produtos_cadastrado || {};
+              const produtoId = baseProduto.id || item.produto_cadastrado_id || item.id;
+              const produto = {
+                id: produtoId,
+                produto_nome: baseProduto.produto_nome || 'Produto Indisponível',
+                preco_unt: baseProduto.preco_unt || 0
+              };
               const quantity = getProductQuantity(produto.id);
               return (
                 <div key={produto.id} className={`p-4 flex items-center justify-between ${quantity > 0 ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
@@ -392,7 +401,7 @@ const NovaEntrega: React.FC = () => {
                     </div>
                     <div>
                       <h3 className="font-medium text-gray-900 dark:text-white text-lg">{produto.produto_nome}</h3>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">R$ {produto.preco_unt?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">R$ {produto.preco_unt.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                     </div>
                   </div>
                   

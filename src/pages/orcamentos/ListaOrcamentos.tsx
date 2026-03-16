@@ -10,10 +10,12 @@ import {
   FileText,
   Filter,
   Plus,
-  Trash2
+  Trash2,
+  User
 } from 'lucide-react';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+
 
 const ListaOrcamentos: React.FC = () => {
   const navigate = useNavigate();
@@ -21,18 +23,19 @@ const ListaOrcamentos: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(0);
   const [statusFilter, setStatusFilter] = useState<string>('todos');
   const [dateFilter, setDateFilter] = useState<{ start: string; end: string }>({ start: '', end: '' });
-  
+
   const { data: orcamentos, isLoading, totalPages, totalCount } = useOrcamentosPJ(
     adminId || '',
-    { 
-      status: statusFilter, 
-      page: currentPage, 
+    {
+      status: statusFilter,
+      page: currentPage,
       pageSize: PAGINATION.BACKEND_PAGE_SIZE,
       startDate: dateFilter.start || undefined,
       endDate: dateFilter.end || undefined,
       enabled: !!adminId
     }
   );
+
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -50,14 +53,24 @@ const ListaOrcamentos: React.FC = () => {
   };
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(value);
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pt-BR');
+  };
+
+  // ✅ Gera cor de avatar baseada no nome
+  const getAvatarColor = (nome: string) => {
+    const colors = [
+      'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
+      'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400',
+      'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400',
+      'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400',
+      'bg-pink-100 text-pink-600 dark:bg-pink-900/30 dark:text-pink-400',
+    ];
+    const index = nome.charCodeAt(0) % colors.length;
+    return colors[index];
   };
 
   return (
@@ -134,64 +147,85 @@ const ListaOrcamentos: React.FC = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Data</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Valor Total</th>
+                  {/* ✅ Coluna nova */}
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    <div className="flex items-center gap-1">
+                      <User className="w-3.5 h-3.5" />
+                      Criado por
+                    </div>
+                  </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Ações</th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {orcamentos.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={7} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                       Nenhum orçamento encontrado
                     </td>
                   </tr>
                 ) : (
-                  orcamentos.map((orcamento) => (
-                    <tr key={orcamento.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                        #{orcamento.numero_orcamento}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        {orcamento.cliente_nome}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        {formatDate(orcamento.data_orcamento)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {getStatusBadge(orcamento.status)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                        {formatCurrency(orcamento.valor_total)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            onClick={() => navigate(`/orcamentos-pj/${orcamento.id}`)}
-                            className="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                            title="Ver Detalhes"
-                          >
-                            <Eye className="w-5 h-5" />
-                          </button>
-                          {orcamento.status === 'pendente' && (
-                            <>
-                              <button
-                                onClick={() => navigate(`/orcamentos-pj/editar/${orcamento.id}`)}
-                                className="p-1 text-gray-400 hover:text-yellow-600 dark:hover:text-yellow-400 transition-colors"
-                                title="Editar"
-                              >
-                                <Edit className="w-5 h-5" />
-                              </button>
-                              <button
-                                className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                                title="Excluir"
-                              >
-                                <Trash2 className="w-5 h-5" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                  orcamentos.map((orcamento) => {
+                    const nomeCriador = orcamento.criado_por_nome || 'Administrador';
+                    return (
+                      <tr key={orcamento.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                          #{orcamento.numero_orcamento}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          {orcamento.cliente_nome}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          {formatDate(orcamento.data_orcamento)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {getStatusBadge(orcamento.status)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                          {formatCurrency(orcamento.valor_total)}
+                        </td>
+
+                        {/* ✅ Célula com avatar + nome */}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${getAvatarColor(nomeCriador)}`}>
+                              {nomeCriador.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="truncate max-w-[120px]">{nomeCriador}</span>
+                          </div>
+                        </td>
+
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => navigate(`/orcamentos-pj/${orcamento.id}`)}
+                              className="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                              title="Ver Detalhes"
+                            >
+                              <Eye className="w-5 h-5" />
+                            </button>
+                            {orcamento.status === 'pendente' && (
+                              <>
+                                <button
+                                  onClick={() => navigate(`/orcamentos-pj/editar/${orcamento.id}`)}
+                                  className="p-1 text-gray-400 hover:text-yellow-600 dark:hover:text-yellow-400 transition-colors"
+                                  title="Editar"
+                                >
+                                  <Edit className="w-5 h-5" />
+                                </button>
+                                <button
+                                  className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                                  title="Excluir"
+                                >
+                                  <Trash2 className="w-5 h-5" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

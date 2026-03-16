@@ -26,7 +26,7 @@ interface ItemCestaBase {
   cesta_base_id: string;
   produto_cadastrado_id: string;
   quantidade: number;
-  produtos_cadastrado: ProdutoCadastrado;
+  produtos_cadastrado: ProdutoCadastrado | ProdutoCadastrado[];
 }
 
 interface CestaBase {
@@ -70,26 +70,46 @@ const NovaCesta: React.FC = () => {
 
   // ── Cestas Base ──
   const { data: cestasBase = [], isLoading: loadingCestas } = useQuery<CestaBase[]>({
-    queryKey: ['cestas_base', targetId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('cestas_base')
-        .select(`
-          *,
-          cestas_base_itens(
-            *,
-            produtos_cadastrado(produto_nome, preco_unt, qtd_estoque, unidade_medida, categoria)
+  queryKey: ['cestas_base', targetId],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from('cestas_base')
+      .select(`
+        id,
+        administrador_id,
+        nome,
+        descricao,
+        preco,
+        ativo,
+        cestas_base_itens!cesta_base_id(
+          id,
+          cesta_base_id,
+          produto_cadastrado_id,
+          quantidade,
+          produtos_cadastrado!produto_cadastrado_id(
+            produto_nome,
+            preco_unt,
+            qtd_estoque,
+            unidade_medida,
+            categoria
           )
-        `)
-        .eq('administrador_id', targetId!)
-        .eq('ativo', true)
-        .order('nome');
+        )
+      `)
+      .eq('administrador_id', targetId!)
+      .eq('ativo', true)
+      .order('nome');
 
-      if (error) throw error;
-      return (data || []) as CestaBase[];
-    },
-    enabled: !!targetId
-  });
+    if (error) {
+      console.error('Erro query cestas_base:', JSON.stringify(error));
+      throw error;
+    }
+    return (data || []) as CestaBase[];
+  },
+  enabled: !!targetId
+});
+
+
+
 
   // ── Estados do formulário ──
   const [cestaSelecionadaId, setCestaSelecionadaId] = useState<string>('');
@@ -110,14 +130,18 @@ const NovaCesta: React.FC = () => {
     let gargalo: string | null = null;
 
     for (const item of cestaSelecionada.cestas_base_itens) {
-      const possivel = Math.floor(
-        (item.produtos_cadastrado?.qtd_estoque ?? 0) / item.quantidade
-      );
-      if (possivel < max) {
-        max = possivel;
-        gargalo = item.produtos_cadastrado?.produto_nome ?? null;
-      }
-    }
+  const prod = Array.isArray(item.produtos_cadastrado)
+    ? item.produtos_cadastrado[0]
+    : item.produtos_cadastrado;
+
+  const possivel = Math.floor(
+    (prod?.qtd_estoque ?? 0) / item.quantidade
+  );
+  if (possivel < max) {
+    max = possivel;
+    gargalo = prod?.produto_nome ?? null;
+  }
+}
 
     return {
       maxCestasDisponivel: max === Infinity ? 0 : max,
@@ -161,22 +185,15 @@ const NovaCesta: React.FC = () => {
     setIsLoading(true);
 
     try {
-  const { data, error } = await supabase.rpc('distribuir_cesta_para_vendedor', {
+  const { error } = await supabase.rpc('distribuir_cesta_para_vendedor', {
     p_cesta_base_id: cestaSelecionadaId,
     p_vendedor_id: vendedorSelecionado,
     p_quantidade: quantidadeParaVendedor,
     p_administrador_id: targetId
   });
 
-  console.log('RPC response:', { data, error }); // ← ADICIONE
-  console.log('Params enviados:', {               // ← ADICIONE
-    p_cesta_base_id: cestaSelecionadaId,
-    p_vendedor_id: vendedorSelecionado,
-    p_quantidade: quantidadeParaVendedor,
-    p_administrador_id: targetId
-    
-  });
-console.log('Erro detalhado:', JSON.stringify(error, null, 2));
+
+
 
       if (error) throw error;
 
@@ -366,9 +383,12 @@ console.log('Erro detalhado:', JSON.stringify(error, null, 2));
             ) : (
               <div className="space-y-3">
                 {cestaSelecionada.cestas_base_itens.map((item: any) => {
-                  const prod = item.produtos_cadastrado;
-                  const subtotal = prod.preco_unt * item.quantidade;
-                  const estoque = prod.qtd_estoque;
+                  const prod = Array.isArray(item.produtos_cadastrado)
+                    ? item.produtos_cadastrado[0]
+                    : item.produtos_cadastrado || {};
+                   const preco = prod?.preco_unt || 0;
+                  const subtotal = preco * item.quantidade;
+                  const estoque = prod.qtd_estoque || 0;
 
                   return (
                     <div
@@ -377,11 +397,11 @@ console.log('Erro detalhado:', JSON.stringify(error, null, 2));
                     >
                       <div className="flex-1">
                         <h4 className="font-medium text-gray-900 dark:text-white text-sm">
-                          {prod.produto_nome}
+                          {prod.produto_nome || 'Produto Indisponível'}
                         </h4>
                         <p className="text-xs text-gray-500 dark:text-gray-400">
                           {prod.categoria && `${prod.categoria} • `}
-                          {formatCurrency(prod.preco_unt)} cada
+                          {formatCurrency(preco)} cada
                         </p>
                       </div>
 
