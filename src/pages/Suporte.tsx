@@ -1,21 +1,21 @@
-import React, { useState } from 'react';
-import { 
-  MessageSquare, 
-  CheckCircle, 
-  Clock, 
-  Send,
-  FileText,
-  Bug,
-  Lightbulb,
-  AlertCircle,
-  Loader2
-} from 'lucide-react';
 import { Skeleton } from "@/components/ui/Skeleton";
+import {
+  AlertCircle,
+  Bug,
+  CheckCircle,
+  Clock,
+  FileText,
+  Lightbulb,
+  Loader2,
+  MessageSquare,
+  Send
+} from 'lucide-react';
+import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSuporteSolicitacoes } from '../hooks/useSuporteSolicitacoes';
 
 const Suporte: React.FC = () => {
-  const { user, loading } = useAuth();
+  const { user, isLoading } = useAuth();
   const { enviarSolicitacao, isSubmitting, error: hookError } = useSuporteSolicitacoes();
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
@@ -26,7 +26,7 @@ const Suporte: React.FC = () => {
     descricao: ''
   });
 
-  if (loading) {
+ if (isLoading) {
     return (
       <div className="space-y-6 p-4 sm:p-6 lg:p-8">
         {/* Header Skeleton */}
@@ -162,7 +162,7 @@ const Suporte: React.FC = () => {
       },
       {
         id: user.id,
-        nome: user.name || user.email.split('@')[0],
+        nome: user.user_metadata?.nome || user.user_metadata?.full_name || user.email!.split('@')[0],
         email: user.email,
       }
     );

@@ -2,9 +2,10 @@ import { prefetchEssentialData } from '@/lib/cache/prefetch';
 import { CACHE_KEYS } from '@/lib/constants/queryKeys';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/utils/toast';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { User } from '@supabase/supabase-js';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 // ===== INTERFACES =====
 
@@ -40,7 +41,6 @@ export interface AdminProfile {
   cidade?: string;
   estado?: string;
   pais?: string;
-  // Payment info
   valor_assinatura?: number;
   status_pagamento?: string;
   data_vencimento?: string;
@@ -64,13 +64,11 @@ export interface FuncionarioProfile {
 
 export type UserType = 'admin' | 'funcionario' | null;
 
-// ===== INTERFACE DO CONTEXTO =====
-
 interface AuthContextType {
   user: User | null;
   userType: UserType;
   userProfile: AdminProfile | FuncionarioProfile | null;
-  adminId: string | null; // ID do admin (próprio ou do vinculado)
+  adminId: string | null;
   permissions: Permissoes;
   isLoading: boolean;
   isAdmin: boolean;
@@ -78,8 +76,6 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
-
-// ===== CONSTANTES =====
 
 const ADMIN_PERMISSIONS: Permissoes = {
   orcamentos_pj: true,
@@ -101,81 +97,69 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isSessionLoading, setIsSessionLoading] = useState(true);
   const queryClient = useQueryClient();
 
-  // ===== QUERY PARA PERFIL (com cache) ===== 
-  const { data: userProfile, error: profileError } = useQuery({ 
-    queryKey: [CACHE_KEYS.USER_PROFILE, user?.id], 
-    queryFn: async () => { 
-      if (!user) return null; 
+  const presenceChannelRef = useRef<RealtimeChannel | null>(null);
+  const presenceTrackedRef = useRef(false);
 
-      // 1. Tentar Admin 
-      const { data: admin, error: adminError } = await supabase 
-        .from('administradores') 
-        .select('*') 
-        .eq('id', user.id) 
-        .maybeSingle(); 
+  // ===== QUERY PARA PERFIL =====
+  const { data: userProfile, error: profileError } = useQuery({
+    queryKey: [CACHE_KEYS.USER_PROFILE, user?.id],
+    queryFn: async () => {
+      if (!user) return null;
 
-      if (adminError) {
-        console.error('❌ Erro ao buscar admin:', adminError);
-      }
+      const { data: admin, error: adminError } = await supabase
+        .from('administradores')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
 
-      if (admin) { 
-        // Verifica se o admin está com pagamento inativo ou bloqueado
+      if (adminError) console.error('❌ Erro ao buscar admin:', adminError);
+
+      if (admin) {
         if (admin.status_pagamento === 'inativo' || admin.status_pagamento === 'cancelado') {
           throw new Error('PAGAMENTO_INATIVO');
         }
-        return { ...admin, type: 'admin' } as AdminProfile & { type: 'admin' }; 
-      } 
-
-      // 2. Tentar Funcionário — primeiro verifica se existe (independente do ativo)
-      const { data: funcionarioRaw, error: funcError } = await supabase 
-        .from('funcionarios') 
-        .select('*') 
-        .eq('auth_user_id', user.id) 
-        .maybeSingle(); 
-
-      if (funcError) {
-        console.error('❌ Erro ao buscar funcionário:', funcError);
+        return { ...admin, type: 'admin' } as AdminProfile & { type: 'admin' };
       }
 
-      // Existe mas está desativado → erro específico
+      const { data: funcionarioRaw, error: funcError } = await supabase
+        .from('funcionarios')
+        .select('*')
+        .eq('auth_user_id', user.id)
+        .maybeSingle();
+
+      if (funcError) console.error('❌ Erro ao buscar funcionário:', funcError);
+
       if (funcionarioRaw && funcionarioRaw.ativo === false) {
         throw new Error('ACESSO_DESATIVADO');
       }
 
-      // Existe e está ativo → retorna perfil
       if (funcionarioRaw && funcionarioRaw.ativo === true) {
-        // O nome da empresa agora vem diretamente da tabela funcionarios (atualizado via trigger)
-        return { ...funcionarioRaw, type: 'funcionario' } as FuncionarioProfile & { type: 'funcionario' }; 
-      } 
+        return { ...funcionarioRaw, type: 'funcionario' } as FuncionarioProfile & { type: 'funcionario' };
+      }
 
       console.error('❌ Nenhum perfil encontrado para o usuário');
-      throw new Error('Usuário não autorizado: Perfil não encontrado'); 
-    }, 
-    enabled: !!user, // SÓ executa se user existir 
-    staleTime: 10 * 60 * 1000, // 10 minutos (perfil não muda frequente) 
-    gcTime: 30 * 60 * 1000, 
-    retry: 1, 
-  }); 
+      throw new Error('Usuário não autorizado: Perfil não encontrado');
+    },
+    enabled: !!user,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    retry: 1,
+  });
 
-  // Derivar estados do userProfile usando useMemo para garantir consistência imediata
+  // ===== DERIVAR ESTADOS =====
   const { userType, adminId, permissions } = useMemo(() => {
     if (!userProfile) {
-      return { 
-        userType: null, 
-        adminId: null, 
-        permissions: ADMIN_PERMISSIONS 
-      };
+      return { userType: null, adminId: null, permissions: ADMIN_PERMISSIONS };
     }
 
-    const type = (userProfile as any).type || 
-                 ('administrador_id' in userProfile ? 'funcionario' : 'admin');
-    
+    const type = (userProfile as any).type ||
+      ('administrador_id' in userProfile ? 'funcionario' : 'admin');
+
     let derivedAdminId: string | null = null;
     let derivedPermissions = ADMIN_PERMISSIONS;
 
     if (type === 'admin') {
       derivedAdminId = (userProfile as AdminProfile).id;
-      derivedPermissions = ADMIN_PERMISSIONS;
     } else {
       derivedAdminId = (userProfile as FuncionarioProfile).administrador_id;
       derivedPermissions = (userProfile as FuncionarioProfile).permissoes || ADMIN_PERMISSIONS;
@@ -184,29 +168,67 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return {
       userType: type as UserType,
       adminId: derivedAdminId,
-      permissions: derivedPermissions
+      permissions: derivedPermissions,
     };
   }, [userProfile]);
 
-  // Log para debug
-  useEffect(() => {
-  }, [userType, adminId, isSessionLoading, user, userProfile, profileError]);
-
   const isLoading = isSessionLoading || (!!user && (!userProfile && !profileError));
+
+  // ===== PRESENÇA (apenas funcionários) =====
+  // Cria o canal UMA VEZ quando userType/adminId ficam disponíveis.
+  // presenceTrackedRef impede recriação por re-renders do React Query.
+  useEffect(() => {
+    if (
+      userType !== 'funcionario' ||
+      !adminId ||
+      !user?.id ||
+      presenceTrackedRef.current  // já está no canal — não recria
+    ) return;
+
+    const userId = user.id;
+    const userName = (userProfile as FuncionarioProfile)?.nome ?? 'Funcionário';
+
+    const channel = supabase.channel(`presence:admin:${adminId}`, {
+      config: { presence: { key: userId } }, // key única por usuário
+    });
+
+    channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await channel.track({
+          auth_user_id: userId,
+          nome: userName,
+          online_at: new Date().toISOString(),
+        });
+        presenceTrackedRef.current = true;
+      }
+    });
+
+    presenceChannelRef.current = channel;
+
+    // Sem return de cleanup aqui — canal só morre no logout ou unmount final
+  }, [userType, adminId, user?.id]); // userProfile fora das deps para não recriar
+
+  // Cleanup final — só roda quando o AuthProvider desmonta (fechamento do app)
+  useEffect(() => {
+    return () => {
+      if (presenceChannelRef.current) {
+        presenceChannelRef.current.untrack().then(() => {
+          supabase.removeChannel(presenceChannelRef.current!);
+        });
+        presenceChannelRef.current = null;
+        presenceTrackedRef.current = false;
+      }
+    };
+  }, []);
 
   // ===== LOGIN =====
   const signIn = async (email: string, password: string) => {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
       if (error) throw error;
       if (!data.user) throw new Error('Credenciais inválidas');
 
-      // ── Verificação antecipada: funcionário desativado?
-      // Checar antes de deixar o fluxo de autenticação completar.
       const { data: funcionario, error: funcError } = await supabase
         .from('funcionarios')
         .select('ativo')
@@ -214,26 +236,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         .maybeSingle();
 
       if (!funcError && funcionario && funcionario.ativo === false) {
-        // Faz sign out imediatamente para não criar sessão ativa
         await supabase.auth.signOut();
         throw new Error('ACESSO_DESATIVADO');
       }
 
-      // O listener onAuthStateChange vai capturar o login e disparar o useQuery
-      toast.success(`Bem-vindo!`);
+      toast.success('Bem-vindo!');
     } catch (error: any) {
       console.error('❌ Erro no login:', error);
-
-      // Repassar erros já formatados
       if (error.message === 'ACESSO_DESATIVADO') throw error;
-
-      // Mensagens de erro específicas
       if (error.message.includes('Invalid login credentials')) {
         throw new Error('E-mail ou senha incorretos');
       } else if (error.message.includes('não autorizado')) {
         throw new Error('Você não tem permissão para acessar o sistema');
       }
-
       throw error;
     }
   };
@@ -241,6 +256,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // ===== LOGOUT =====
   const signOut = async () => {
     try {
+      // Sai da presença ANTES de deslogar
+      if (presenceChannelRef.current) {
+        await presenceChannelRef.current.untrack();
+        supabase.removeChannel(presenceChannelRef.current);
+        presenceChannelRef.current = null;
+        presenceTrackedRef.current = false;
+      }
+
       await supabase.auth.signOut();
       setUser(null);
       queryClient.removeQueries({ queryKey: [CACHE_KEYS.USER_PROFILE] });
@@ -251,16 +274,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // ===== LIFECYCLE (Verificar sessão ao carregar) =====
+  // ===== LIFECYCLE =====
   useEffect(() => {
     const initAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-
-        if (session?.user) {
-          setUser(session.user);
-          // Query vai rodar automaticamente
-        }
+        if (session?.user) setUser(session.user);
       } catch (error) {
         console.error('Erro ao verificar sessão:', error);
       } finally {
@@ -273,6 +292,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setUser(session?.user ?? null);
       if (!session?.user) {
+        // Limpa presença se sessão cair por token expirado
+        if (presenceChannelRef.current) {
+          presenceChannelRef.current.untrack().then(() => {
+            supabase.removeChannel(presenceChannelRef.current!);
+          });
+          presenceChannelRef.current = null;
+          presenceTrackedRef.current = false;
+        }
         queryClient.removeQueries({ queryKey: [CACHE_KEYS.USER_PROFILE] });
       }
     });
@@ -280,16 +307,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, [queryClient]);
 
-  // ===== PREFETCH AUTOMÁTICO =====
-  // Executa prefetch de dados essenciais assim que o adminId estiver disponível
-  // (seja após login ou reload da página)
+  // ===== PREFETCH =====
   useEffect(() => {
     if (adminId) {
       prefetchEssentialData(queryClient, adminId).catch(console.error);
     }
   }, [adminId, queryClient]);
 
-  // Efeito para logout em caso de erro no perfil (não autorizado/bloqueado)
+  // ===== ERRO DE PERFIL =====
   useEffect(() => {
     if (profileError) {
       console.error('❌ Erro no perfil:', profileError);
@@ -303,7 +328,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         toast.error('Erro de autorização. Faça login novamente.');
       }
 
-      // Salva o erro provisoriamente para o LoginPage exibir em seu formulário
       localStorage.setItem('loginErrorMsg', errorMsg);
       signOut();
     }

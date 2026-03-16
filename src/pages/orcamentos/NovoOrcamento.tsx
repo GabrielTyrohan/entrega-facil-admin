@@ -290,21 +290,23 @@ const NovoOrcamento: React.FC = () => {
       setIsSubmitting(true);
       
       await createOrcamento({
-        administrador_id: adminId || '',
-        cliente_id: formData.cliente_id,
-        cliente_nome: formData.cliente_nome,
-        data_orcamento: new Date().toISOString(),
-        // @ts-ignore - colunas criadas manualmente no banco
-        dataSaida: formData.data_saida || undefined,
-        // @ts-ignore - colunas criadas manualmente no banco
-        horaSaida: formData.hora_saida || undefined,
-        status: 'pendente', // Alterado de 'rascunho' para 'pendente' para evitar erro de constraint
-        valor_total: calcularTotalGeral(),
-        margem_lucro_geral: 0, // Calculate if needed
-        numero_orcamento: Math.floor(Math.random() * 1000000), // Should be handled by DB sequence ideally
-        forma_pagamento: formData.forma_pagamento,
-        itens: itens as OrcamentoPJItem[]
-      });
+  administrador_id: adminId || '',
+  cliente_id: formData.cliente_id,
+  cliente_nome: formData.cliente_nome,
+  data_orcamento: new Date().toISOString(),
+  // @ts-ignore
+  dataSaida: formData.data_saida || undefined,
+  // @ts-ignore
+  horaSaida: formData.hora_saida || undefined,
+  status: 'pendente',
+  valor_total: calcularTotalGeral(),
+  margem_lucro_geral: 0,
+  numero_orcamento: Math.floor(Math.random() * 1000000),
+  forma_pagamento: formData.forma_pagamento,
+  created_by: user?.id,
+  itens: itens as OrcamentoPJItem[]
+});
+
 
       toast.success('Orçamento criado com sucesso!');
       navigate('/orcamentos-pj');

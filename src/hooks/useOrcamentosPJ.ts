@@ -1,7 +1,8 @@
 import { CACHE_KEYS } from '@/lib/constants/queryKeys';
 import { supabase } from '@/lib/supabase';
 import { useSupabaseQuery } from '@/lib/supabaseCache';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+
 
 export interface OrcamentoPJItem {
   id: string;
@@ -19,6 +20,7 @@ export interface OrcamentoPJItem {
   };
 }
 
+
 export interface OrcamentoPJ {
   id: string;
   administrador_id: string;
@@ -35,7 +37,10 @@ export interface OrcamentoPJ {
   itens?: OrcamentoPJItem[];
   created_at?: string;
   updated_at?: string;
+  created_by?: string;
+  criado_por_nome?: string; // ✅ campo resolvido
 }
+
 
 export interface UseOrcamentosPJReturn {
   data: OrcamentoPJ[];
@@ -47,6 +52,7 @@ export interface UseOrcamentosPJReturn {
   currentPage: number;
   refetch: () => void;
 }
+
 
 export const useOrcamentosPJ = (
   adminId: string,
@@ -63,6 +69,8 @@ export const useOrcamentosPJ = (
   const pageSize = options?.pageSize || 20;
   const from = page * pageSize;
   const to = from + pageSize - 1;
+  const enabled = (options?.enabled !== false) && !!adminId;
+
 
   let query = supabase
     .from('orcamentos_pj')
@@ -71,30 +79,78 @@ export const useOrcamentosPJ = (
     .order('created_at', { ascending: false })
     .range(from, to);
 
+
   if (options?.status && options.status !== 'todos') {
     query = query.eq('status', options.status);
   }
-
   if (options?.startDate) {
     query = query.gte('data_orcamento', options.startDate);
   }
-
   if (options?.endDate) {
     query = query.lte('data_orcamento', options.endDate);
   }
+
 
   const queryResult = useSupabaseQuery(
     'ORCAMENTOS_PJ',
     query,
     [CACHE_KEYS.ORCAMENTOS_PJ, 'list', { adminId, status: options?.status, startDate: options?.startDate, endDate: options?.endDate, page, pageSize }],
-    { enabled: options?.enabled && !!adminId }
+    { enabled }
   );
+
+
+  const orcamentos: OrcamentoPJ[] = queryResult.data ?? [];
+
+  // ✅ Busca nomes dos criadores (funcionários ou administradores)
+  const createdByIds = orcamentos
+    .map(o => o.created_by)
+    .filter((id): id is string => !!id);
+
+  const { data: criadoresData } = useQuery({
+    queryKey: ['orcamentos_criadores', createdByIds],
+    queryFn: async () => {
+      if (createdByIds.length === 0) return { funcs: [], admins: [] };
+
+      const [{ data: funcs }, { data: admins }] = await Promise.all([
+        supabase
+          .from('funcionarios')
+          .select('auth_user_id, nome')
+          .in('auth_user_id', createdByIds),
+        supabase
+          .from('administradores')
+          .select('id, nome')
+          .in('id', createdByIds),
+      ]);
+
+      return { funcs: funcs || [], admins: admins || [] };
+    },
+    enabled: createdByIds.length > 0,
+    staleTime: 1000 * 60 * 5, // 5 min cache
+  });
+
+  // ✅ Monta mapa de id → nome
+  const mapaFuncionarios = Object.fromEntries(
+    (criadoresData?.funcs || []).map(f => [f.auth_user_id, f.nome])
+  );
+  const mapaAdmins = Object.fromEntries(
+    (criadoresData?.admins || []).map(a => [a.id, a.nome])
+  );
+
+  // ✅ Injeta criado_por_nome em cada orçamento
+  const orcamentosComCriador = orcamentos.map(o => ({
+    ...o,
+    criado_por_nome:
+      (o.created_by && (mapaFuncionarios[o.created_by] || mapaAdmins[o.created_by]))
+      || 'Administrador',
+  }));
+
 
   const totalCount = queryResult.count || 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
+
   return {
-    data: queryResult.data ?? [],
+    data: orcamentosComCriador,
     isLoading: queryResult.isLoading,
     error: queryResult.error,
     totalCount,
@@ -104,6 +160,7 @@ export const useOrcamentosPJ = (
   };
 };
 
+
 export const useOrcamentoPJById = (id: string, options?: { enabled?: boolean }) => {
   const query = supabase
     .from('orcamentos_pj')
@@ -111,44 +168,44 @@ export const useOrcamentoPJById = (id: string, options?: { enabled?: boolean }) 
     .eq('id', id)
     .single();
 
+
   return useSupabaseQuery<OrcamentoPJ>(
     'ORCAMENTOS_PJ',
     query,
-    [CACHE_KEYS.ORCAMENTOS_PJ, 'detail', id, 'v2'], // Added version to force cache refresh
+    [CACHE_KEYS.ORCAMENTOS_PJ, 'detail', id, 'v2'],
     { enabled: options?.enabled !== false && !!id }
   );
 };
 
+
 export const useCreateOrcamentoPJ = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async (data: Partial<OrcamentoPJ> & { itens?: Partial<OrcamentoPJItem>[] }) => {
       const { itens, ...orcamentoData } = data;
-      
-      // 1. Criar orçamento
+
       const { data: orcamento, error: orcamentoError } = await supabase
         .from('orcamentos_pj')
         .insert(orcamentoData)
         .select()
         .single();
-        
+
       if (orcamentoError) throw orcamentoError;
-      
-      // 2. Criar itens se houver
+
       if (itens && itens.length > 0) {
         const itensComId = itens.map(item => ({
           ...item,
           orcamento_id: orcamento.id
         }));
-        
+
         const { error: itensError } = await supabase
           .from('orcamentos_pj_itens')
           .insert(itensComId);
-          
+
         if (itensError) throw itensError;
       }
-      
+
       return orcamento;
     },
     onSuccess: () => {
@@ -157,9 +214,10 @@ export const useCreateOrcamentoPJ = () => {
   });
 };
 
+
 export const useUpdateOrcamentoPJ = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<OrcamentoPJ> }) => {
       const { data: result, error } = await supabase
@@ -168,7 +226,7 @@ export const useUpdateOrcamentoPJ = () => {
         .eq('id', id)
         .select()
         .single();
-        
+
       if (error) throw error;
       return result;
     },
