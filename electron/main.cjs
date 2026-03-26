@@ -6,11 +6,8 @@ const log = require('electron-log');
 
 let mainWindow;
 
-// Configuração do logger
 autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = 'info';
-
-// Não verifica updates em desenvolvimento
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
 
@@ -21,35 +18,34 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: true
+      webSecurity: true,
+      allowRunningInsecureContent: false
     },
     icon: path.join(__dirname, '../public/icon.png'),
     title: 'Entrega Fácil Admin'
   });
 
-  const startURL = isDev
-    ? 'http://localhost:5175'
-    : `file://${path.join(__dirname, '../dist/index.html')}`;
-
-  mainWindow.loadURL(startURL);
-
   if (isDev) {
+    // snyk:ignore javascript/ElectronLoadInsecureContent -- dev server local, isolado, nunca executado em produção
+    const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
+    mainWindow.loadURL(devServerUrl);
     mainWindow.webContents.openDevTools();
+  } else {
+    // ✅ Produção: loadFile — sem HTTP, sem URL construída manualmente
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
-  mainWindow.on('closed', () => mainWindow = null);
+  mainWindow.on('closed', () => { mainWindow = null; });
 }
 
 app.whenReady().then(() => {
   createWindow();
 
-  // Só verifica updates em produção
   if (!isDev) {
     autoUpdater.checkForUpdates();
   }
 });
 
-// Evento: update disponível para download
 autoUpdater.on('checking-for-update', () => {
   log.info('Verificando atualizações...');
 });
@@ -69,12 +65,11 @@ autoUpdater.on('download-progress', (progress) => {
   }
 });
 
-// Evento: update baixado — pergunta ao usuário se quer reiniciar
 autoUpdater.on('update-downloaded', (info) => {
   log.info(`Versão ${info.version} baixada. Aguardando confirmação do usuário.`);
 
   if (mainWindow) {
-    mainWindow.setProgressBar(-1); // Remove barra de progresso
+    mainWindow.setProgressBar(-1);
   }
 
   dialog.showMessageBox({
@@ -93,7 +88,6 @@ autoUpdater.on('update-downloaded', (info) => {
   });
 });
 
-// Evento: erro no updater
 autoUpdater.on('error', (err) => {
   log.error(`Erro no auto-updater: ${err.message}`);
 });

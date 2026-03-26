@@ -62,10 +62,12 @@ export const useCestaBaseDetalhes = (id: string, options?: { enabled?: boolean }
 
 export const useDistribuirCestaBase = () => {
   const queryClient = useQueryClient();
+  const { adminId, user } = useAuth();
+  const id = adminId || user?.id;
 
   return useMutation({
     mutationFn: ({ cestaBaseId, vendedorId }: { cestaBaseId: string; vendedorId: string }) =>
-      CestaBaseService.distribuirParaVendedor(cestaBaseId, vendedorId),
+      CestaBaseService.distribuirParaVendedor(cestaBaseId, vendedorId, id!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CESTAS_BASE] });
       queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CESTAS] });

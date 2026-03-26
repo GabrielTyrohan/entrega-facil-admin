@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { CACHE_KEYS, CACHE_TIMES, useSupabaseQuery } from '../lib/supabaseCache';
 
+
 export interface Entrega {
   id: string;
   cliente_id: string;
@@ -18,10 +19,8 @@ export interface Entrega {
   dataRetorno?: string;
   created_at: string;
   updated_at: string;
-  // Propriedades adicionais do banco de dados
   cliente_nome?: string;
   cliente_endereco?: string;
-  // Relacionamentos
   cliente?: {
     id: string;
     nome: string;
@@ -49,6 +48,7 @@ export interface Entrega {
   };
 }
 
+
 export interface EntregaItem {
   id: string;
   entrega_id: string;
@@ -61,6 +61,7 @@ export interface EntregaItem {
   };
 }
 
+
 export interface UseEntregasReturn {
   data: any[];
   isLoading: boolean;
@@ -72,7 +73,7 @@ export interface UseEntregasReturn {
   refetch: () => void;
 }
 
-// Hook para listar todas as entregas com paginação
+
 export const useEntregas = (options?: {
   enabled?: boolean;
   status?: string;
@@ -94,7 +95,6 @@ export const useEntregas = (options?: {
   const queryFn = async () => {
     let vendedorIds: string[] = [];
 
-    // 1. Se tiver admin_id, buscar IDs dos vendedores primeiro
     if (targetAdminId) {
       const { data: vendedores, error: vErr } = await supabase
         .from('vendedores')
@@ -104,16 +104,11 @@ export const useEntregas = (options?: {
       if (vErr) throw vErr;
       vendedorIds = vendedores?.map(v => v.id) || [];
       
-      // Se admin não tem vendedores, não tem entregas
       if (vendedorIds.length === 0) {
         return { data: [], count: 0 };
       }
     }
 
-    // 2. Construir query de entregas
-    // Removido !inner para evitar erro 400
-    // Removido produto:produtos para evitar erro 400 (relação direta inexistente)
-    // Buscando produto através dos itens (tabela correta: itens_entrega)
     let query = supabase
       .from('entregas')
       .select(`
@@ -124,7 +119,6 @@ export const useEntregas = (options?: {
       .order('data_entrega', { ascending: false })
       .range(from, to);
 
-    // Filtros
     if (targetAdminId) {
       query = query.in('vendedor_id', vendedorIds);
     }
@@ -148,29 +142,26 @@ export const useEntregas = (options?: {
     if (options?.search) {
       const search = options.search;
       if (/^[0-9a-f]{8}-/i.test(search)) {
-         query = query.eq('id', search);
+        query = query.eq('id', search);
       } else {
-         query = query.or(`status_entrega.ilike.%${search}%,status_pagamento.ilike.%${search}%`);
+        query = query.or(`status_entrega.ilike.%${search}%,status_pagamento.ilike.%${search}%`);
       }
     }
 
     const { data, error, count } = await query;
     if (error) throw error;
     
-    // Mapear os dados (sem necessidade de mapear produto pois removemos o join)
-    const formattedData = data || [];
-    
-    return { data: formattedData, count };
+    return { data: data || [], count };
   };
 
   const queryResult = useQuery({
     queryKey: [
-      CACHE_KEYS.ENTREGAS, 
-      targetAdminId, 
-      { 
-        status: options?.status, 
-        vendedor_id: options?.vendedor_id, 
-        data_inicio: options?.data_inicio, 
+      CACHE_KEYS.ENTREGAS,
+      targetAdminId,
+      {
+        status: options?.status,
+        vendedor_id: options?.vendedor_id,
+        data_inicio: options?.data_inicio,
         data_fim: options?.data_fim,
         search: options?.search,
         page,
@@ -196,7 +187,7 @@ export const useEntregas = (options?: {
   };
 };
 
-// Hook para buscar entrega por ID com itens
+
 export const useEntrega = (id: string, options?: { enabled?: boolean }) => {
   const queryFn = async () => {
     const { data, error } = await supabase
@@ -227,10 +218,10 @@ export const useEntrega = (id: string, options?: { enabled?: boolean }) => {
   });
 };
 
-// Hook para entregas por vendedor
+
 export const useEntregasPorVendedor = (
   vendedor_id: string,
-  options?: { 
+  options?: {
     enabled?: boolean;
     status?: string;
     limit?: number;
@@ -267,7 +258,7 @@ export const useEntregasPorVendedor = (
   });
 };
 
-// Hook para entregas por cliente
+
 export const useEntregasPorCliente = (
   cliente_id: string,
   options?: { enabled?: boolean; limit?: number }
@@ -299,7 +290,7 @@ export const useEntregasPorCliente = (
   });
 };
 
-// Hook para criar entrega
+
 export const useCreateEntrega = () => {
   const queryClient = useQueryClient();
   
@@ -328,7 +319,7 @@ export const useCreateEntrega = () => {
   });
 };
 
-// Hook para atualizar entrega
+
 export const useUpdateEntrega = () => {
   const queryClient = useQueryClient();
   
@@ -356,7 +347,7 @@ export const useUpdateEntrega = () => {
   });
 };
 
-// Hook para deletar entrega
+
 export const useDeleteEntrega = () => {
   const queryClient = useQueryClient();
   
@@ -379,7 +370,7 @@ export const useDeleteEntrega = () => {
   });
 };
 
-// Hook para estatísticas de entregas
+
 export const useEstatisticasEntregas = (
   vendedor_id?: string,
   options?: { enabled?: boolean }
@@ -398,9 +389,10 @@ export const useEstatisticasEntregas = (
   });
 };
 
+
 import { PAGINATION } from '@/lib/constants/pagination';
 
-// Hook para entregas com paginação
+
 export const useEntregasPaginadas = (
   page: number = 1,
   limit: number = PAGINATION.BACKEND_PAGE_SIZE,
@@ -417,7 +409,6 @@ export const useEntregasPaginadas = (
   const queryFn = async () => {
     let vendedorIds: string[] = [];
 
-    // 1. Se tiver admin_id, buscar IDs dos vendedores primeiro
     if (options?.administrador_id) {
       const { data: vendedores, error: vErr } = await supabase
         .from('vendedores')
@@ -427,13 +418,11 @@ export const useEntregasPaginadas = (
       if (vErr) throw vErr;
       vendedorIds = vendedores?.map(v => v.id) || [];
       
-      // Se admin não tem vendedores, não tem entregas
       if (vendedorIds.length === 0) {
         return { data: [], count: 0 };
       }
     }
 
-    // 2. Query de entregas
     let query = supabase
       .from('entregas')
       .select(`
@@ -455,7 +444,6 @@ export const useEntregasPaginadas = (
       .order('data_entrega', { ascending: false })
       .range(from, to);
 
-    // Filtros
     if (options?.administrador_id) {
       query = query.in('vendedor_id', vendedorIds);
     }
@@ -475,7 +463,6 @@ export const useEntregasPaginadas = (
     const { data, error, count } = await query;
     if (error) throw error;
     
-    // Mapear os dados para incluir o produto principal (primeiro item)
     const formattedData = data?.map(item => ({
       ...item,
       produto: item.itens?.[0]?.produto || null
@@ -494,10 +481,10 @@ export const useEntregasPaginadas = (
     ...result,
     data: result.data?.data ?? [],
     count: result.data?.count ?? 0,
-  } as any; // Casting as any to match previous return type mostly
+  } as any;
 };
 
-// Função utilitária para invalidar cache de entregas
+
 export const useInvalidateEntregas = () => {
   const queryClient = useQueryClient();
   
@@ -508,14 +495,14 @@ export const useInvalidateEntregas = () => {
   };
 };
 
-// Função utilitária para pré-carregar entrega
+
 export const usePrefetchEntrega = () => {
   const queryClient = useQueryClient();
   
   return (id: string) => {
     queryClient.prefetchQuery({
       queryKey: [CACHE_KEYS.ENTREGAS, id],
-      queryFn: () => 
+      queryFn: () =>
         supabase
           .from('entregas')
           .select(`
@@ -532,7 +519,45 @@ export const usePrefetchEntrega = () => {
           .eq('id', id)
           .single()
           .then(({ data }) => data),
-      staleTime: 2 * 60 * 1000, // 2 minutos
+      staleTime: 2 * 60 * 1000,
     });
   };
+};
+
+
+// Hook para buscar entregas de um vendedor em uma data específica (Acerto Diário)
+export const useEntregasByVendedorData = (
+  vendedor_id: string,
+  data: string,
+  options?: { enabled?: boolean }
+) => {
+  const queryFn = async () => {
+    // Monta o intervalo do dia completo em UTC-3 (Brasília)
+    const dataInicio = `${data}T00:00:00-03:00`;
+    const dataFim = `${data}T23:59:59-03:00`;
+
+    const { data: entregas, error } = await supabase
+      .from('entregas')
+      .select(`
+        id,
+        valor,
+        status_pagamento,
+        data_entrega,
+        cliente:clientes(id, nome, sobrenome)
+      `)
+      .eq('vendedor_id', vendedor_id)
+      .gte('data_entrega', dataInicio)
+      .lte('data_entrega', dataFim)
+      .order('data_entrega', { ascending: true });
+
+    if (error) throw error;
+    return entregas || [];
+  };
+
+  return useQuery({
+    queryKey: [CACHE_KEYS.ENTREGAS, 'by-vendedor-data', vendedor_id, data],
+    queryFn,
+    enabled: (options?.enabled ?? true) && !!vendedor_id && !!data,
+    staleTime: CACHE_TIMES.ENTREGAS?.staleTime || 5 * 60 * 1000,
+  });
 };

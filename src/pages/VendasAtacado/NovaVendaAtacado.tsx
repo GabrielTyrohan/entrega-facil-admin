@@ -115,17 +115,7 @@ const NovaVendaAtacado = () => {
     }
   }, [dataEntrega, formaPagamento]);
 
-  // Effect: Update price when product changes
-  useEffect(() => {
-    if (selectedProdutoId && produtos.length > 0) {
-      const produto = produtos.find(p => p.id === selectedProdutoId);
-      if (produto) {
-        setPrecoUnit(applyCurrencyMask((produto.preco * 100).toFixed(0)));
-      }
-    } else {
-      setPrecoUnit('');
-    }
-  }, [selectedProdutoId, produtos]);
+  // ✅ precoUnit is set directly in the onChange handler — no useEffect sync needed
 
   // Handlers
   const handleAddItem = () => {
@@ -426,7 +416,17 @@ const NovaVendaAtacado = () => {
                 <select
                   className="block w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   value={selectedProdutoId}
-                  onChange={(e) => setSelectedProdutoId(e.target.value)}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setSelectedProdutoId(id);
+                    // Set price directly — avoids a useEffect sync render cycle
+                    if (id) {
+                      const produto = produtos.find(p => p.id === id);
+                      setPrecoUnit(produto ? applyCurrencyMask((produto.preco * 100).toFixed(0)) : '');
+                    } else {
+                      setPrecoUnit('');
+                    }
+                  }}
                 >
                   <option value="">Selecione uma cesta</option>
                   {produtos.map((produto) => (

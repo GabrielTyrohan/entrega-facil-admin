@@ -20,6 +20,7 @@ export interface Permissoes {
   vendedores: boolean;
   configuracoes: boolean;
   configuracoes_fiscais: boolean;
+  expedicao?: boolean;
 }
 
 export interface AdminProfile {

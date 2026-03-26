@@ -494,32 +494,26 @@ const Devedores: React.FC = () => {
     return Math.min(Math.max(baseItemsPerPage, 5), 25);
   };
 
-  // Atualizar itens por página quando a tela redimensionar
+  // ✅ Resize effect without currentPage in deps — page clamping moved to render
   useEffect(() => {
     const handleResize = () => {
-      const newItemsPerPage = calculateItemsPerPage();
-      setItemsPerPage(newItemsPerPage);
-      
-      // Ajustar página atual se necessário
-      const maxPage = Math.ceil(devedoresFiltrados.length / newItemsPerPage);
-      if (currentPage > maxPage && maxPage > 0) {
-        setCurrentPage(maxPage);
-      }
+      setItemsPerPage(calculateItemsPerPage());
     };
 
     handleResize(); // Calcular inicial
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [devedoresFiltrados.length, currentPage]);
+  }, [devedoresFiltrados.length]);
 
   // Reset página quando filtro mudar
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, selectedVendedor, sortOption]);
 
-  // Lógica de paginação
+  // Lógica de paginação — safePage clamps currentPage defensively without a setState
   const totalPages = Math.ceil(devedoresFiltrados.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
+  const safePage = Math.min(currentPage, totalPages || 1);
+  const startIndex = (safePage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentDevedores = devedoresFiltrados.slice(startIndex, endIndex);
 

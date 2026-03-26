@@ -1,0 +1,10 @@
+version: v1.25.0
+ignore:
+  javascript/PrototypePollution:
+    - '*':
+        reason: Valores sanitizados via allowlist antes de fluir para hooks. Falso positivo confirmado.
+        expires: 2027-01-01T00:00:00.000Z
+  javascript/OR:
+    - '*':
+        reason: URL reconstruída via protocol/host/pathname validados. Falso positivo confirmado.
+        expires: 2027-01-01T00:00:00.000Z

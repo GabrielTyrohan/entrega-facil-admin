@@ -1,12 +1,12 @@
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { AlertCircle, ArrowLeft, CheckCircle2, Edit, Filter, LayoutGrid, Loader2, MoreHorizontal, PackagePlus, Plus, Search, Share2, Trash2, X } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCestasBase, useDeleteCestaBase, useDistribuirCestaBase } from '../hooks/useCestasBase';
@@ -31,7 +31,7 @@ const CestasBase: React.FC = () => {
   // Assegurar tipo
   const vendedores = vendedoresRaw as any[];
 
-  const [filteredCestas, setFilteredCestas] = useState<CestaBase[]>([]);
+  // filteredCestas is now derived via useMemo — no useState needed
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('todos');
   
@@ -43,7 +43,8 @@ const CestasBase: React.FC = () => {
   } | null>(null);
   const [vendedorSelecionado, setVendedorSelecionado] = useState<string>('');
 
-  useEffect(() => {
+  // ✅ useMemo: derived state — no setState, no render loop
+  const filteredCestas = useMemo(() => {
     let filtered = cestas;
 
     if (statusFilter !== 'todos') {
@@ -58,7 +59,7 @@ const CestasBase: React.FC = () => {
       );
     }
 
-    setFilteredCestas(filtered);
+    return filtered;
   }, [cestas, searchTerm, statusFilter]);
 
   const handleEditCesta = (cesta: CestaBase) => {
@@ -144,7 +145,7 @@ const CestasBase: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Cestas Base</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Cadastrar Cestas</h1>
           <p className="text-gray-600 dark:text-gray-400">Modelos de cestas para distribuição aos vendedores</p>
         </div>
         <div className="flex items-center space-x-3">
@@ -153,14 +154,14 @@ const CestasBase: React.FC = () => {
             className="bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-white px-4 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Cestas</span>
+            <span>Emitir Cesta</span>
           </button>
           <button 
             onClick={() => navigate('/produtos/cestas-base/nova')}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
           >
             <Plus className="w-4 h-4" />
-            <span>Nova Cesta Base</span>
+            <span>Novo Modelo</span>
           </button>
         </div>
       </div>
@@ -304,7 +305,7 @@ const CestasBase: React.FC = () => {
             <div className="mx-auto w-16 h-16 bg-indigo-50 dark:bg-indigo-900/20 rounded-full flex items-center justify-center mb-4">
               <PackagePlus className="w-8 h-8 text-indigo-400" />
             </div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Nenhuma cesta base encontrada</h3>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Nenhum modelo encontrado</h3>
             <p className="text-gray-500 dark:text-gray-400 mb-6">
               {searchTerm || statusFilter !== 'todos'
                 ? 'Tente ajustar os filtros de busca.'
@@ -317,7 +318,7 @@ const CestasBase: React.FC = () => {
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors mx-auto"
               >
                 <Plus className="w-4 h-4" />
-                <span>Criar Primeira Cesta Base</span>
+                <span>Criar Primeiro Modelo</span>
               </button>
             )}
           </div>

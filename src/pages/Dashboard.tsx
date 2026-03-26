@@ -1,4 +1,5 @@
 import { Skeleton } from '@/components/ui/Skeleton';
+import { useAuth } from '@/contexts/AuthContext';
 import { useCountUp } from '@/hooks/useCountUp';
 import { useDashboard } from '@/hooks/useDashboard';
 import { EstoqueAtual } from '@/types/estoque';
@@ -354,6 +355,9 @@ const TopVendedoresCard: React.FC<{ data: TopVendedor[], isLoading: boolean }> =
 
 // ===== COMPONENTE PRINCIPAL =====
 const Dashboard: React.FC = () => {
+  const { userType, permissions } = useAuth();
+  const isExpedicao = userType !== 'admin' && permissions?.expedicao === true;
+
   const [currentDateTime, setCurrentDateTime] = useState(new Date()); 
  
    // Atualizar data/hora a cada minuto 
@@ -481,18 +485,22 @@ const Dashboard: React.FC = () => {
        </div> 
  
        {/* Stats Grid */} 
+       {!isExpedicao && (
        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6"> 
          {statsCards.map((stat, index) => ( 
            <StatCard key={index} {...stat} /> 
          ))} 
        </div> 
+       )}
  
        {/* Charts Section - Full width chart on top */} 
        <div className="space-y-6 sm:space-y-8">
+         {!isExpedicao && (
          <FaturamentoMensalChart 
            data={faturamentoMensalData} 
            isLoading={someLoading && !charts} 
          />
+         )}
 
          {/* Bottom row: Vendedores + Estoque side by side */}
          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 sm:gap-8">

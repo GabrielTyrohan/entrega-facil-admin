@@ -1,25 +1,46 @@
 import { format, isAfter, parseISO, subDays } from 'date-fns';
+import { supabase } from '../../lib/supabase';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
-    AlertCircle,
-    Check,
-    ChevronLeft,
-    ChevronRight,
-    DollarSign,
-    Download,
-    FileText,
-    Plus,
-    Trash2,
-    TrendingDown,
-    TrendingUp
+  AlertCircle,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  DollarSign,
+  Download,
+  FileText,
+  Plus,
+  Trash2,
+  TrendingDown,
+  TrendingUp
 } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useAuth } from '../../contexts/AuthContext';
 import { useDeleteLancamento, useFluxoCaixa, useFluxoCaixaStats, useUpdateLancamento } from '../../hooks/useFluxoCaixa';
 import { formatCurrency } from '../../utils/currencyUtils';
+
+interface Lancamento {
+  id: string;
+  data_lancamento: string;
+  data_vencimento?: string;
+  descricao: string;
+  categoria: string;
+  tipo: 'entrada' | 'saida';
+  valor: number;
+  forma_pagamento: string;
+  status: 'pago' | 'pendente' | 'cancelado';
+  anexo_url?: string;
+  recorrente?: boolean;
+  total_parcelas?: number;
+  parcela_atual?: number;
+  grupo_parcela_id?: string;
+}
+
+const ALLOWED_TIPOS = ['todos', 'entrada', 'saida'] as const;
+type TipoFiltro = typeof ALLOWED_TIPOS[number];
 
 const FluxoCaixa = () => {
   const { adminId, userProfile } = useAuth();
@@ -27,10 +48,15 @@ const FluxoCaixa = () => {
     startDate: subDays(new Date(), 30).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0]
   });
-  const [tipoFiltro, setTipoFiltro] = useState('todos');
+  const [tipoFiltro, setTipoFiltro] = useState<TipoFiltro>('todos');
   const [currentPage, setCurrentPage] = useState(0);
   const ITEMS_PER_PAGE = 15;
-  
+
+  const safeTipo = useMemo(
+    () => ALLOWED_TIPOS.includes(tipoFiltro) ? tipoFiltro : 'todos',
+    [tipoFiltro]
+  );
+
   const { data: stats, isLoading: statsLoading } = useFluxoCaixaStats(
     adminId || '',
     dateRange.startDate,
@@ -42,7 +68,7 @@ const FluxoCaixa = () => {
     {
       startDate: dateRange.startDate,
       endDate: dateRange.endDate,
-      tipo: tipoFiltro,
+      tipo: safeTipo, // NOSONAR (javascript/PrototypePollution) -- safeTipo validado por allowlist ALLOWED_TIPOS antes do useMemo
       page: currentPage,
       pageSize: ITEMS_PER_PAGE
     }
@@ -51,12 +77,29 @@ const FluxoCaixa = () => {
   const deleteMutation = useDeleteLancamento();
   const updateMutation = useUpdateLancamento();
 
-  const handleDelete = async (id: string) => {
-    if (window.confirm('Tem certeza que deseja excluir este lançamento?')) {
-      await deleteMutation.mutateAsync(id);
+  const handleDelete = async (item: Lancamento & { grupo_parcela_id?: string; total_parcelas?: number }) => {
+  if (item.status === 'pago') return;
+
+  // Se tem grupo e mais de 1 parcela, oferece a opção
+  if (item.grupo_parcela_id && (item.total_parcelas ?? 1) > 1) {
+    const excluirTodas = window.confirm(
+      `Este lançamento faz parte de uma recorrência de ${item.total_parcelas} parcelas.\n\nClicar em OK excluirá TODAS as parcelas pendentes.\nClicar em Cancelar excluirá só esta.`
+    );
+    if (excluirTodas) {
+      await supabase
+        .from('lancamentos_caixa')
+        .delete()
+        .eq('grupo_parcela_id', item.grupo_parcela_id)
+        .eq('status', 'pendente'); // garante que só exclui as pendentes
       refetch();
+      return;
     }
-  };
+  }
+
+  await deleteMutation.mutateAsync(item.id);
+  refetch();
+};
+
 
   const handleConfirmarPagamento = async (id: string) => {
     if (window.confirm('Confirmar pagamento deste lançamento?')) {
@@ -71,46 +114,53 @@ const FluxoCaixa = () => {
     }
   };
 
+  const handleOpenAnexo = (url: string) => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+        const safeUrl = `${String(parsed.protocol)}//${String(parsed.host)}${String(parsed.pathname)}`;
+        window.open(safeUrl, '_blank', 'noopener,noreferrer'); // NOSONAR (javascript/OR) -- URL reconstruída manualmente a partir de partes validadas, sem query string
+      }
+    } catch {
+      // URL inválida — não faz nada
+    }
+  };
+
   const handleExport = () => {
     if (!lancamentos.length) return;
 
     const doc = new jsPDF();
 
-    // Nome da Empresa
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.text(userProfile?.nome_empresa || 'Minha Empresa', 14, 15);
 
-    // Título
     doc.setFontSize(14);
     doc.setFont('helvetica', 'normal');
     doc.text('Relatório de Fluxo de Caixa', 14, 23);
 
-    // Período e Data de Emissão
     doc.setFontSize(10);
     doc.text(`Período: ${format(parseISO(dateRange.startDate), 'dd/MM/yyyy')} a ${format(parseISO(dateRange.endDate), 'dd/MM/yyyy')}`, 14, 30);
     doc.text(`Gerado em: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 35);
 
-    // Resumo Financeiro
     const startY = 45;
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('Resumo do Período', 14, startY);
-    
+
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.text(`Total Entradas: ${formatCurrency(stats?.totalEntradas || 0)}`, 14, startY + 8);
     doc.text(`Total Saídas: ${formatCurrency(stats?.totalSaidas || 0)}`, 14, startY + 14);
-    
+
     const saldo = stats?.saldo || 0;
-    doc.setTextColor(saldo >= 0 ? 0 : 200, saldo >= 0 ? 100 : 0, 0); // Verde ou Vermelho
+    doc.setTextColor(saldo >= 0 ? 0 : 200, saldo >= 0 ? 100 : 0, 0);
     doc.text(`Saldo: ${formatCurrency(saldo)}`, 14, startY + 20);
-    doc.setTextColor(0, 0, 0); // Reset cor
+    doc.setTextColor(0, 0, 0);
 
     doc.text(`Contas a Pagar: ${formatCurrency(stats?.contasAPagar || 0)}`, 100, startY + 8);
 
-    // Tabela de Lançamentos
-    const tableData = lancamentos.map(l => [
+    const tableData = (lancamentos as Lancamento[]).map(l => [
       format(parseISO(l.data_lancamento), 'dd/MM/yyyy'),
       l.categoria,
       l.tipo.toUpperCase(),
@@ -126,33 +176,23 @@ const FluxoCaixa = () => {
       styles: { fontSize: 9, cellPadding: 3 },
       headStyles: { fillColor: [41, 128, 185], textColor: 255 },
       columnStyles: {
-        0: { cellWidth: 25 }, // Data
-        1: { cellWidth: 'auto' }, // Categoria
-        2: { cellWidth: 25 }, // Tipo
-        3: { cellWidth: 35, halign: 'right' }, // Valor
-        4: { cellWidth: 35 }, // Pagamento
-        5: { cellWidth: 25 } // Status
+        0: { cellWidth: 25 },
+        1: { cellWidth: 'auto' },
+        2: { cellWidth: 25 },
+        3: { cellWidth: 35, halign: 'right' },
+        4: { cellWidth: 35 },
+        5: { cellWidth: 25 }
       },
-      didParseCell: function(data) {
-        // Colorir valores e status
+      didParseCell: function (data) {
         if (data.section === 'body') {
-          if (data.column.index === 2) { // Tipo (agora índice 2)
+          if (data.column.index === 2) {
             const tipo = data.cell.raw as string;
-            if (tipo === 'SAIDA') {
-              data.cell.styles.textColor = [220, 38, 38]; // Red
-            } else {
-              data.cell.styles.textColor = [22, 163, 74]; // Green
-            }
+            data.cell.styles.textColor = tipo === 'SAIDA' ? [220, 38, 38] : [22, 163, 74];
           }
-          if (data.column.index === 3) { // Valor (agora índice 3)
-             // Manter cor padrão ou seguir a lógica do tipo
-             const rowRaw = data.row.raw as unknown[];
-             const tipo = rowRaw[2] as string; // Acessa o valor da coluna Tipo (índice 2) com cast seguro
-             if (tipo === 'SAIDA') {
-               data.cell.styles.textColor = [220, 38, 38];
-             } else {
-               data.cell.styles.textColor = [22, 163, 74];
-             }
+          if (data.column.index === 3) {
+            const rowRaw = data.row.raw as unknown[];
+            const tipo = rowRaw[2] as string;
+            data.cell.styles.textColor = tipo === 'SAIDA' ? [220, 38, 38] : [22, 163, 74];
           }
         }
       }
@@ -161,7 +201,7 @@ const FluxoCaixa = () => {
     doc.save(`fluxo_caixa_${dateRange.startDate}_${dateRange.endDate}.pdf`);
   };
 
-  const isBoletoVencido = (lancamento: any) => {
+  const isBoletoVencido = (lancamento: Lancamento) => {
     if (lancamento.tipo !== 'saida' || lancamento.categoria !== 'Boleto' || lancamento.status === 'pago') return false;
     if (!lancamento.data_vencimento) return false;
     return isAfter(new Date(), parseISO(lancamento.data_vencimento));
@@ -176,6 +216,7 @@ const FluxoCaixa = () => {
         </div>
         <div className="flex gap-2">
           <button
+            type="button"
             onClick={handleExport}
             className="flex items-center px-4 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
@@ -264,10 +305,10 @@ const FluxoCaixa = () => {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#374151" />
                   <XAxis dataKey="date" stroke="#9CA3AF" />
                   <YAxis stroke="#9CA3AF" />
-                  <Tooltip 
+                  <Tooltip
                     contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#F3F4F6' }}
                     itemStyle={{ color: '#F3F4F6' }}
-                    formatter={(value: any) => formatCurrency(Number(value))}
+                    formatter={(value) => [formatCurrency(Number(value ?? 0)), '']}
                   />
                   <Legend />
                   <Line type="monotone" dataKey="entradas" name="Entradas" stroke="#16a34a" strokeWidth={2} />
@@ -280,7 +321,7 @@ const FluxoCaixa = () => {
 
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 space-y-4">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Filtros</h3>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Período De</label>
             <input
@@ -305,7 +346,11 @@ const FluxoCaixa = () => {
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo</label>
             <select
               value={tipoFiltro}
-              onChange={(e) => setTipoFiltro(e.target.value)}
+              onChange={(e) => setTipoFiltro(
+                ALLOWED_TIPOS.includes(e.target.value as TipoFiltro)
+                  ? (e.target.value as TipoFiltro)
+                  : 'todos'
+              )}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             >
               <option value="todos">Todos</option>
@@ -343,7 +388,7 @@ const FluxoCaixa = () => {
                   <td colSpan={6} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">Nenhum lançamento encontrado</td>
                 </tr>
               ) : (
-                lancamentos.map((item: any) => {
+                (lancamentos as Lancamento[]).map((item) => {
                   const vencido = isBoletoVencido(item);
                   return (
                     <tr key={item.id} className={`bg-white dark:bg-gray-800 border-b hover:bg-gray-50 dark:hover:bg-gray-700/50 ${vencido ? 'bg-red-50 dark:bg-red-900/10' : ''}`}>
@@ -371,8 +416,8 @@ const FluxoCaixa = () => {
                       </td>
                       <td className="px-6 py-4 text-center">
                         <span className={`px-2 py-1 rounded-full text-xs font-semibold
-                          ${item.status === 'pago' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' : 
-                            item.status === 'cancelado' ? 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300' : 
+                          ${item.status === 'pago' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+                            item.status === 'cancelado' ? 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300' :
                             'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'}`}>
                           {item.status.toUpperCase()}
                         </span>
@@ -381,6 +426,7 @@ const FluxoCaixa = () => {
                         <div className="flex justify-center gap-2">
                           {item.status === 'pendente' && (
                             <button
+                              type="button"
                               onClick={() => handleConfirmarPagamento(item.id)}
                               className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300"
                               title="Confirmar Pagamento"
@@ -389,22 +435,23 @@ const FluxoCaixa = () => {
                             </button>
                           )}
                           {item.anexo_url && (
-                            <a 
-                              href={item.anexo_url} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
+                            <button
+                              type="button"
+                              onClick={() => handleOpenAnexo(item.anexo_url!)}
                               className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
                               title="Ver Comprovante"
                             >
                               <FileText size={18} />
-                            </a>
+                            </button>
                           )}
                           <button
-                            onClick={() => handleDelete(item.id)}
+                            type="button"
+                            onClick={() => handleDelete(item)}
                             disabled={item.status === 'pago'}
-                            className={`title="Excluir" ${
-                              item.status === 'pago' 
-                                ? 'text-gray-400 cursor-not-allowed dark:text-gray-600' 
+                            title="Excluir"
+                            className={`${
+                              item.status === 'pago'
+                                ? 'text-gray-400 cursor-not-allowed dark:text-gray-600'
                                 : 'text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300'
                             }`}
                           >
@@ -419,7 +466,7 @@ const FluxoCaixa = () => {
             </tbody>
           </table>
         </div>
-        
+
         {/* Paginação */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-6 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
@@ -428,6 +475,7 @@ const FluxoCaixa = () => {
             </div>
             <div className="flex gap-2">
               <button
+                type="button"
                 onClick={() => handlePageChange(currentPage - 1)}
                 disabled={currentPage === 0}
                 className="p-1 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -444,10 +492,10 @@ const FluxoCaixa = () => {
                       pageNum = totalPages - 5 + i;
                     }
                   }
-                  
                   return (
                     <button
                       key={pageNum}
+                      type="button"
                       onClick={() => handlePageChange(pageNum)}
                       className={`w-8 h-8 flex items-center justify-center rounded-md text-sm font-medium transition-colors ${
                         currentPage === pageNum
@@ -461,6 +509,7 @@ const FluxoCaixa = () => {
                 })}
               </div>
               <button
+                type="button"
                 onClick={() => handlePageChange(currentPage + 1)}
                 disabled={currentPage === totalPages - 1}
                 className="p-1 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"

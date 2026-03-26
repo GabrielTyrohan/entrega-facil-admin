@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Funcionario, useCreateFuncionario, useUpdateFuncionario } from '../hooks/useFuncionarios';
 import { toast } from '../utils/toast';
+import { supabase } from '../lib/supabase';
 
 interface FuncionarioModalProps {
   isOpen: boolean;
@@ -20,7 +21,7 @@ const DEFAULT_PERMISSIONS = {
 };
 
 const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, funcionarioToEdit }) => {
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, adminId } = useAuth();
   const createMutation = useCreateFuncionario();
   const updateMutation = useUpdateFuncionario();
   
@@ -30,7 +31,7 @@ const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, fu
   const [cargo, setCargo] = useState('');
   const [senha, setSenha] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [permissions, setPermissions] = useState(DEFAULT_PERMISSIONS);
+  const [permissions, setPermissions] = useState<any>({ ...DEFAULT_PERMISSIONS, expedicao: false });
 
   // Função para formatar telefone
   const formatTelefone = (value: string) => {
@@ -52,14 +53,18 @@ const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, fu
             setEmail(funcionarioToEdit.email);
             setTelefone(formatTelefone(funcionarioToEdit.telefone || ''));
             setCargo(funcionarioToEdit.cargo || '');
-            setPermissions({ ...DEFAULT_PERMISSIONS, ...funcionarioToEdit.permissoes });
+            setPermissions({ 
+              ...DEFAULT_PERMISSIONS, 
+              expedicao: funcionarioToEdit.permissoes?.expedicao ?? false,
+              ...funcionarioToEdit.permissoes 
+            });
             setSenha(''); 
         } else {
             setNome('');
             setEmail('');
             setTelefone('');
             setCargo('');
-            setPermissions(DEFAULT_PERMISSIONS);
+            setPermissions({ ...DEFAULT_PERMISSIONS, expedicao: false });
             const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
             const guaranteed = [
               'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)],
@@ -87,9 +92,25 @@ const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, fu
     };
   }, [isOpen, onClose]);
 
+  const handleExpedicaoToggle = (checked: boolean) => {
+    if (checked) {
+      const allFalse = Object.keys(DEFAULT_PERMISSIONS).reduce((acc, key) => {
+        acc[key] = false;
+        return acc;
+      }, {} as Record<string, boolean>);
+      setPermissions({ ...allFalse, expedicao: true });
+    } else {
+      const allTrue = Object.keys(DEFAULT_PERMISSIONS).reduce((acc, key) => {
+        acc[key] = true;
+        return acc;
+      }, {} as Record<string, boolean>);
+      setPermissions({ ...allTrue, expedicao: false });
+    }
+  };
+
   const handlePermissionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = e.target;
-    setPermissions(prev => ({ ...prev, [name]: checked }));
+    setPermissions((prev: any) => ({ ...prev, [name]: checked }));
   };
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -118,9 +139,18 @@ const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, fu
         });
         toast.success('Funcionário atualizado com sucesso!');
       } else {
+        const adminIdToUse = adminId || user?.id;
+        
+        // Busca o nome_empresa do administrador antes de salvar
+        const { data: adminData } = await supabase
+          .from('administradores')
+          .select('nome_empresa')
+          .eq('id', adminIdToUse)
+          .single();
+
         await createMutation.mutateAsync({
-          administrador_id: user?.id,
-          nome_empresa: (userProfile as any)?.nome_empresa || null,
+          administrador_id: adminIdToUse,
+          nome_empresa: adminData?.nome_empresa || (userProfile as any)?.nome_empresa || null,
           nome,
           email,
           senha,
@@ -245,7 +275,31 @@ const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, fu
 
             <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Permissões de Acesso</h3>
-                <div className="grid grid-cols-2 gap-3">
+
+                {/* Card de Expedição */}
+                <div className="mb-4 rounded-lg border-2 border-orange-200 bg-orange-50/50 p-4 dark:border-orange-900/50 dark:bg-orange-900/10">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="text-sm font-semibold text-orange-900 dark:text-orange-400">
+                        Acesso Restrito — Expedição
+                      </h4>
+                      <p className="mt-1 text-xs text-orange-700 dark:text-orange-300">
+                        Libera apenas Cestas do Vendedor e Entrega Avulsa. Desativa todas as outras permissões.
+                      </p>
+                    </div>
+                    <label className="relative inline-flex cursor-pointer items-center">
+                      <input
+                        type="checkbox"
+                        className="peer sr-only"
+                        checked={permissions.expedicao || false}
+                        onChange={(e) => handleExpedicaoToggle(e.target.checked)}
+                      />
+                      <div className="peer h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-orange-500 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-orange-300 dark:bg-gray-700 dark:border-gray-600 dark:peer-focus:ring-orange-800"></div>
+                    </label>
+                  </div>
+                </div>
+
+                <div className={`grid grid-cols-2 gap-3 transition-opacity duration-200 ${permissions.expedicao ? 'opacity-40 pointer-events-none' : ''}`}>
                     {Object.keys(DEFAULT_PERMISSIONS).map((key) => (
                         <label key={key} className="flex items-center space-x-2 cursor-pointer">
                             <input

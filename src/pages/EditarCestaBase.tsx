@@ -30,14 +30,10 @@ const EditarCestaBase: React.FC = () => {
   const [nomeCesta, setNomeCesta] = useState<string>('');
   const [descricao, setDescricao] = useState<string>('');
   const [precoFinalStr, setPrecoFinalStr] = useState<string>('');
-  
-  const [produtosFiltrados, setProdutosFiltrados] = useState<Produto[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-  
   const [itensCesta, setItensCesta] = useState<ItemCesta[]>([]);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
-
   const [paginaAtual, setPaginaAtual] = useState(1);
   const PRODUTOS_POR_PAGINA = 9;
 
@@ -58,7 +54,7 @@ const EditarCestaBase: React.FC = () => {
             preco_unt: item.produto?.preco_unt || 0,
             categoria: '',
             produto_cod: '',
-            qtd_estoque: 9999, // Não aplicável estritamente na cesta base
+            qtd_estoque: 9999,
           } as Produto
         }));
         setItensCesta(itensMapeados);
@@ -66,12 +62,18 @@ const EditarCestaBase: React.FC = () => {
     }
   }, [cestaOriginal]);
 
+  // Debounce da busca
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm);
     }, 500);
     return () => clearTimeout(handler);
   }, [searchTerm]);
+
+  // ✅ Reseta página apenas quando debounced muda — sem loop
+  useEffect(() => {
+    setPaginaAtual(1);
+  }, [debouncedSearchTerm]);
 
   const { data: produtos = [], isLoading: loadingProdutos } = useProdutos({
     enabled: !!targetId,
@@ -80,22 +82,17 @@ const EditarCestaBase: React.FC = () => {
 
   const isBuscando = loadingProdutos || searchTerm !== debouncedSearchTerm;
 
-  useEffect(() => {
-    let filtered: Produto[] = produtos;
-
-    if (searchTerm.trim()) {
-      const termos = normalizar(searchTerm.trim()).split(/\s+/);
-      filtered = filtered.filter((p: Produto) => {
-        const campos =
-          normalizar(p.produto_nome) + ' ' +
-          normalizar(p.produto_cod || '') + ' ' +
-          normalizar(p.categoria || '');
-        return termos.every(termo => campos.includes(termo));
-      });
-    }
-
-    setProdutosFiltrados(filtered);
-    setPaginaAtual(1);
+  // ✅ useMemo em vez de useEffect — sem side effects, sem re-renders extras
+  const produtosFiltrados = useMemo(() => {
+    if (!searchTerm.trim()) return produtos;
+    const termos = normalizar(searchTerm.trim()).split(/\s+/);
+    return produtos.filter((p: Produto) => {
+      const campos =
+        normalizar(p.produto_nome) + ' ' +
+        normalizar(p.produto_cod || '') + ' ' +
+        normalizar(p.categoria || '');
+      return termos.every(termo => campos.includes(termo));
+    });
   }, [produtos, searchTerm]);
 
   const precoSugerido = useMemo(() => {
@@ -147,7 +144,7 @@ const EditarCestaBase: React.FC = () => {
       const cleanString = precoFinalStr.replace(/[R$\s.]/g, '').replace(',', '.');
       precoFinalNumber = parseFloat(cleanString);
     }
-    
+
     if (!precoFinalNumber || precoFinalNumber <= 0) {
       precoFinalNumber = precoSugerido;
     }
@@ -203,7 +200,7 @@ const EditarCestaBase: React.FC = () => {
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Editar Cesta Base</h1>
           <p className="text-gray-600 dark:text-gray-400">Edite o modelo de cesta</p>
         </div>
-        <button 
+        <button
           onClick={() => navigate('/produtos/cestas-base')}
           className="bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
         >
@@ -226,7 +223,7 @@ const EditarCestaBase: React.FC = () => {
             <ShoppingBasket className="w-5 h-5 mr-2 text-indigo-600 dark:text-indigo-400" />
             Dados da Cesta
           </h2>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="md:col-span-1">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -278,7 +275,7 @@ const EditarCestaBase: React.FC = () => {
           </div>
         </div>
 
-        {/* Cesta Atual (Itens Selecionados) */}
+        {/* Cesta Atual */}
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
@@ -286,9 +283,9 @@ const EditarCestaBase: React.FC = () => {
               Itens da Cesta ({itensCesta.length} incluídos)
             </h2>
             {itensCesta.length > 0 && (
-              <button 
-                type="button" 
-                onClick={() => setItensCesta([])} 
+              <button
+                type="button"
+                onClick={() => setItensCesta([])}
                 className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-sm font-medium"
               >
                 Limpar Cesta
@@ -349,7 +346,7 @@ const EditarCestaBase: React.FC = () => {
           )}
         </div>
 
-        {/* Seleção de Produtos no Catálogo */}
+        {/* Catálogo de Produtos */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
           <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Catálogo de Produtos</h2>
@@ -370,7 +367,7 @@ const EditarCestaBase: React.FC = () => {
               const totalPaginas = Math.ceil(produtosFiltrados.length / PRODUTOS_POR_PAGINA);
               const inicio = (paginaAtual - 1) * PRODUTOS_POR_PAGINA;
               const produtosPagina = produtosFiltrados.slice(inicio, inicio + PRODUTOS_POR_PAGINA);
-              
+
               return (
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -476,16 +473,16 @@ const EditarCestaBase: React.FC = () => {
 
         {/* Botões de Ação */}
         <div className="flex items-center justify-end space-x-4 pt-4">
-          <button 
-            type="button" 
-            onClick={() => navigate('/produtos/cestas-base')} 
+          <button
+            type="button"
+            onClick={() => navigate('/produtos/cestas-base')}
             className="px-6 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
           >
             Cancelar
           </button>
-          <button 
-            type="submit" 
-            disabled={updateCestaBaseMutation.isPending || itensCesta.length === 0} 
+          <button
+            type="submit"
+            disabled={updateCestaBaseMutation.isPending || itensCesta.length === 0}
             className="px-8 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 dark:disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors disabled:cursor-not-allowed flex items-center shadow-sm"
           >
             {updateCestaBaseMutation.isPending ? 'Salvando...' : 'Atualizar Cesta Base'}

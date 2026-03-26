@@ -149,11 +149,12 @@ export class CestaBaseService {
     }
   }
 
-  static async distribuirParaVendedor(cestaBaseId: string, vendedorId: string): Promise<string> {
+  static async distribuirParaVendedor(cestaBaseId: string, vendedorId: string, adminId: string): Promise<string> {
     try {
       const { data, error } = await supabase.rpc('distribuir_cesta_para_vendedor', {
         p_cesta_base_id: cestaBaseId,
-        p_vendedor_id: vendedorId
+        p_vendedor_id: vendedorId,
+        p_administrador_id: adminId
       });
 
       if (error) throw error;

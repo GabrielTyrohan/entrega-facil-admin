@@ -11,7 +11,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { CestaData, useCestaDetalhes, useCestas, useEntregarCestas } from '../hooks/useCestas';
-import { supabase } from '../lib/supabase'; // ← NOVO
+import { supabase } from '../lib/supabase';
 import { CestaService } from '../services/cestaService';
 
 type Cesta = CestaData;
@@ -109,7 +109,6 @@ const CestasVendedor: React.FC = () => {
         observacao: obsEntrega || undefined,
       });
 
-      // Atualizar o estoque do vendedor somando a quantidade entregue
       const novoEstoque = modalEntrega.quantidadeAtual + qtdEntrega;
       await supabase
         .from('estoque_vendedor')
@@ -133,8 +132,6 @@ const CestasVendedor: React.FC = () => {
       toast.error(err.message || 'Erro ao registrar entrega.');
     }
   };
-
-
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -230,8 +227,9 @@ const CestasVendedor: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Cestas do Vendedor</h1>
-          <p className="text-gray-600 dark:text-gray-400">Gerencie as cestas de produtos dos vendedores</p>
+          {/* ✅ ALTERADO */}
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Cestas dos Vendedores</h1>
+          <p className="text-gray-600 dark:text-gray-400">Cestas distribuídas aos vendedores</p>
         </div>
         <div className="flex items-center space-x-3">
           <button
@@ -239,14 +237,16 @@ const CestasVendedor: React.FC = () => {
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 gap-2 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
           >
             <PackagePlus className="w-4 h-4" />
-            Cestas Base
+            {/* ✅ ALTERADO */}
+            Modelos de Cesta
           </button>
           <button 
             onClick={() => navigate('/produtos/cestas/nova')}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
           >
             <Plus className="w-4 h-4" />
-            <span>Nova Cesta</span>
+            {/* ✅ ALTERADO */}
+            <span>Emitir Cesta</span>
           </button>
         </div>
       </div>
@@ -312,7 +312,6 @@ const CestasVendedor: React.FC = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Itens</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Valor Total</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Entregas</th>
-                  {/* ← NOVO cabeçalho */}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Estoque Mobile</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ações</th>
@@ -435,7 +434,7 @@ const CestasVendedor: React.FC = () => {
             <p className="text-gray-500 dark:text-gray-400 mb-6">
               {searchTerm || statusFilter !== 'todos'
                 ? 'Tente ajustar os filtros de busca.'
-                : 'Comece criando a primeira cesta para um vendedor.'
+                : 'Comece emitindo a primeira cesta para um vendedor.'  /* ✅ ALTERADO */
               }
             </p>
             {!searchTerm && statusFilter === 'todos' && (
@@ -444,14 +443,15 @@ const CestasVendedor: React.FC = () => {
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors mx-auto"
               >
                 <Plus className="w-4 h-4" />
-                <span>Criar Primeira Cesta</span>
+                {/* ✅ ALTERADO */}
+                <span>Emitir Primeira Cesta</span>
               </button>
             )}
           </div>
         </div>
       )}
 
-      {/* Alertas */}
+      {/* Alerta */}
       <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
         <div className="flex">
           <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mt-0.5 mr-3" />
@@ -736,7 +736,6 @@ const CestasVendedor: React.FC = () => {
           </div>
         </div>
       )}
-
 
     </div>
   );

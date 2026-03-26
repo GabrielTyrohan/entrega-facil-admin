@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, ArrowLeft, Eye, Package, ShoppingBasket, User } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Eye, Package, PackagePlus, ShoppingBasket, User } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -8,25 +8,28 @@ import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../utils/currencyUtils';
 import { toast } from '../utils/toast';
 
-
 // ─────────────────────────────────────────────────────────────
 // Tipos
 // ─────────────────────────────────────────────────────────────
-
-interface ProdutoCadastrado {
-  produto_nome: string;
-  preco_unt: number;
-  qtd_estoque: number;
-  unidade_medida?: string;
-  categoria?: string;
-}
 
 interface ItemCestaBase {
   id: string;
   cesta_base_id: string;
   produto_cadastrado_id: string;
   quantidade: number;
-  produtos_cadastrado: ProdutoCadastrado | ProdutoCadastrado[];
+  produtos_cadastrado?: {
+    produto_nome: string;
+    preco_unt: number;
+    qtd_estoque: number;
+    unidade_medida?: string;
+    categoria?: string;
+  } | {
+    produto_nome: string;
+    preco_unt: number;
+    qtd_estoque: number;
+    unidade_medida?: string;
+    categoria?: string;
+  }[];
 }
 
 interface CestaBase {
@@ -53,7 +56,6 @@ interface Vendedor {
   updated_at: string;
 }
 
-
 // ─────────────────────────────────────────────────────────────
 // Componente
 // ─────────────────────────────────────────────────────────────
@@ -70,46 +72,37 @@ const NovaCesta: React.FC = () => {
 
   // ── Cestas Base ──
   const { data: cestasBase = [], isLoading: loadingCestas } = useQuery<CestaBase[]>({
-  queryKey: ['cestas_base', targetId],
-  queryFn: async () => {
-    const { data, error } = await supabase
-      .from('cestas_base')
-      .select(`
-        id,
-        administrador_id,
-        nome,
-        descricao,
-        preco,
-        ativo,
-        cestas_base_itens!cesta_base_id(
+    queryKey: ['cestas_base', targetId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('cestas_base')
+        .select(`
           id,
-          cesta_base_id,
-          produto_cadastrado_id,
-          quantidade,
-          produtos_cadastrado!produto_cadastrado_id(
-            produto_nome,
-            preco_unt,
-            qtd_estoque,
-            unidade_medida,
-            categoria
+          administrador_id,
+          nome,
+          descricao,
+          preco,
+          ativo,
+          cestas_base_itens(
+            id,
+            cesta_base_id,
+            produto_cadastrado_id,
+            quantidade,
+            produtos_cadastrado!inner(produto_nome, preco_unt, qtd_estoque, unidade_medida, categoria)
           )
-        )
-      `)
-      .eq('administrador_id', targetId!)
-      .eq('ativo', true)
-      .order('nome');
-
-    if (error) {
-      console.error('Erro query cestas_base:', JSON.stringify(error));
-      throw error;
-    }
-    return (data || []) as CestaBase[];
-  },
-  enabled: !!targetId
-});
-
-
-
+        `)
+        .eq('administrador_id', targetId!)
+        .eq('ativo', true)
+        .order('nome');
+      
+      if (error) {
+        console.error('Erro query cestas_base:', JSON.stringify(error));
+        throw error;
+      }
+      return (data || []) as CestaBase[];
+    },
+    enabled: !!targetId
+  });
 
   // ── Estados do formulário ──
   const [cestaSelecionadaId, setCestaSelecionadaId] = useState<string>('');
@@ -130,18 +123,18 @@ const NovaCesta: React.FC = () => {
     let gargalo: string | null = null;
 
     for (const item of cestaSelecionada.cestas_base_itens) {
-  const prod = Array.isArray(item.produtos_cadastrado)
-    ? item.produtos_cadastrado[0]
-    : item.produtos_cadastrado;
+      const prod = Array.isArray(item.produtos_cadastrado)
+        ? item.produtos_cadastrado[0]
+        : item.produtos_cadastrado;
 
-  const possivel = Math.floor(
-    (prod?.qtd_estoque ?? 0) / item.quantidade
-  );
-  if (possivel < max) {
-    max = possivel;
-    gargalo = prod?.produto_nome ?? null;
-  }
-}
+      const possivel = Math.floor(
+        (prod?.qtd_estoque ?? 0) / item.quantidade
+      );
+      if (possivel < max) {
+        max = possivel;
+        gargalo = prod?.produto_nome ?? null;
+      }
+    }
 
     return {
       maxCestasDisponivel: max === Infinity ? 0 : max,
@@ -162,14 +155,13 @@ const NovaCesta: React.FC = () => {
     setErrors({});
   }, [cestaSelecionadaId]);
 
-
   // ── Submit ──
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: { [key: string]: string } = {};
 
     if (!cestaSelecionadaId)
-      newErrors.cesta = 'Selecione uma Cesta Base';
+      newErrors.cesta = 'Selecione um modelo de cesta';
     if (!vendedorSelecionado)
       newErrors.vendedor = 'Selecione um vendedor';
     if (cestaSelecionadaId && maxCestasDisponivel === 0)
@@ -185,21 +177,18 @@ const NovaCesta: React.FC = () => {
     setIsLoading(true);
 
     try {
-  const { error } = await supabase.rpc('distribuir_cesta_para_vendedor', {
-    p_cesta_base_id: cestaSelecionadaId,
-    p_vendedor_id: vendedorSelecionado,
-    p_quantidade: quantidadeParaVendedor,
-    p_administrador_id: targetId
-  });
-
-
-
+      const { error } = await supabase.rpc('distribuir_cesta_para_vendedor', {
+        p_cesta_base_id: cestaSelecionadaId,
+        p_vendedor_id: vendedorSelecionado,
+        p_quantidade: quantidadeParaVendedor,
+        p_administrador_id: targetId
+      });
 
       if (error) throw error;
 
       const vendedor = vendedores.find(v => v.id === vendedorSelecionado);
       toast.success(
-        `Cesta "${cestaSelecionada!.nome}" distribuída para ${vendedor?.nome ?? 'vendedor'}! ${quantidadeParaVendedor} unidade(s) registrada(s).`
+        `Modelo "${cestaSelecionada!.nome}" emitido para ${vendedor?.nome ?? 'vendedor'}! ${quantidadeParaVendedor} unidade(s) registrada(s).`
       );
 
       navigate('/produtos/cestas');
@@ -214,7 +203,6 @@ const NovaCesta: React.FC = () => {
     }
   };
 
-
   // ─────────────────────────────────────────────────────────────
   // Render
   // ─────────────────────────────────────────────────────────────
@@ -225,8 +213,8 @@ const NovaCesta: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Nova Cesta</h1>
-          <p className="text-gray-600 dark:text-gray-400">Distribua uma cesta base para um vendedor</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Emitir Cesta</h1>
+          <p className="text-gray-600 dark:text-gray-400">Distribua um modelo de cesta para um vendedor</p>
         </div>
         <button
           onClick={() => navigate('/produtos/cestas')}
@@ -237,10 +225,38 @@ const NovaCesta: React.FC = () => {
         </button>
       </div>
 
+      {/* Erro de submit */}
       {errors.submit && (
         <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-lg flex items-start">
           <AlertCircle className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" />
           <span>{errors.submit}</span>
+        </div>
+      )}
+
+      {/* ── Aviso: nenhum modelo cadastrado ── */}
+      {!loadingCestas && cestasBase.length === 0 && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6">
+          <div className="flex items-start gap-4">
+            <div className="p-2 bg-yellow-100 dark:bg-yellow-900/40 rounded-lg shrink-0">
+              <AlertCircle className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-base font-semibold text-yellow-800 dark:text-yellow-200 mb-1">
+                Nenhum modelo de cesta cadastrado
+              </h3>
+              <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-4">
+                Para emitir uma cesta para um vendedor, primeiro você precisa criar ao menos um modelo de cesta ativo.
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate('/produtos/cestas-base/nova')}
+                className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+              >
+                <PackagePlus className="w-4 h-4" />
+                Criar Modelo de Cesta
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -255,10 +271,10 @@ const NovaCesta: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-            {/* Select Cesta Base */}
+            {/* Select Modelo de Cesta */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Cesta Base *
+                Modelo de Cesta *
               </label>
               <select
                 value={cestaSelecionadaId}
@@ -269,10 +285,14 @@ const NovaCesta: React.FC = () => {
                 className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white ${
                   errors.cesta ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-gray-600'
                 }`}
-                disabled={loadingCestas}
+                disabled={loadingCestas || cestasBase.length === 0}
               >
                 <option value="">
-                  {loadingCestas ? 'Carregando cestas...' : 'Selecione uma Cesta Base'}
+                  {loadingCestas
+                    ? 'Carregando modelos...'
+                    : cestasBase.length === 0
+                    ? 'Nenhum modelo disponível'
+                    : 'Selecione um modelo'}
                 </option>
                 {cestasBase.map(cesta => (
                   <option key={cesta.id} value={cesta.id}>
@@ -297,7 +317,7 @@ const NovaCesta: React.FC = () => {
                 className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white ${
                   errors.vendedor ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-gray-600'
                 }`}
-                disabled={loadingVendedores}
+                disabled={loadingVendedores || cestasBase.length === 0}
               >
                 <option value="">
                   {loadingVendedores ? 'Carregando vendedores...' : 'Selecione um vendedor'}
@@ -339,7 +359,7 @@ const NovaCesta: React.FC = () => {
                   setQuantidadeParaVendedor(valor);
                   if (errors.quantidade) setErrors(prev => ({ ...prev, quantidade: '' }));
                 }}
-                disabled={!cestaSelecionadaId || maxCestasDisponivel === 0}
+                disabled={!cestaSelecionadaId || maxCestasDisponivel === 0 || cestasBase.length === 0}
                 className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed ${
                   errors.quantidade ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-gray-600'
                 }`}
@@ -386,7 +406,7 @@ const NovaCesta: React.FC = () => {
                   const prod = Array.isArray(item.produtos_cadastrado)
                     ? item.produtos_cadastrado[0]
                     : item.produtos_cadastrado || {};
-                   const preco = prod?.preco_unt || 0;
+                  const preco = prod?.preco_unt || 0;
                   const subtotal = preco * item.quantidade;
                   const estoque = prod.qtd_estoque || 0;
 
@@ -406,17 +426,12 @@ const NovaCesta: React.FC = () => {
                       </div>
 
                       <div className="flex items-center gap-4">
-                        {/* Qtd na cesta */}
                         <span className="text-sm text-gray-700 dark:text-gray-300 min-w-[48px] text-center">
                           {item.quantidade} un.
                         </span>
-
-                        {/* Subtotal */}
                         <span className="text-sm font-medium text-gray-900 dark:text-white min-w-[72px] text-right">
                           {formatCurrency(subtotal)}
                         </span>
-
-                        {/* Badge estoque */}
                         <span className={`text-xs px-2 py-1 rounded-full min-w-[58px] text-center ${
                           estoque > 10
                             ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
@@ -450,8 +465,8 @@ const NovaCesta: React.FC = () => {
             <div>
               <h3 className="text-sm font-medium text-blue-800 dark:text-blue-200">Importante</h3>
               <ul className="text-sm text-blue-700 dark:text-blue-300 mt-1 space-y-1">
-                <li>• A cesta base é copiada como template para o vendedor selecionado</li>
-                <li>• Os produtos e quantidades são definidos pelo modelo de cesta base</li>
+                <li>• O modelo é copiado como template para o vendedor selecionado</li>
+                <li>• Os produtos e quantidades são definidos pelo modelo selecionado</li>
                 <li>• A quantidade de cestas define o limite de entregas do vendedor no aplicativo mobile</li>
                 <li>• O estoque exibido é atual e pode mudar antes da confirmação</li>
               </ul>
@@ -470,11 +485,11 @@ const NovaCesta: React.FC = () => {
           </button>
           <button
             type="submit"
-            disabled={isLoading || !cestaSelecionadaId || !vendedorSelecionado || maxCestasDisponivel === 0}
+            disabled={isLoading || !cestaSelecionadaId || !vendedorSelecionado || maxCestasDisponivel === 0 || cestasBase.length === 0}
             className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 dark:disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors disabled:cursor-not-allowed flex items-center shadow-sm"
           >
             <ShoppingBasket className="w-4 h-4 mr-2" />
-            {isLoading ? 'Distribuindo...' : 'Criar Cesta →'}
+            {isLoading ? 'Emitindo...' : 'Emitir Cesta →'}
           </button>
         </div>
 

@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
-import { Navigate, Route, HashRouter as Router, Routes } from 'react-router-dom';
+import { Navigate, Route, HashRouter as Router, Routes, useLocation } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import MainLayout from './components/layout/MainLayout';
 import PaymentStatusAutoChecker from './components/PaymentStatusAutoChecker';
 import ProtectedRoute from './components/ProtectedRoute';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import CestasVendedor from './pages/CestasVendedor';
 import ChangePasswordPage from './pages/ChangePasswordPage';
@@ -19,6 +19,7 @@ import MovimentacoesEstoque from './pages/Estoque/MovimentacoesEstoque';
 import RelatorioEstoque from './pages/Estoque/RelatorioEstoque';
 import NovaEntrega from './pages/NovaEntrega';
 
+import DetalheAcerto from './pages/AcertosDiarios/DetalhesAcerto';
 import CestasBase from './pages/CestasBase';
 import EditarCesta from './pages/EditarCesta';
 import EditarCestaBase from './pages/EditarCestaBase';
@@ -33,13 +34,12 @@ import Relatorios from './pages/Relatorios';
 import Suporte from './pages/Suporte';
 import Vendedores from './pages/Vendedores';
 
-// Novos componentes e permissões
 import { Toaster } from 'sonner';
-import { RequirePermission } from './components/Permissoes/RequirePermission';
+import RequirePermission, { isRotaExpedicaoPermitida } from './components/Permissoes/RequirePermission';
 import ListaAcertos from './pages/AcertosDiarios/ListaAcertos';
 import NovoAcerto from './pages/AcertosDiarios/NovoAcerto';
 import FluxoCaixa from './pages/Caixa/FluxoCaixa';
-import LancamentoCaixa from './pages/Caixa/LancamentoCaixa';
+import NovoLancamento from './pages/Caixa/NovoLancamento';
 import ConfiguracoesFiscais from './pages/ConfiguracoesFiscais';
 import FuncionarioConfig from './pages/FuncionarioConfig';
 import Funcionarios from './pages/Funcionarios';
@@ -50,6 +50,16 @@ import TabelaAtacado from './pages/TabelaPrecos/TabelaAtacado';
 import DetalhesVendaAtacado from './pages/VendasAtacado/DetalhesVendaAtacado';
 import ListaVendas from './pages/VendasAtacado/ListaVendas';
 import NovaVendaAtacado from './pages/VendasAtacado/NovaVendaAtacado';
+
+function ExpedicaoGuard({ children }: { children: React.ReactNode }) {
+  const { userType, permissions } = useAuth();
+  const location = useLocation();
+  if (userType !== 'admin' && permissions?.expedicao) {
+    if (!isRotaExpedicaoPermitida(location.pathname))
+      return <Navigate to='/produtos/cestas' replace />;
+  }
+  return <>{children}</>;
+}
 
 function App() {
   // Migração para IndexedDB e limpeza de cache antigo do LocalStorage
@@ -93,114 +103,160 @@ function App() {
                     <MainLayout>
                       <Routes>
                         <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                        <Route path="/dashboard" element={<Dashboard />} />
-                        <Route path="/vendedores" element={<Vendedores />} />
-                        <Route path="/vendedores/novo" element={<NovoVendedor />} />
-                        <Route path="/vendedores/editar/:id" element={<EditarVendedor />} />
-                        <Route path="/produtos/novo" element={<NovoProduto />} />
+                        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+
+                        {/* Rotas SEM guard extra (apenas autenticação) */}
+                        <Route path="/funcionario-config" element={<FuncionarioConfig />} />
+                        <Route path="/change-password" element={<ChangePasswordPage />} />
+                        <Route path="/suporte" element={<Suporte />} />
                         <Route path="/produtos/cestas" element={<CestasVendedor />} />
                         <Route path="/produtos/cestas/nova" element={<NovaCesta />} />
                         <Route path="/produtos/cestas/editar/:id" element={<EditarCesta />} />
-                        <Route path="/produtos/cestas-base" element={<CestasBase />} />
-                        <Route path="/produtos/cestas-base/nova" element={<NovaCestaBase />} />
-                        <Route path="/produtos/cestas-base/editar/:id" element={<EditarCestaBase />} />
-                        <Route path="/clientes" element={<Clientes />} />
-                        <Route path="/entregas" element={<Entregas />} />
-                        <Route path="/entregas/nova" element={<NovaEntrega />} />
                         <Route path="/entregas/avulsas" element={<EntregaAvulsa />} />
-                        <Route path="/pagamentos" element={<Pagamentos />} />
-                        <Route path="/devedores" element={<Devedores />} />
-                        <Route path="/produtos" element={<Produtos />} />
+
+                        {/* Rotas com <ExpedicaoGuard> */}
+                        <Route path="/dashboard" element={<ExpedicaoGuard><Dashboard /></ExpedicaoGuard>} />
                         
-                        <Route path="/estoque/movimentacoes" element={
-                          <RequirePermission permission="caixa" redirectTo="/dashboard">
-                            <MovimentacoesEstoque />
-                          </RequirePermission>
-                        } />
-                        <Route path="/estoque/relatorio" element={
-                          <RequirePermission permission="caixa" redirectTo="/dashboard">
-                            <RelatorioEstoque />
-                          </RequirePermission>
+                        <Route path="/vendedores" element={<ExpedicaoGuard><Vendedores /></ExpedicaoGuard>} />
+                        <Route path="/vendedores/novo" element={<ExpedicaoGuard><NovoVendedor /></ExpedicaoGuard>} />
+                        <Route path="/vendedores/editar/:id" element={<ExpedicaoGuard><EditarVendedor /></ExpedicaoGuard>} />
+                        
+                        <Route path="/clientes" element={<ExpedicaoGuard><Clientes /></ExpedicaoGuard>} />
+                        <Route path="/devedores" element={<ExpedicaoGuard><Devedores /></ExpedicaoGuard>} />
+                        
+                        <Route path="/produtos" element={<ExpedicaoGuard><Produtos /></ExpedicaoGuard>} />
+                        <Route path="/produtos/novo" element={<ExpedicaoGuard><NovoProduto /></ExpedicaoGuard>} />
+                        
+                        <Route path="/produtos/cestas-base" element={<ExpedicaoGuard><CestasBase /></ExpedicaoGuard>} />
+                        <Route path="/produtos/cestas-base/nova" element={<ExpedicaoGuard><NovaCestaBase /></ExpedicaoGuard>} />
+                        <Route path="/produtos/cestas-base/editar/:id" element={<ExpedicaoGuard><EditarCestaBase /></ExpedicaoGuard>} />
+                        
+                        <Route path="/entregas" element={<ExpedicaoGuard><Entregas /></ExpedicaoGuard>} />
+                        <Route path="/entregas/nova" element={<ExpedicaoGuard><NovaEntrega /></ExpedicaoGuard>} />
+                        
+                        <Route path="/pagamentos" element={<ExpedicaoGuard><Pagamentos /></ExpedicaoGuard>} />
+                        <Route path="/configuracoes" element={<ExpedicaoGuard><Configuracoes /></ExpedicaoGuard>} />
+                        <Route path="/funcionarios" element={<ExpedicaoGuard><Funcionarios /></ExpedicaoGuard>} />
+
+                        {/* Rotas com <ExpedicaoGuard> + <RequirePermission> */}
+                        <Route path="/configuracoes-fiscais" element={
+                          <ExpedicaoGuard>
+                            <RequirePermission permission="configuracoes_fiscais">
+                              <ConfiguracoesFiscais />
+                            </RequirePermission>
+                          </ExpedicaoGuard>
                         } />
 
-                        {/* Rota de Relatórios Protegida */}
                         <Route path="/relatorios" element={
-                          <RequirePermission permission="relatorios" redirectTo="/dashboard">
-                            <Relatorios />
-                          </RequirePermission>
+                          <ExpedicaoGuard>
+                            <RequirePermission permission="relatorios">
+                              <Relatorios />
+                            </RequirePermission>
+                          </ExpedicaoGuard>
                         } />
 
-                        <Route path="/suporte" element={<Suporte />} />
-                        <Route path="/configuracoes" element={<Configuracoes />} />
-                        <Route path="/funcionario-config" element={<FuncionarioConfig />} />
-                        <Route path="/funcionarios" element={<Funcionarios />} />
-                        <Route path="/change-password" element={<ChangePasswordPage />} />
-
-                        {/* Novas Rotas Protegidas */}
                         <Route path="/orcamentos-pj" element={
-                          <RequirePermission permission="orcamentos_pj" redirectTo="/dashboard">
-                            <ListaOrcamentos />
-                          </RequirePermission>
+                          <ExpedicaoGuard>
+                            <RequirePermission permission="orcamentos_pj">
+                              <ListaOrcamentos />
+                            </RequirePermission>
+                          </ExpedicaoGuard>
                         } />
                         <Route path="/orcamentos-pj/novo" element={
-                          <RequirePermission permission="orcamentos_pj" redirectTo="/dashboard">
-                            <NovoOrcamento />
-                          </RequirePermission>
+                          <ExpedicaoGuard>
+                            <RequirePermission permission="orcamentos_pj">
+                              <NovoOrcamento />
+                            </RequirePermission>
+                          </ExpedicaoGuard>
                         } />
                         <Route path="/orcamentos-pj/:id" element={
-                          <RequirePermission permission="orcamentos_pj" redirectTo="/dashboard">
-                            <DetalhesOrcamento />
-                          </RequirePermission>
-                        } />
-                        
-                        <Route path="/vendas-atacado" element={
-                          <RequirePermission permission="vendas_atacado" redirectTo="/dashboard">
-                            <ListaVendas />
-                          </RequirePermission>
-                        } />
-                        <Route path="/vendas-atacado/nova" element={
-                          <RequirePermission permission="vendas_atacado" redirectTo="/dashboard">
-                            <NovaVendaAtacado />
-                          </RequirePermission>
-                        } />
-                        <Route path="/vendas-atacado/:id" element={
-                          <RequirePermission permission="vendas_atacado" redirectTo="/dashboard">
-                            <DetalhesVendaAtacado />
-                          </RequirePermission>
-                        } />
-                        
-                        <Route path="/acertos-diarios" element={
-                          <RequirePermission permission="acertos" redirectTo="/dashboard">
-                            <ListaAcertos />
-                          </RequirePermission>
-                        } />
-                        <Route path="/acertos-diarios/novo" element={
-                          <RequirePermission permission="acertos" redirectTo="/dashboard">
-                            <NovoAcerto />
-                          </RequirePermission>
-                        } />
-                        
-                        <Route path="/caixa" element={
-                          <RequirePermission permission="caixa" redirectTo="/dashboard">
-                            <FluxoCaixa />
-                          </RequirePermission>
-                        } />
-                        <Route path="/caixa/lancamento" element={
-                          <RequirePermission permission="caixa" redirectTo="/dashboard">
-                            <LancamentoCaixa />
-                          </RequirePermission>
-                        } />
-                        
-                        <Route path="/tabela-precos" element={
-                          <RequirePermission permission="vendas_atacado" redirectTo="/dashboard">
-                            <TabelaAtacado />
-                          </RequirePermission>
+                          <ExpedicaoGuard>
+                            <RequirePermission permission="orcamentos_pj">
+                              <DetalhesOrcamento />
+                            </RequirePermission>
+                          </ExpedicaoGuard>
                         } />
 
-                        <Route path="/configuracoes-fiscais" element={
-                          <RequirePermission permission="configuracoes_fiscais" redirectTo="/dashboard">
-                            <ConfiguracoesFiscais />
-                          </RequirePermission>
+                        <Route path="/vendas-atacado" element={
+                          <ExpedicaoGuard>
+                            <RequirePermission permission="vendas_atacado">
+                              <ListaVendas />
+                            </RequirePermission>
+                          </ExpedicaoGuard>
+                        } />
+                        <Route path="/vendas-atacado/nova" element={
+                          <ExpedicaoGuard>
+                            <RequirePermission permission="vendas_atacado">
+                              <NovaVendaAtacado />
+                            </RequirePermission>
+                          </ExpedicaoGuard>
+                        } />
+                        <Route path="/vendas-atacado/:id" element={
+                          <ExpedicaoGuard>
+                            <RequirePermission permission="vendas_atacado">
+                              <DetalhesVendaAtacado />
+                            </RequirePermission>
+                          </ExpedicaoGuard>
+                        } />
+
+                        <Route path="/tabela-precos" element={
+                          <ExpedicaoGuard>
+                            <RequirePermission permission="vendas_atacado">
+                              <TabelaAtacado />
+                            </RequirePermission>
+                          </ExpedicaoGuard>
+                        } />
+
+                        <Route path="/acertos-diarios" element={
+                          <ExpedicaoGuard>
+                            <RequirePermission permission="acertos">
+                              <ListaAcertos />
+                            </RequirePermission>
+                          </ExpedicaoGuard>
+                        } />
+                        <Route path="/acertos-diarios/novo" element={
+                          <ExpedicaoGuard>
+                            <RequirePermission permission="acertos">
+                              <NovoAcerto />
+                            </RequirePermission>
+                          </ExpedicaoGuard>
+                        } />
+                        <Route path="/acertos-diarios/:id" element={
+                          <ExpedicaoGuard>
+                            <RequirePermission permission="acertos">
+                              <DetalheAcerto />
+                            </RequirePermission>
+                          </ExpedicaoGuard>
+                        } />
+
+                        <Route path="/caixa" element={
+                          <ExpedicaoGuard>
+                            <RequirePermission permission="caixa">
+                              <FluxoCaixa />
+                            </RequirePermission>
+                          </ExpedicaoGuard>
+                        } />
+                        <Route path="/caixa/lancamento" element={
+                          <ExpedicaoGuard>
+                            <RequirePermission permission="caixa">
+                              <NovoLancamento />
+                            </RequirePermission>
+                          </ExpedicaoGuard>
+                        } />
+
+                        <Route path="/estoque/movimentacoes" element={
+                          <ExpedicaoGuard>
+                            <RequirePermission permission="caixa">
+                              <MovimentacoesEstoque />
+                            </RequirePermission>
+                          </ExpedicaoGuard>
+                        } />
+                        <Route path="/estoque/relatorio" element={
+                          <ExpedicaoGuard>
+                            <RequirePermission permission="caixa">
+                              <RelatorioEstoque />
+                            </RequirePermission>
+                          </ExpedicaoGuard>
                         } />
 
                       </Routes>

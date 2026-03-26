@@ -3,7 +3,7 @@
 // Menu lateral com controle de permissões dinâmico
 // ============================================
 
-import { Permissoes, useAuth } from '@/contexts/AuthContext';
+import { Permissoes, useAuth, UserType } from '@/contexts/AuthContext';
 import {
   AlertCircle,
   ArrowUpDown,
@@ -16,6 +16,7 @@ import {
   FileKey,
   FileText,
   LayoutDashboard,
+  LogOut,
   MessageSquare,
   Package,
   PackagePlus,
@@ -48,9 +49,60 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
+function useVisibleMenu(userType: UserType, permissions: Permissoes, isAdmin: boolean, menuItems: MenuItem[]) {
+  return useMemo(() => {
+    // ADMIN
+    if (isAdmin) return menuItems;
+
+    // EXPEDIÇÃO
+    if (userType !== 'admin' && permissions?.expedicao) {
+      const expedicaoPaths = [
+        '/dashboard',
+        '/vendedores', '/clientes',
+        '/produtos', '/produtos/cestas-base', '/produtos/cestas', '/entregas/avulsas',
+        '/configuracoes', '/suporte'
+      ];
+      return menuItems.filter(item => expedicaoPaths.includes(item.path));
+    }
+
+    // FUNCIONÁRIO NORMAL
+    return menuItems.filter(item => {
+      if (item.adminOnly) return false;
+      if (item.funcionarioOnly && userType !== 'funcionario') return false;
+
+      switch (item.group) {
+        case 'Estoque':
+          return !!permissions?.caixa;
+          
+        case 'Financeiro': {
+          const hasFinanceiroAcc = permissions?.caixa || permissions?.acertos || permissions?.relatorios;
+          if (!hasFinanceiroAcc) return false;
+          if (item.permission && !permissions[item.permission]) return false;
+          return true;
+        }
+
+        case 'Comercial': {
+          const hasComercialAcc = permissions?.vendas_atacado || permissions?.orcamentos_pj || permissions?.configuracoes_fiscais;
+          if (!hasComercialAcc) return false;
+          if (item.permission && !permissions[item.permission]) return false;
+          return true;
+        }
+
+        case 'Relatórios':
+          return !!permissions?.relatorios;
+
+        default:
+          if (item.path === '/funcionarios') return !!permissions?.funcionarios;
+          if (item.permission && !permissions[item.permission]) return false;
+          return true;
+      }
+    });
+  }, [userType, permissions, isAdmin, menuItems]);
+}
+
 const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const location = useLocation();
-  const { permissions, isAdmin, userType } = useAuth();
+  const { permissions, isAdmin, userType, signOut } = useAuth();
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   // ===== ITENS DO MENU =====
@@ -58,7 +110,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const menuItems: MenuItem[] = useMemo(() => [
     // PRINCIPAL
     {
-      path: '/',
+      path: '/dashboard',
       label: 'Dashboard',
       icon: <LayoutDashboard className="w-5 h-5" />,
       group: 'Principal'
@@ -95,13 +147,13 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     },
     {
       path: '/produtos/cestas',
-      label: 'Cestas',
+      label: 'Entregar Cesta',
       icon: <ShoppingBasket className="w-5 h-5" />,
       group: 'Catálogo'
     },
     {
       path: '/produtos/cestas-base',
-      label: 'Cestas Base',
+      label: 'Cadastrar Cestas',
       icon: <PackagePlus className="w-5 h-5" />,
       group: 'Catálogo'
     },
@@ -206,13 +258,6 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     
     // SISTEMA
     {
-      path: '/funcionario-config',
-      label: 'Meu Perfil',
-      icon: <UserCog className="w-5 h-5" />,
-      funcionarioOnly: true,
-      group: 'Sistema'
-    },
-    {
       path: '/suporte',
       label: 'Suporte',
       icon: <MessageSquare className="w-5 h-5" />,
@@ -229,18 +274,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   ], []);
 
   // ===== FILTRAR ITENS BASEADO NAS PERMISSÕES =====
-  const visibleItems = useMemo(() => menuItems.filter((item) => {
-    // Se tem adminOnly e não é admin, esconder
-    if (item.adminOnly && !isAdmin) return false;
-
-    // Se é apenas para funcionários e o usuário não é funcionário
-    if (item.funcionarioOnly && userType !== 'funcionario') return false;
-
-    // Se tem permissão específica, verificar
-    if (item.permission && !permissions[item.permission]) return false;
-
-    return true;
-  }), [menuItems, isAdmin, permissions, userType]);
+  const visibleItems = useVisibleMenu(userType, permissions, isAdmin, menuItems);
 
   // Agrupar itens por categoria
   const groupedItems = useMemo(() => visibleItems.reduce((acc, item) => {
@@ -258,7 +292,8 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     'Financeiro',
     'Comercial',
     'Relatórios',
-    'Sistema'
+    'Sistema',
+    'Outros'
   ];
 
   // Expandir automaticamente o grupo do item ativo
@@ -315,18 +350,18 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
           </h2>
           
           {/* Badge de tipo de usuário */}
-          <div className="mt-3 flex items-center gap-2">
-            {userType === 'admin' ? (
-              <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30
-                           text-blue-700 dark:text-blue-400 text-xs font-medium rounded">
-                Administrador
-              </span>
-            ) : (
-              <span className="px-2 py-1 bg-emerald-100 dark:bg-emerald-900/30
-                           text-emerald-700 dark:text-emerald-400 text-xs font-medium rounded">
-                Funcionário
-              </span>
-            )}
+          <div className="mt-3 flex flex-col gap-2">
+            <div className="flex items-center">
+              {userType === 'admin' ? (
+                <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs font-medium rounded">
+                  Administrador
+                </span>
+              ) : (
+                <span className="px-2 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs font-medium rounded">
+                  Funcionário
+                </span>
+              )}
+            </div>
           </div>
         </div>
       
@@ -336,11 +371,11 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
             const items = groupedItems[group];
             if (!items?.length) return null;
 
-            const isPrincipal = group === 'Principal';
+            const isPrincipal = group === 'Principal' || group === 'Outros';
             const isGroupOpen = openGroups[group];
 
             return (
-              <div key={group} className="space-y-1">
+               <div key={group} className="space-y-1">
                 {/* Cabeçalho do Grupo (Dropdown) */}
                 {!isPrincipal && (
                   <button
@@ -386,8 +421,28 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
         </nav>
       
         {/* Footer fixo do sidebar */}
-        <div className="flex-shrink-0 p-4 border-t border-gray-200 dark:border-gray-700">
-          <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+        <div className="flex-shrink-0 p-4 border-t border-gray-200 dark:border-gray-700 space-y-2">
+          {/* Menu Fixo de Rodapé */}
+          <Link
+            to="/funcionario-config"
+            onClick={() => { if (window.innerWidth < 1024 && onClose) onClose(); }}
+            className={`flex items-center gap-3 w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors ${location.pathname === '/funcionario-config' ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium' : ''}`}
+          >
+            <UserCog className="w-5 h-5" />
+            <span>Meu Perfil</span>
+          </Link>
+          <button
+            onClick={() => {
+              signOut();
+              if (window.innerWidth < 1024 && onClose) onClose();
+            }}
+            className="flex items-center gap-3 w-full px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg transition-colors"
+          >
+            <LogOut className="w-5 h-5" />
+            <span>Sair</span>
+          </button>
+          
+          <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-4 pt-2 border-t border-gray-100 dark:border-gray-800">
             Versão {packageJson.version}
           </p>
         </div>

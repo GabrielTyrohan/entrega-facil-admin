@@ -34,3 +34,5 @@ electron/*.zip
 *.sln
 *.sw?
 .env
+
+documentacao/

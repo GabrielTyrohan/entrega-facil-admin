@@ -1,41 +1,35 @@
-// ============================================ 
-// ARQUIVO: src/pages/LoginPage.tsx 
-// PARTE 1: Imports, Estados e Lógica 
-// ============================================ 
-
 import { useAuth } from '@/contexts/AuthContext';
 import { AlertCircle, Eye, EyeOff, LogIn } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-const LoginPage = () => { 
-  // Estados 
-  const [email, setEmail] = useState(''); 
-  const [password, setPassword] = useState(''); 
+const LoginPage = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false); 
-  const [error, setError] = useState(''); 
-  const [isBlocked, setIsBlocked] = useState(false); 
-  const [blockTimeRemaining, setBlockTimeRemaining] = useState(0); 
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [blockTimeRemaining, setBlockTimeRemaining] = useState(0);
 
-  const { signIn, user, userProfile, isLoading: authLoading } = useAuth(); 
-  const navigate = useNavigate(); 
-  const location = useLocation(); 
+  const { signIn, user, userProfile, isLoading: authLoading } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  // ===== VERIFICAR BLOQUEIO AO CARREGAR ===== 
-  useEffect(() => { 
-    const blockEndTime = localStorage.getItem('loginBlockEndTime'); 
-    if (blockEndTime) { 
-      const remaining = parseInt(blockEndTime) - Date.now(); 
-      if (remaining > 0) { 
-        setIsBlocked(true); 
-        setBlockTimeRemaining(Math.ceil(remaining / 1000)); 
-      } else { 
-        localStorage.removeItem('loginBlockEndTime'); 
-        localStorage.removeItem('loginFailedAttempts'); 
-      } 
-    } 
-  }, []); 
+  // ===== VERIFICAR BLOQUEIO AO CARREGAR =====
+  useEffect(() => {
+    const blockEndTime = localStorage.getItem('loginBlockEndTime');
+    if (blockEndTime) {
+      const remaining = parseInt(blockEndTime) - Date.now();
+      if (remaining > 0) {
+        setIsBlocked(true);
+        setBlockTimeRemaining(Math.ceil(remaining / 1000));
+      } else {
+        localStorage.removeItem('loginBlockEndTime');
+        localStorage.removeItem('loginFailedAttempts');
+      }
+    }
+  }, []);
 
   // ===== VERIFICAR MENSAGENS DE ERRO REDIRECIONADAS =====
   useEffect(() => {
@@ -52,90 +46,96 @@ const LoginPage = () => {
     }
   }, []);
 
-  // ===== COUNTDOWN DO BLOQUEIO ===== 
-  useEffect(() => { 
-    if (!isBlocked || blockTimeRemaining <= 0) return; 
+  // ===== COUNTDOWN DO BLOQUEIO =====
+  useEffect(() => {
+    if (!isBlocked || blockTimeRemaining <= 0) return;
 
-    const timer = setInterval(() => { 
-      setBlockTimeRemaining((prev) => { 
-        if (prev <= 1) { 
-          setIsBlocked(false); 
-          localStorage.removeItem('loginBlockEndTime'); 
-          localStorage.removeItem('loginFailedAttempts'); 
-          return 0; 
-        } 
-        return prev - 1; 
-      }); 
-    }, 1000); 
+    const timer = setInterval(() => {
+      setBlockTimeRemaining((prev) => {
+        if (prev <= 1) {
+          setIsBlocked(false);
+          localStorage.removeItem('loginBlockEndTime');
+          localStorage.removeItem('loginFailedAttempts');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
 
-    return () => clearInterval(timer); 
-  }, [isBlocked, blockTimeRemaining]); 
+    return () => clearInterval(timer);
+  }, [isBlocked, blockTimeRemaining]);
 
-  // ===== REDIRECIONAR SE JÁ LOGADO ===== 
-  useEffect(() => { 
-    if (user && userProfile && !authLoading) { 
-      const from = (location.state as any)?.from?.pathname || '/'; 
-      navigate(from, { replace: true }); 
-    } 
-  }, [user, userProfile, authLoading, navigate, location]); 
+  // ===== REDIRECIONAR SE JÁ LOGADO =====
+  useEffect(() => {
+    if (user && userProfile && !authLoading) {
+      const rawFrom = (location.state as { from?: { pathname?: string } })?.from?.pathname;
 
-  // ===== SUBMIT ===== 
-  const handleSubmit = async (e: React.FormEvent) => { 
-    e.preventDefault(); 
-    setError(''); 
+      // ✅ FIX Open Redirect: aceita apenas caminhos internos válidos
+      const isInternalPath = (path: string) =>
+        typeof path === 'string' &&
+        path.startsWith('/') &&
+        !path.startsWith('//') &&
+        !/^\/[a-z]+:/i.test(path); // bloqueia /javascript: /http: /https: etc
 
-    if (isBlocked) { 
-      setError(`Aguarde ${blockTimeRemaining}s antes de tentar novamente`); 
-      return; 
-    } 
+      const from = rawFrom && isInternalPath(rawFrom) ? rawFrom : '/';
+      navigate(from, { replace: true });
+    }
+  }, [user, userProfile, authLoading, navigate, location]);
 
-    setIsLoading(true); 
+  // ===== SUBMIT =====
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
 
-    try { 
-      await signIn(email, password); 
-      localStorage.removeItem('loginFailedAttempts'); 
-      localStorage.removeItem('loginBlockEndTime'); 
-      // Navegação feita pelo useEffect quando user+userProfile estiverem prontos
-    } catch (err: any) {
-      // Funcionário com acesso desativado — sem navegar ao dashboard
-      if (err?.message === 'ACESSO_DESATIVADO') {
+    if (isBlocked) {
+      setError(`Aguarde ${blockTimeRemaining}s antes de tentar novamente`);
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      await signIn(email, password);
+      localStorage.removeItem('loginFailedAttempts');
+      localStorage.removeItem('loginBlockEndTime');
+    } catch (err: unknown) {
+      const error = err as { message?: string };
+
+      if (error?.message === 'ACESSO_DESATIVADO') {
         setError('Seu acesso foi desativado. Entre em contato com o administrador.');
         setIsLoading(false);
         return;
       }
 
-      // Admin com pagamento inativo
-      if (err?.message === 'PAGAMENTO_INATIVO') {
+      if (error?.message === 'PAGAMENTO_INATIVO') {
         setError('Conta bloqueada por falta de pagamento. Regularize sua assinatura.');
         setIsLoading(false);
         return;
       }
 
-      const currentAttempts = parseInt( 
-        localStorage.getItem('loginFailedAttempts') || '0' 
-      ); 
-      const newAttempts = currentAttempts + 1; 
-      localStorage.setItem('loginFailedAttempts', newAttempts.toString()); 
+      const currentAttempts = parseInt(
+        localStorage.getItem('loginFailedAttempts') || '0'
+      );
+      const newAttempts = currentAttempts + 1;
+      localStorage.setItem('loginFailedAttempts', newAttempts.toString());
 
-      if (newAttempts >= 5) { 
-        const blockDuration = Math.min(30 * Math.pow(2, newAttempts - 5), 300); 
-        const blockEndTime = Date.now() + blockDuration * 1000; 
-        localStorage.setItem('loginBlockEndTime', blockEndTime.toString()); 
-        setIsBlocked(true); 
-        setBlockTimeRemaining(blockDuration); 
-        setError(`Muitas tentativas falhas. Bloqueado por ${blockDuration}s`); 
-      } else { 
-        setError(err?.message || 'Credenciais inválidas. Verifique seu e-mail e senha.'); 
-      } 
-    } finally { 
-      setIsLoading(false); 
-    } 
-  }; 
+      if (newAttempts >= 5) {
+        const blockDuration = Math.min(30 * Math.pow(2, newAttempts - 5), 300);
+        const blockEndTime = Date.now() + blockDuration * 1000;
+        localStorage.setItem('loginBlockEndTime', blockEndTime.toString());
+        setIsBlocked(true);
+        setBlockTimeRemaining(blockDuration);
+        setError(`Muitas tentativas falhas. Bloqueado por ${blockDuration}s`);
+      } else {
+        setError(error?.message || 'Credenciais inválidas. Verifique seu e-mail e senha.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
-      
-      {/* Card de Login */}
       <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-lg w-full max-w-md border border-gray-200 dark:border-gray-700">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
@@ -147,7 +147,6 @@ const LoginPage = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Erro */}
           {error && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 flex items-start gap-2">
               <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
@@ -197,16 +196,10 @@ const LoginPage = () => {
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 focus:outline-none"
               >
-                {showPassword ? (
-                  <EyeOff className="h-5 w-5" />
-                ) : (
-                  <Eye className="h-5 w-5" />
-                )}
+                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
               </button>
             </div>
           </div>
-
-
 
           {/* Botão */}
           <button
@@ -240,7 +233,7 @@ const LoginPage = () => {
         </p>
       </div>
     </div>
-  ); 
- }; 
- 
- export default LoginPage;
+  );
+};
+
+export default LoginPage;

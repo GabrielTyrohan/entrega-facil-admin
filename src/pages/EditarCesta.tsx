@@ -1,5 +1,5 @@
 import { AlertCircle, ArrowLeft, Check, Minus, Package, Plus, Search, ShoppingBasket, User, X } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCestaDetalhes } from '../hooks/useCestas';
@@ -36,7 +36,7 @@ const EditarCesta: React.FC = () => {
   const [nomeCesta, setNomeCesta] = useState<string>('');
   const [vendedorSelecionado, setVendedorSelecionado] = useState<string>('');
   const [limiteMaximo] = useState<number>(50);
-  const [produtosFiltrados, setProdutosFiltrados] = useState<Produto[]>([]);
+  // produtosFiltrados is now derived via useMemo — no useState needed
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [filtroEstoque, setFiltroEstoque] = useState<'todos' | 'emEstoque'>('todos');
@@ -99,8 +99,8 @@ const EditarCesta: React.FC = () => {
     }
   }, [cestaDetalhes, targetId]);
 
-  // Filtrar produtos
-  useEffect(() => {
+  // ✅ useMemo: derived state — no setState, no render loop
+  const produtosFiltrados = useMemo(() => {
     let filtered: Produto[] = produtos;
 
     if (filtroEstoque === 'emEstoque') {
@@ -118,9 +118,13 @@ const EditarCesta: React.FC = () => {
       });
     }
 
-    setProdutosFiltrados(filtered);
-    setPaginaAtual(1);
+    return filtered;
   }, [produtos, searchTerm, filtroEstoque]);
+
+  // Reset page only when debouncedSearchTerm or filtroEstoque changes (no loop risk)
+  useEffect(() => {
+    setPaginaAtual(1);
+  }, [debouncedSearchTerm, filtroEstoque]);
 
 
   // Calcular totais

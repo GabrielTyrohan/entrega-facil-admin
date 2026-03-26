@@ -26,7 +26,7 @@ const NovaCestaBase: React.FC = () => {
   const [descricao, setDescricao] = useState<string>('');
   const [precoFinalStr, setPrecoFinalStr] = useState<string>('');
   
-  const [produtosFiltrados, setProdutosFiltrados] = useState<Produto[]>([]);
+  // produtosFiltrados is now derived via useMemo — no useState needed
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [filtroEstoque, setFiltroEstoque] = useState<'todos' | 'emEstoque'>('todos');
@@ -51,7 +51,8 @@ const NovaCestaBase: React.FC = () => {
 
   const isBuscando = loadingProdutos || searchTerm !== debouncedSearchTerm;
 
-  useEffect(() => {
+  // ✅ useMemo: derived state — no setState, no render loop
+  const produtosFiltrados = useMemo(() => {
     let filtered: Produto[] = produtos;
 
     if (filtroEstoque === 'emEstoque') {
@@ -69,9 +70,13 @@ const NovaCestaBase: React.FC = () => {
       });
     }
 
-    setProdutosFiltrados(filtered);
-    setPaginaAtual(1);
+    return filtered;
   }, [produtos, searchTerm, filtroEstoque]);
+
+  // Reset page only when debouncedSearchTerm or filtroEstoque changes (no loop risk)
+  useEffect(() => {
+    setPaginaAtual(1);
+  }, [debouncedSearchTerm, filtroEstoque]);
 
   const precoSugerido = useMemo(() => {
     return itensCesta.reduce((sum, item) => sum + (item.produto.preco_unt * item.quantidade), 0);
@@ -108,7 +113,7 @@ const NovaCestaBase: React.FC = () => {
     setErrors({});
 
     if (!nomeCesta.trim()) {
-      setErrors({ nome: 'Nome da cesta base é obrigatório' });
+      setErrors({ nome: 'Nome do modelo é obrigatório' });
       return;
     }
 
@@ -141,7 +146,7 @@ const NovaCestaBase: React.FC = () => {
 
       navigate('/produtos/cestas-base');
     } catch (error: any) {
-      setErrors({ submit: error?.message || 'Erro ao criar cesta base. Tente novamente.' });
+      setErrors({ submit: error?.message || 'Erro ao criar modelo. Tente novamente.' });
     }
   };
 
@@ -154,7 +159,7 @@ const NovaCestaBase: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Nova Cesta Base</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Novo Modelo de Cesta</h1>
           <p className="text-gray-600 dark:text-gray-400">Monte um modelo de cesta para uso futuro</p>
         </div>
         <button 
@@ -178,7 +183,7 @@ const NovaCestaBase: React.FC = () => {
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
             <ShoppingBasket className="w-5 h-5 mr-2 text-indigo-600 dark:text-indigo-400" />
-            Dados da Cesta
+            Dados do Modelo
           </h2>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -239,7 +244,7 @@ const NovaCestaBase: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
               <Package className="w-5 h-5 mr-2 text-indigo-600 dark:text-indigo-400" />
-              Itens da Cesta ({itensCesta.length} incluídos)
+              Itens do Modelo ({itensCesta.length} incluídos)
             </h2>
             {itensCesta.length > 0 && (
               <button 
@@ -247,7 +252,7 @@ const NovaCestaBase: React.FC = () => {
                 onClick={() => setItensCesta([])} 
                 className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-sm font-medium"
               >
-                Limpar Cesta
+                Limpar Modelo
               </button>
             )}
           </div>
@@ -540,7 +545,7 @@ const NovaCestaBase: React.FC = () => {
             disabled={createCestaBaseMutation.isPending || itensCesta.length === 0} 
             className="px-8 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 dark:disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors disabled:cursor-not-allowed flex items-center shadow-sm"
           >
-            {createCestaBaseMutation.isPending ? 'Salvando...' : 'Salvar Cesta Base'}
+            {createCestaBaseMutation.isPending ? 'Salvando...' : 'Salvar Modelo'}
           </button>
         </div>
       </form>

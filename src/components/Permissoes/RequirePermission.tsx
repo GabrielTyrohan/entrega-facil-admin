@@ -1,36 +1,46 @@
-import { toast } from '@/utils/toast';
-import React, { useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
-import { Permissoes, useAuth } from '../../contexts/AuthContext';
+import { Navigate, useLocation } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 
-interface Props {
-  permission: keyof Permissoes;
+export type PermissaoKey =
+  | 'orcamentos_pj' | 'vendas_atacado' | 'notas_fiscais'
+  | 'caixa' | 'acertos' | 'relatorios' | 'funcionarios'
+  | 'vendedores' | 'configuracoes' | 'configuracoes_fiscais'
+  | 'expedicao';
+
+export const ROTAS_EXPEDICAO = [
+  '/dashboard',
+  '/produtos/cestas', '/produtos/cestas/nova',
+  '/entregas/avulsas', '/funcionario-config',
+];
+
+export function isRotaExpedicaoPermitida(pathname: string): boolean {
+  return ROTAS_EXPEDICAO.some(
+    (rota) => pathname === rota ||
+    pathname.startsWith('/produtos/cestas/editar/')
+  );
+}
+
+interface RequirePermissionProps {
+  permission: PermissaoKey;
   children: React.ReactNode;
-  fallback?: React.ReactNode;
   redirectTo?: string;
 }
 
-export const RequirePermission: React.FC<Props> = ({ permission, children, fallback = null, redirectTo }) => {
-  const { permissions, userType, isLoading } = useAuth();
-  const hasPermission = userType === 'admin' || (permissions && permissions[permission]);
+export default function RequirePermission({
+  permission, children, redirectTo = '/dashboard',
+}: RequirePermissionProps) {
+  const { userType, permissions } = useAuth();
+  const location = useLocation();
 
-  useEffect(() => {
-    if (!isLoading && !hasPermission && redirectTo) {
-       toast.error('Você não tem permissão para acessar esta área.');
-    }
-  }, [isLoading, hasPermission, redirectTo]);
+  if (userType === 'admin') return <>{children}</>;
 
-  if (isLoading) {
-      return null;
-  }
-
-  if (hasPermission) {
+  if (permissions?.expedicao) {
+    if (!isRotaExpedicaoPermitida(location.pathname))
+      return <Navigate to='/produtos/cestas' replace />;
     return <>{children}</>;
   }
 
-  if (redirectTo) {
-      return <Navigate to={redirectTo} replace />;
-  }
-
-  return <>{fallback}</>;
-};
+  const temPermissao = permissions?.[permission as keyof typeof permissions];
+  if (!temPermissao) return <Navigate to={redirectTo} replace />;
+  return <>{children}</>;
+}
