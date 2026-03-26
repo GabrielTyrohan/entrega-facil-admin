@@ -5,12 +5,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { AlertCircle, ArrowLeft, CheckCircle2, Edit, Filter, LayoutGrid, Loader2, MoreHorizontal, PackagePlus, Plus, Search, Share2, Trash2, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Edit, Filter, LayoutGrid, Loader2, MoreHorizontal, PackagePlus, Plus, Search, Trash2, X } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useCestasBase, useDeleteCestaBase, useDistribuirCestaBase } from '../hooks/useCestasBase';
-import { useVendedoresByAdmin } from '../hooks/useVendedores';
+import { useCestasBase, useDeleteCestaBase } from '../hooks/useCestasBase';
 import { CestaBase } from '../services/cestaBaseService';
 import { formatCurrency } from '../utils/currencyUtils';
 import { toast } from '../utils/toast';
@@ -22,26 +21,12 @@ const CestasBase: React.FC = () => {
 
   const { data: cestas = [], isLoading, error } = useCestasBase(targetId);
   const deleteCestaBaseMutation = useDeleteCestaBase();
-  const distribuirCestaBaseMutation = useDistribuirCestaBase();
-  
-  const { data: vendedoresRaw = [], isLoading: loadingVendedores } = useVendedoresByAdmin(targetId || '', {
-    enabled: !!targetId
-  });
-  
-  // Assegurar tipo
-  const vendedores = vendedoresRaw as any[];
 
   // filteredCestas is now derived via useMemo — no useState needed
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('todos');
   
   const [cestaParaExcluir, setCestaParaExcluir] = useState<CestaBase | null>(null);
-  
-  const [modalDistribuir, setModalDistribuir] = useState<{
-    cestaId: string;
-    cestaNome: string;
-  } | null>(null);
-  const [vendedorSelecionado, setVendedorSelecionado] = useState<string>('');
 
   // ✅ useMemo: derived state — no setState, no render loop
   const filteredCestas = useMemo(() => {
@@ -74,22 +59,6 @@ const CestasBase: React.FC = () => {
       setCestaParaExcluir(null);
     } catch (err: any) {
       toast.error(err?.message || 'Erro ao excluir a cesta base. Tente novamente.');
-    }
-  };
-
-  const handleDistribuir = async () => {
-    if (!modalDistribuir || !vendedorSelecionado) return;
-    const vendedor = vendedores.find(v => v.id === vendedorSelecionado);
-    try {
-      await distribuirCestaBaseMutation.mutateAsync({
-        cestaBaseId: modalDistribuir.cestaId,
-        vendedorId: vendedorSelecionado
-      });
-      toast.success(`Cesta distribuída para ${vendedor?.nome || 'o vendedor'}`);
-      setModalDistribuir(null);
-      setVendedorSelecionado('');
-    } catch (err: any) {
-      toast.error(err?.message || 'Erro ao distribuir cesta base.');
     }
   };
 
@@ -273,13 +242,7 @@ const CestasBase: React.FC = () => {
                             <Edit className="w-4 h-4 mr-2" />
                             Editar
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => setModalDistribuir({
-                            cestaId: cesta.id,
-                            cestaNome: cesta.nome
-                          })}>
-                            <Share2 className="w-4 h-4 mr-2 text-indigo-500" />
-                            Distribuir
-                          </DropdownMenuItem>
+
                           <DropdownMenuItem
                             onClick={() => setCestaParaExcluir(cesta)}
                             className="text-red-600 dark:text-red-400"
@@ -321,71 +284,6 @@ const CestasBase: React.FC = () => {
                 <span>Criar Primeiro Modelo</span>
               </button>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Modal Distribuir */}
-      {modalDistribuir && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
-                  <Share2 size={20} className="text-indigo-600 dark:text-indigo-400" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-gray-900 dark:text-white">Distribuir Cesta</h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{modalDistribuir.cestaNome}</p>
-                </div>
-              </div>
-              <button onClick={() => setModalDistribuir(null)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
-                <X size={20} className="text-gray-500" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Selecione o Vendedor *
-                </label>
-                <select
-                  value={vendedorSelecionado}
-                  onChange={(e) => setVendedorSelecionado(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                  disabled={loadingVendedores}
-                >
-                  <option value="">
-                    {loadingVendedores ? 'Carregando vendedores...' : 'Selecione um vendedor...'}
-                  </option>
-                  {vendedores.filter(v => v.ativo).map(vendedor => (
-                    <option key={vendedor.id} value={vendedor.id}>
-                      {vendedor.nome}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800">
-                <p className="text-sm text-yellow-800 dark:text-yellow-200 flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 mt-0.5" />
-                  Isso irá criar uma cópia desta cesta base (com todos os itens associados e preços atuais) e atribuí-la diretamente ao vendedor selecionado.
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
-              <button 
-                onClick={() => setModalDistribuir(null)} 
-                className="flex-1 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleDistribuir}
-                disabled={distribuirCestaBaseMutation.isPending || !vendedorSelecionado}
-                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-              >
-                {distribuirCestaBaseMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CheckCircle2 size={16} /> Confirmar</>}
-              </button>
-            </div>
           </div>
         </div>
       )}
