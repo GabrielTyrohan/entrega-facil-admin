@@ -53,10 +53,27 @@ export default function MovimentacoesEstoque() {
   // Combobox State
   const [comboboxOpen, setComboboxOpen] = useState(false);
   const [comboboxSearch, setComboboxSearch] = useState('');
+  const [debouncedComboboxSearch, setDebouncedComboboxSearch] = useState('');
   const comboboxRef = useRef<HTMLDivElement>(null);
 
-  // Hooks
-  const { data: produtos } = useProdutos();
+  // Debounce da busca do combobox
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedComboboxSearch(comboboxSearch);
+    }, 400);
+    return () => clearTimeout(handler);
+  }, [comboboxSearch]);
+
+  // Hooks — todos os produtos (para filtro da página e lookup do selecionado)
+  const { data: todosProdutos } = useProdutos();
+
+  // Produtos filtrados via Supabase ilike (para o combobox do modal)
+  const { data: produtosBusca } = useProdutos({
+    searchTerm: debouncedComboboxSearch || undefined,
+  });
+
+  // Usa produtosBusca quando há busca ativa, senão todosProdutos
+  const produtos = debouncedComboboxSearch ? produtosBusca : todosProdutos;
 
   // Close combobox when clicking outside
   useEffect(() => {
@@ -69,18 +86,27 @@ export default function MovimentacoesEstoque() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Filter products for combobox
+  // Normalizar string: minúsculas e sem acentos (mesmo padrão do EditarCestaBase)
+  const normalizeStr = (str: string) =>
+    str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+  // Filter products for combobox (busca complexa: multi-termo, case-insensitive, sem acentos, por nome, código e categoria)
   const filteredProducts = useMemo(() => {
     if (!produtos) return [];
-    if (!comboboxSearch) return produtos;
-    return produtos.filter((prod: any) => 
-      prod.produto_nome.toLowerCase().includes(comboboxSearch.toLowerCase())
-    );
+    if (!comboboxSearch.trim()) return produtos;
+    const termos = normalizeStr(comboboxSearch.trim()).split(/\s+/);
+    return produtos.filter((prod: any) => {
+      const campos =
+        normalizeStr(prod.produto_nome || '') + ' ' +
+        normalizeStr(prod.produto_cod || '') + ' ' +
+        normalizeStr(prod.categoria || '');
+      return termos.every(termo => campos.includes(termo));
+    });
   }, [produtos, comboboxSearch]);
 
   const selectedProduct = useMemo(() => {
-    return produtos?.find((p: any) => p.id === ajusteData.produtoId);
-  }, [produtos, ajusteData.produtoId]);
+    return todosProdutos?.find((p: any) => p.id === ajusteData.produtoId);
+  }, [todosProdutos, ajusteData.produtoId]);
   const { 
     movimentacoes, 
     isLoading, 
@@ -206,7 +232,7 @@ export default function MovimentacoesEstoque() {
               onChange={(e) => handleFilterChange('produtoId', e.target.value)}
             >
               <option value="">Todos os produtos</option>
-              {produtos?.map((prod: any) => (
+              {todosProdutos?.map((prod: any) => (
                 <option key={prod.id} value={prod.id}>
                   {prod.produto_nome}
                 </option>
@@ -299,7 +325,7 @@ export default function MovimentacoesEstoque() {
                 </tr>
               ) : (
                 paginatedData.map((mov) => {
-                  const produto = produtos?.find((p: any) => p.id === mov.produto_cadastrado_id);
+                  const produto = todosProdutos?.find((p: any) => p.id === mov.produto_cadastrado_id);
                   const isEntrada = mov.tipo_movimentacao.startsWith('entrada');
                   
                   return (
