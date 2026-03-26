@@ -1,8 +1,9 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { CACHE_KEYS, CACHE_TIMES } from '@/lib/constants/queryKeys';
-import { supabase } from '@/lib/supabase';
+import { movimentarEstoque } from '@/utils/movimentarEstoque';
 import type { MovimentacaoEstoque, RegistrarMovimentacaoParams } from '@/types/estoque';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
 
 export function useMovimentacoesEstoque(produtoId?: string) { 
   const { userProfile, userType } = useAuth(); 
@@ -42,42 +43,22 @@ export function useMovimentacoesEstoque(produtoId?: string) {
       if (!adminId) throw new Error('Admin ID não encontrado'); 
       if (!userProfile) throw new Error('Usuário não autenticado'); 
 
-      const { data: produto, error: produtoError } = await supabase 
-        .from('produtos_cadastrado') 
-        .select('qtd_estoque') 
-        .eq('id', params.produto_id) 
-        .single(); 
-
-      if (produtoError) throw produtoError; 
-
-      const estoqueAtual = produto?.qtd_estoque || 0; 
-      const isEntrada = params.tipo_movimentacao.startsWith('entrada'); 
-      const novaQuantidade = isEntrada 
-        ? estoqueAtual + params.quantidade 
-        : estoqueAtual - params.quantidade; 
-
-      const { data, error } = await supabase 
-        .from('movimentacoes_estoque') 
-        .insert({ 
-          administrador_id: adminId, 
-          produto_cadastrado_id: params.produto_id, 
-          tipo_movimentacao: params.tipo_movimentacao, 
-          quantidade: params.quantidade, 
-          quantidade_anterior: estoqueAtual, 
-          quantidade_nova: novaQuantidade, 
-          usuario_id: userProfile.id, 
-          usuario_tipo: (userProfile as any).tipo || 'admin', 
-          usuario_nome: userProfile.nome, 
-          motivo: params.motivo, 
-          observacoes: params.observacoes, 
-          lote: params.lote, 
-          fornecedor: params.fornecedor, 
-        }) 
-        .select() 
-        .single(); 
-
-      if (error) throw error; 
-      return data as MovimentacaoEstoque; 
+      // Usa função centralizada — apenas INSERT em movimentacoes_estoque
+      // A TRIGGER no Supabase atualiza qtd_estoque automaticamente
+      await movimentarEstoque({
+        adminId,
+        produtoId: params.produto_id,
+        quantidade: params.quantidade,
+        tipoMovimentacao: params.tipo_movimentacao,
+        referenciaTipo: 'ajuste_manual',
+        usuarioId: userProfile.id,
+        usuarioTipo: (userProfile as any).tipo || 'admin',
+        usuarioNome: userProfile.nome,
+        motivo: params.motivo,
+        observacoes: params.observacoes,
+        lote: params.lote,
+        fornecedor: params.fornecedor,
+      });
     }, 
     onSuccess: () => { 
       queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.MOVIMENTACOES_ESTOQUE] }); 

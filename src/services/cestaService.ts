@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { movimentarEstoqueBatch } from '../utils/movimentarEstoque';
 
 export interface Cesta {
   id: string;
@@ -94,7 +95,7 @@ export class CestaService {
       const nomeCesta = cestaData.nome;
 
       // Implementar criação manual da cesta
-      return await this.createCestaRecord(cestaData, nomeCesta, precoTotal, produtos);
+      return await this.createCestaRecord(cestaData, nomeCesta, precoTotal);
     } catch (error) {
       console.error('Erro no serviço de cestas:', error);
       throw error;
@@ -104,8 +105,7 @@ export class CestaService {
   private static async createCestaRecord(
     cestaData: CreateCestaData, 
     nomeCesta: string, 
-    precoTotal: number,
-    produtos: Record<string, unknown>[]
+    precoTotal: number
   ): Promise<Cesta> {
     try {
       // 1. Criar a cesta na tabela produtos
@@ -149,26 +149,28 @@ export class CestaService {
         throw new Error('Erro ao adicionar produtos à cesta: ' + itensError.message);
       }
 
-      // 3. Atualizar estoque dos produtos (reservar)
-      for (const item of cestaData.itens) {
-        const produto = produtos.find(p => p.id === item.produto_cadastrado_id);
-        if (produto) {
-          const novoEstoque = Number(produto.qtd_estoque) - item.quantidade;
-          
-          const { error: estoqueError } = await supabase
-            .from('produtos_cadastrado')
-            .update({ qtd_estoque: novoEstoque })
-            .eq('id', item.produto_cadastrado_id);
-
-          if (estoqueError) {
-            // Rollback: remover cesta e itens
-            await supabase.from('produtos_na_cesta').delete().eq('cesta_id', novaCesta.id);
-            await supabase.from('produtos').delete().eq('id', novaCesta.id);
-            
-            console.error('Erro ao atualizar estoque:', estoqueError);
-            throw new Error('Erro ao reservar estoque dos produtos');
+      // 3. Registrar movimentações de saída (trigger atualiza qtd_estoque)
+      try {
+        await movimentarEstoqueBatch(
+          cestaData.itens.map(item => ({
+            produtoId: item.produto_cadastrado_id,
+            quantidade: item.quantidade,
+          })),
+          {
+            adminId: cestaData.vendedor_id, // será sobrescrito se necessário
+            tipoMovimentacao: 'saida_venda',
+            referenciaTipo: 'entrega_cesta',
+            referenciaId: novaCesta.id,
+            usuarioId: cestaData.vendedor_id,
+            usuarioTipo: 'admin',
+            usuarioNome: 'Sistema',
           }
-        }
+        );
+      } catch (estoqueError) {
+        // Rollback: remover cesta e itens
+        await supabase.from('produtos_na_cesta').delete().eq('cesta_id', novaCesta.id);
+        await supabase.from('produtos').delete().eq('id', novaCesta.id);
+        throw estoqueError;
       }
 
       return novaCesta;
@@ -315,36 +317,27 @@ export class CestaService {
         // 1. Reverter baixa dos itens antigos.
         // 2. Aplicar baixa dos itens novos.
         
-        // Passo 1: Devolver estoque dos itens antigos
-        for (const itemAntigo of itensAtuais || []) {
-          const { error: refundError } = await supabase.rpc('increment_estoque', { 
-            p_produto_id: itemAntigo.produto_cadastrado_id, 
-            p_quantidade: itemAntigo.quantidade 
-          });
-          if (refundError) {
-             // Fallback manual se RPC não existir
-             const { data: prod } = await supabase.from('produtos_cadastrado').select('qtd_estoque').eq('id', itemAntigo.produto_cadastrado_id).single();
-             if (prod) {
-               await supabase.from('produtos_cadastrado').update({ qtd_estoque: prod.qtd_estoque + itemAntigo.quantidade }).eq('id', itemAntigo.produto_cadastrado_id);
-             }
+        // Passo 1: Devolver estoque dos itens antigos (movimentação de entrada)
+        await movimentarEstoqueBatch(
+          (itensAtuais || []).map(item => ({
+            produtoId: item.produto_cadastrado_id,
+            quantidade: item.quantidade,
+          })),
+          {
+            adminId: '', // será preenchido pelo contexto
+            tipoMovimentacao: 'entrada_devolucao',
+            referenciaTipo: 'entrega_cesta',
+            referenciaId: cestaId,
+            usuarioId: '',
+            usuarioTipo: 'admin',
+            usuarioNome: 'Sistema',
           }
-        }
+        );
 
         // Passo 2: Remover itens antigos da tabela de ligação
         await supabase.from('produtos_na_cesta').delete().eq('cesta_id', cestaId);
 
-        // Passo 3: Verificar estoque para os novos itens
-        for (const item of cestaData.itens) {
-          const produto = produtos.find(p => p.id === item.produto_cadastrado_id);
-          if (!produto) throw new Error(`Produto ${item.produto_cadastrado_id} não encontrado`);
-          if (produto.qtd_estoque < item.quantidade) {
-             // Reverter a devolução seria complexo aqui. Vamos assumir que se falhar, o usuário tenta de novo.
-             // O ideal seria uma transação única no banco.
-             throw new Error(`Estoque insuficiente para ${produto.produto_nome}`);
-          }
-        }
-
-        // Passo 4: Inserir novos itens
+        // Passo 3: Inserir novos itens
         const novosItens = cestaData.itens.map(item => ({
           cesta_id: cestaId,
           produto_cadastrado_id: item.produto_cadastrado_id,
@@ -353,20 +346,23 @@ export class CestaService {
         
         await supabase.from('produtos_na_cesta').insert(novosItens);
 
-        // Passo 5: Baixar estoque dos novos itens
-        for (const item of cestaData.itens) {
-           const { error: debitError } = await supabase.rpc('decrement_estoque', {
-             p_produto_id: item.produto_cadastrado_id,
-             p_quantidade: item.quantidade
-           });
-           if (debitError) {
-              // Fallback manual
-              const produto = produtos.find(p => p.id === item.produto_cadastrado_id);
-              if (produto) {
-                await supabase.from('produtos_cadastrado').update({ qtd_estoque: produto.qtd_estoque - item.quantidade }).eq('id', item.produto_cadastrado_id);
-              }
-           }
-        }
+        // Passo 4: Baixar estoque dos novos itens (movimentação de saída)
+        // A trigger rejeita se estoque insuficiente
+        await movimentarEstoqueBatch(
+          cestaData.itens.map(item => ({
+            produtoId: item.produto_cadastrado_id,
+            quantidade: item.quantidade,
+          })),
+          {
+            adminId: '',
+            tipoMovimentacao: 'saida_venda',
+            referenciaTipo: 'entrega_cesta',
+            referenciaId: cestaId,
+            usuarioId: '',
+            usuarioTipo: 'admin',
+            usuarioNome: 'Sistema',
+          }
+        );
 
         // Recalcular preço total
         const novoPrecoTotal = cestaData.itens.reduce((total, item) => {

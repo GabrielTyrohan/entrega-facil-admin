@@ -17,7 +17,7 @@ interface ItemCestaBase {
   cesta_base_id: string;
   produto_cadastrado_id: string;
   quantidade: number;
-  produtos_cadastrado?: {
+  produto?: {
     produto_nome: string;
     preco_unt: number;
     qtd_estoque: number;
@@ -88,7 +88,7 @@ const NovaCesta: React.FC = () => {
             cesta_base_id,
             produto_cadastrado_id,
             quantidade,
-            produtos_cadastrado!inner(produto_nome, preco_unt, qtd_estoque, unidade_medida, categoria)
+            produto:produtos_cadastrado(produto_nome, preco_unt, qtd_estoque, unidade_medida, categoria)
           )
         `)
         .eq('administrador_id', targetId!)
@@ -123,9 +123,9 @@ const NovaCesta: React.FC = () => {
     let gargalo: string | null = null;
 
     for (const item of cestaSelecionada.cestas_base_itens) {
-      const prod = Array.isArray(item.produtos_cadastrado)
-        ? item.produtos_cadastrado[0]
-        : item.produtos_cadastrado;
+      const prod = Array.isArray(item.produto)
+        ? item.produto[0]
+        : item.produto;
 
       const possivel = Math.floor(
         (prod?.qtd_estoque ?? 0) / item.quantidade
@@ -403,12 +403,12 @@ const NovaCesta: React.FC = () => {
             ) : (
               <div className="space-y-3">
                 {cestaSelecionada.cestas_base_itens.map((item: any) => {
-                  const prod = Array.isArray(item.produtos_cadastrado)
-                    ? item.produtos_cadastrado[0]
-                    : item.produtos_cadastrado || {};
+                  const prod = Array.isArray(item.produto)
+                    ? item.produto[0]
+                    : item.produto || {};
                   const preco = prod?.preco_unt || 0;
                   const subtotal = preco * item.quantidade;
-                  const estoque = prod.qtd_estoque || 0;
+                  const estoque = prod?.qtd_estoque || 0;
 
                   return (
                     <div

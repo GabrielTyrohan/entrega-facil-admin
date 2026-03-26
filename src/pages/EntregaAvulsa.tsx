@@ -24,6 +24,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useProdutos } from '../hooks/useProdutos';
 import { useVendedoresByAdmin } from '../hooks/useVendedores';
 import { supabase } from '../lib/supabase';
+import { movimentarEstoque } from '../utils/movimentarEstoque';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -244,11 +245,19 @@ const EntregaAvulsa: React.FC = () => {
       );
       if (e2) throw new Error(e2.message);
 
+      // Registrar movimentações de saída (trigger atualiza qtd_estoque)
       for (const item of itens) {
-        const { error: e3 } = await supabase.from('produtos_cadastrado')
-          .update({ qtd_estoque: Math.max(0, item.produto.qtd_estoque - item.quantidade), updated_at: new Date().toISOString() })
-          .eq('id', item.produto.id);
-        if (e3) throw new Error(e3.message);
+        await movimentarEstoque({
+          adminId: adminId || user?.id || '',
+          produtoId: item.produto.id,
+          quantidade: item.quantidade,
+          tipoMovimentacao: 'saida_venda',
+          referenciaTipo: 'entrega_avulsa',
+          referenciaId: entrega.id,
+          usuarioId: user?.id || '',
+          usuarioTipo: 'admin',
+          usuarioNome: user?.email || 'Sistema',
+        });
       }
 
       toast.success(`Entrega confirmada! ${itens.length} produto(s) para ${vendedorSelecionado.nome}.`);
@@ -265,14 +274,21 @@ const EntregaAvulsa: React.FC = () => {
     if (!deletando) return;
     setIsDeletando(true);
     try {
-      // Devolver estoque central
+      // Devolver estoque via movimentação de entrada
       for (const item of deletando.entregas_avulsas_itens) {
         const pid = item.produto_cadastrado_id ?? item.produtos_cadastrado?.id;
-        const qtdAtual = item.produtos_cadastrado?.qtd_estoque ?? 0;
         if (pid) {
-          await supabase.from('produtos_cadastrado')
-            .update({ qtd_estoque: qtdAtual + item.quantidade, updated_at: new Date().toISOString() })
-            .eq('id', pid);
+          await movimentarEstoque({
+            adminId: adminId || '',
+            produtoId: pid,
+            quantidade: item.quantidade,
+            tipoMovimentacao: 'entrada_devolucao',
+            referenciaTipo: 'entrega_avulsa',
+            referenciaId: deletando.id,
+            usuarioId: user?.id || '',
+            usuarioTipo: 'admin',
+            usuarioNome: user?.email || 'Sistema',
+          });
         }
       }
       // Deletar itens e entrega
@@ -340,28 +356,54 @@ const EntregaAvulsa: React.FC = () => {
     if (itensAtivos.length === 0) { toast.error('A entrega precisa ter pelo menos 1 produto.'); return; }
     setIsSalvandoEdit(true);
     try {
-      // Ajustar estoque para cada item
+      // Ajustar estoque via movimentações
       for (const it of editItens) {
-        const diff = it.quantidade - it.quantidadeOriginal; // positivo = mais debitado, negativo = devolver
+        const diff = it.quantidade - it.quantidadeOriginal;
         if (diff === 0 && !it.removido) continue;
         if (!it.produto_cadastrado_id) continue;
 
-        // Buscar qtd_estoque atual do produto
-        const { data: prod } = await supabase
-          .from('produtos_cadastrado').select('qtd_estoque').eq('id', it.produto_cadastrado_id).single();
-        const estoqueAtual = prod?.qtd_estoque ?? 0;
-
-        let novoEstoque: number;
         if (it.removido) {
           // Devolver tudo que foi debitado originalmente
-          novoEstoque = estoqueAtual + it.quantidadeOriginal;
-        } else {
-          // Aplicar diff (+adicionou mais ou -devolveu parte)
-          novoEstoque = Math.max(0, estoqueAtual - diff);
+          if (it.quantidadeOriginal > 0) {
+            await movimentarEstoque({
+              adminId: adminId || '',
+              produtoId: it.produto_cadastrado_id,
+              quantidade: it.quantidadeOriginal,
+              tipoMovimentacao: 'entrada_devolucao',
+              referenciaTipo: 'entrega_avulsa',
+              referenciaId: editando.id,
+              usuarioId: user?.id || '',
+              usuarioTipo: 'admin',
+              usuarioNome: user?.email || 'Sistema',
+            });
+          }
+        } else if (diff > 0) {
+          // Mais debitado — saída
+          await movimentarEstoque({
+            adminId: adminId || '',
+            produtoId: it.produto_cadastrado_id,
+            quantidade: diff,
+            tipoMovimentacao: 'saida_venda',
+            referenciaTipo: 'entrega_avulsa',
+            referenciaId: editando.id,
+            usuarioId: user?.id || '',
+            usuarioTipo: 'admin',
+            usuarioNome: user?.email || 'Sistema',
+          });
+        } else if (diff < 0) {
+          // Devolvido parte — entrada
+          await movimentarEstoque({
+            adminId: adminId || '',
+            produtoId: it.produto_cadastrado_id,
+            quantidade: Math.abs(diff),
+            tipoMovimentacao: 'entrada_devolucao',
+            referenciaTipo: 'entrega_avulsa',
+            referenciaId: editando.id,
+            usuarioId: user?.id || '',
+            usuarioTipo: 'admin',
+            usuarioNome: user?.email || 'Sistema',
+          });
         }
-        await supabase.from('produtos_cadastrado')
-          .update({ qtd_estoque: novoEstoque, updated_at: new Date().toISOString() })
-          .eq('id', it.produto_cadastrado_id);
 
         // Deletar item removido
         if (it.removido && it.id) {

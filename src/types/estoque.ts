@@ -17,7 +17,7 @@ export interface MovimentacaoEstoque {
   quantidade_nova: number;
   custo_unitario?: number;
   valor_total?: number;
-  referencia_tipo?: 'venda_atacado' | 'entrega' | 'nota_fiscal' | 'orcamento' | 'ajuste_manual' | 'inventario';
+  referencia_tipo?: 'venda_atacado' | 'entrega' | 'nota_fiscal' | 'orcamento' | 'ajuste_manual' | 'inventario' | 'entrega_cesta' | 'entrega_avulsa';
   referencia_id?: string;
   usuario_id: string;
   usuario_tipo: 'admin' | 'funcionario' | 'vendedor';
