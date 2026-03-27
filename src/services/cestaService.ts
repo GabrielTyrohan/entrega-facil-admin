@@ -32,7 +32,12 @@ export interface CreateCestaData {
 }
 
 export class CestaService {
-  static async createCestaWithItems(cestaData: CreateCestaData): Promise<Cesta> {
+  static async createCestaWithItems(
+    cestaData: CreateCestaData,
+    adminId: string,
+    usuarioId: string,
+    usuarioNome: string
+  ): Promise<Cesta> {
     try {
       // Validar dados de entrada
       if (!cestaData.vendedor_id) {
@@ -95,7 +100,7 @@ export class CestaService {
       const nomeCesta = cestaData.nome;
 
       // Implementar criação manual da cesta
-      return await this.createCestaRecord(cestaData, nomeCesta, precoTotal);
+      return await this.createCestaRecord(cestaData, nomeCesta, precoTotal, adminId, usuarioId, usuarioNome);
     } catch (error) {
       console.error('Erro no serviço de cestas:', error);
       throw error;
@@ -105,7 +110,10 @@ export class CestaService {
   private static async createCestaRecord(
     cestaData: CreateCestaData, 
     nomeCesta: string, 
-    precoTotal: number
+    precoTotal: number,
+    adminId: string,
+    usuarioId: string,
+    usuarioNome: string
   ): Promise<Cesta> {
     try {
       // 1. Criar a cesta na tabela produtos
@@ -157,13 +165,13 @@ export class CestaService {
             quantidade: item.quantidade,
           })),
           {
-            adminId: cestaData.vendedor_id, // será sobrescrito se necessário
+            adminId: adminId,
             tipoMovimentacao: 'saida_venda',
             referenciaTipo: 'entrega_cesta',
             referenciaId: novaCesta.id,
-            usuarioId: cestaData.vendedor_id,
+            usuarioId: usuarioId,
             usuarioTipo: 'admin',
-            usuarioNome: 'Sistema',
+            usuarioNome: usuarioNome,
           }
         );
       } catch (estoqueError) {
@@ -275,7 +283,13 @@ export class CestaService {
     }
   }
 
-  static async updateCestaWithItems(cestaId: string, cestaData: Partial<CreateCestaData>): Promise<Cesta> {
+  static async updateCestaWithItems(
+    cestaId: string,
+    cestaData: Partial<CreateCestaData>,
+    adminId: string,
+    usuarioId: string,
+    usuarioNome: string
+  ): Promise<Cesta> {
     try {
       // 1. Atualizar dados básicos da cesta (se fornecidos)
       const updateData: any = { updated_at: new Date().toISOString() };
@@ -324,13 +338,13 @@ export class CestaService {
             quantidade: item.quantidade,
           })),
           {
-            adminId: '', // será preenchido pelo contexto
+            adminId: adminId,
             tipoMovimentacao: 'entrada_devolucao',
             referenciaTipo: 'entrega_cesta',
             referenciaId: cestaId,
-            usuarioId: '',
+            usuarioId: usuarioId,
             usuarioTipo: 'admin',
-            usuarioNome: 'Sistema',
+            usuarioNome: usuarioNome,
           }
         );
 
@@ -354,13 +368,13 @@ export class CestaService {
             quantidade: item.quantidade,
           })),
           {
-            adminId: '',
+            adminId: adminId,
             tipoMovimentacao: 'saida_venda',
             referenciaTipo: 'entrega_cesta',
             referenciaId: cestaId,
-            usuarioId: '',
+            usuarioId: usuarioId,
             usuarioTipo: 'admin',
-            usuarioNome: 'Sistema',
+            usuarioNome: usuarioNome,
           }
         );
 

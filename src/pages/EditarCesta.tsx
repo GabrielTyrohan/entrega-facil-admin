@@ -235,7 +235,13 @@ const EditarCesta: React.FC = () => {
         }))
       };
 
-      await CestaService.updateCestaWithItems(cestaId!, updateData);
+      await CestaService.updateCestaWithItems(
+        cestaId!,
+        updateData,
+        adminId || user?.id || '',
+        user?.id || '',
+        user?.email || 'Admin'
+      );
       
       setSuccessMessage(`Cesta atualizada com sucesso!`);
       setTimeout(() => {

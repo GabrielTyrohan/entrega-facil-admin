@@ -11,7 +11,6 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { CestaData, useCestaDetalhes, useCestas, useEntregarCestas } from '../hooks/useCestas';
-import { supabase } from '../lib/supabase';
 import { CestaService } from '../services/cestaService';
 
 type Cesta = CestaData;
@@ -109,21 +108,7 @@ const CestasVendedor: React.FC = () => {
         observacao: obsEntrega || undefined,
       });
 
-      const novoEstoque = modalEntrega.quantidadeAtual + qtdEntrega;
-      await supabase
-        .from('estoque_vendedor')
-        .upsert(
-          {
-            vendedor_id: modalEntrega.vendedorId,
-            produto_id: modalEntrega.cestaId,
-            quantidade_disponivel: novoEstoque,
-            administrador_id: adminId || user?.id,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'vendedor_id,produto_id' }
-        );
-
-      toast.success(`${qtdEntrega} cesta(s) entregue(s) e estoque atualizado para ${novoEstoque}!`);
+      toast.success(`${qtdEntrega} cesta(s) entregue(s) com sucesso!`);
       setModalEntrega(null);
       setQtdEntrega(1);
       setObsEntrega('');
