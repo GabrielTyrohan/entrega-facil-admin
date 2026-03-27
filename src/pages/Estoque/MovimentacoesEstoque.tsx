@@ -50,6 +50,8 @@ export default function MovimentacoesEstoque() {
     observacoes: '',
   });
 
+  const [selectedProductData, setSelectedProductData] = useState<any>(null);
+
   // Combobox State
   const [comboboxOpen, setComboboxOpen] = useState(false);
   const [comboboxSearch, setComboboxSearch] = useState('');
@@ -104,9 +106,6 @@ export default function MovimentacoesEstoque() {
     });
   }, [produtos, comboboxSearch]);
 
-  const selectedProduct = useMemo(() => {
-    return todosProdutos?.find((p: any) => p.id === ajusteData.produtoId);
-  }, [todosProdutos, ajusteData.produtoId]);
   const { 
     movimentacoes, 
     isLoading, 
@@ -194,6 +193,8 @@ export default function MovimentacoesEstoque() {
         motivo: '',
         observacoes: '',
       });
+      setSelectedProductData(null);
+      setComboboxSearch('');
     } catch (error) {
       console.error(error);
       toast.error('Erro ao registrar ajuste');
@@ -384,7 +385,18 @@ export default function MovimentacoesEstoque() {
       {/* Adjustment Modal */}
       <Modal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          setAjusteData({
+            produtoId: '',
+            tipo: 'entrada_ajuste',
+            quantidade: '',
+            motivo: '',
+            observacoes: '',
+          });
+          setSelectedProductData(null);
+          setComboboxSearch('');
+        }}
         title="Registrar Ajuste Manual"
       >
         <div className="space-y-4">
@@ -397,9 +409,9 @@ export default function MovimentacoesEstoque() {
                 if (!comboboxOpen) setComboboxSearch('');
               }}
             >
-              <span className={selectedProduct ? 'text-gray-900 dark:text-white' : 'text-gray-500'}>
-                {selectedProduct 
-                  ? `${selectedProduct.produto_nome} (Atual: ${selectedProduct.qtd_estoque})` 
+              <span className={selectedProductData ? 'text-gray-900 dark:text-white' : 'text-gray-500'}>
+                {selectedProductData 
+                  ? `${selectedProductData.produto_nome} (Atual: ${selectedProductData.qtd_estoque})` 
                   : 'Selecione ou pesquise um produto...'}
               </span>
               <Search className="w-4 h-4 text-gray-400" />
@@ -432,6 +444,8 @@ export default function MovimentacoesEstoque() {
                         }`}
                         onClick={() => {
                           setAjusteData(prev => ({ ...prev, produtoId: prod.id }));
+                          setSelectedProductData(prod);
+                          setComboboxSearch('');
                           setComboboxOpen(false);
                         }}
                       >

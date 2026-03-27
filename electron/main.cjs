@@ -1,8 +1,12 @@
 const { app, BrowserWindow, dialog } = require('electron');
 const path = require('path');
-const isDev = process.env.NODE_ENV === 'development' || process.env.ELECTRON_IS_DEV === 'true';
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
+
+// ✅ Detecção mais robusta de ambiente de desenvolvimento
+const isDev = process.env.NODE_ENV === 'development' 
+           || process.env.ELECTRON_IS_DEV === 'true'
+           || !app.isPackaged; // fallback garantido: false só em build final
 
 let mainWindow;
 
@@ -19,28 +23,34 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: true,
-      allowRunningInsecureContent: false
+      allowRunningInsecureContent: false,
     },
     icon: path.join(__dirname, '../public/icon.png'),
-    title: 'Entrega Fácil Admin'
+    title: 'Entrega Fácil Admin',
   });
 
   if (isDev) {
-    // snyk:ignore javascript/ElectronLoadInsecureContent -- dev server local, isolado, nunca executado em produção
     const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
     mainWindow.loadURL(devServerUrl);
     mainWindow.webContents.openDevTools();
+
+    // ✅ Log para confirmar que entrou em modo dev
+    log.info(`[DEV] Carregando: ${devServerUrl}`);
   } else {
-    // ✅ Produção: loadFile — sem HTTP, sem URL construída manualmente
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    // ✅ Caminho correto para o build de produção
+    const prodPath = path.join(__dirname, '../dist/index.html');
+    mainWindow.loadFile(prodPath);
+    log.info(`[PROD] Carregando arquivo: ${prodPath}`);
   }
 
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
 app.whenReady().then(() => {
+  console.log('isDev:', isDev);
+  console.log('isPackaged:', app.isPackaged);
+  console.log('NODE_ENV:', process.env.NODE_ENV);
   createWindow();
-
   if (!isDev) {
     autoUpdater.checkForUpdates();
   }

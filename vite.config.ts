@@ -2,23 +2,28 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig } from 'vite';
 
-// https://vitejs.dev/config/
+const isDev = process.env.NODE_ENV === 'development';
+
 export default defineConfig({
   plugins: [react()],
-  base: './',
+  base: isDev ? '/' : './',  // ← '/' em dev, './' só no build
   build: {
     outDir: 'dist',
     emptyOutDir: true,
     sourcemap: false,
     rollupOptions: {
       output: {
-        manualChunks: undefined
-      }
-    }
+        manualChunks: undefined,
+      },
+    },
   },
   server: {
     port: 5173,
-    strictPort: false
+    strictPort: true,
+    hmr: {
+      host: 'localhost',
+      port: 5173,
+    },
   },
   optimizeDeps: {
     exclude: ['lucide-react'],
