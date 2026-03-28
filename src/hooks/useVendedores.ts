@@ -1,11 +1,11 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
-import { QUERY_KEYS } from '@/lib/constants/queryKeys';
-import { PAGINATION } from '@/lib/constants/pagination';
 import { useAuth } from '@/contexts/AuthContext';
-import { toast } from '@/utils/toast';
+import { PAGINATION } from '@/lib/constants/pagination';
+import { QUERY_KEYS } from '@/lib/constants/queryKeys';
+import { supabase } from '@/lib/supabase';
 import { CACHE_KEYS, useSupabaseQuery } from '@/lib/supabaseCache';
 import { handleSupabaseError } from '@/utils/supabaseErrorHandler';
+import { toast } from '@/utils/toast';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 export interface Vendedor {
   id: string;
@@ -17,33 +17,28 @@ export interface Vendedor {
   ativo: boolean;
   created_at: string;
   updated_at: string;
-  // Campos adicionais opcionais
   data_inicio?: string | null;
   tipo_vinculo?: string | null;
   percentual_minimo?: number | null;
-  // Legacy fields (optional compatibility)
   admin_id?: string;
   comissao_percentual?: number;
 }
 
-// ============================================
-// OTIMIZADO: Hooks usando RLS e AdminId Context
-// ============================================
-
 // ===== BUSCAR VENDEDORES (com paginação) =====
 export const useVendedores = (page: number = 0) => {
-  const { adminId } = useAuth(); // Pega adminId do contexto
+  const { adminId } = useAuth();
 
   return useQuery({
     queryKey: [QUERY_KEYS.VENDEDORES, { adminId, page }],
     queryFn: async () => {
       const { from, to } = PAGINATION.calculateRange(page, 15);
 
-      // NÃO PRECISA FILTRAR POR administrador_id!
-      // O RLS do Supabase faz isso automaticamente
+      // ✅ Filtro explícito por administrador_id como segunda camada de segurança
+      // além do RLS — garante isolamento mesmo se uma política RLS falhar
       const { data, error, count } = await supabase
         .from('vendedores')
         .select('*', { count: 'exact' })
+        .eq('administrador_id', adminId!)
         .range(from, to)
         .order('nome');
 
@@ -55,9 +50,9 @@ export const useVendedores = (page: number = 0) => {
         totalPages: PAGINATION.calculateTotalPages(count || 0, 15),
       };
     },
-    enabled: !!adminId, // Só executa se tiver adminId
-    staleTime: 5 * 60 * 1000, // Cache de 5 minutos
-    placeholderData: (previousData: any) => previousData, // Keep previous data while fetching
+    enabled: !!adminId,
+    staleTime: 5 * 60 * 1000,
+    placeholderData: (previousData: any) => previousData,
   });
 };
 
@@ -72,7 +67,7 @@ export const useCreateVendedor = () => {
         .from('vendedores')
         .insert({
           ...novoVendedor,
-          administrador_id: adminId!, // Vincula ao admin
+          administrador_id: adminId!,
         })
         .select()
         .single();
@@ -94,7 +89,6 @@ export const useCreateVendedor = () => {
 // LEGACY HOOKS (Preserved for compatibility)
 // ============================================
 
-// Hook para buscar vendedor por ID
 export const useVendedor = (id: string, options?: { enabled?: boolean }) => {
   const query = supabase
     .from('vendedores')
@@ -107,7 +101,6 @@ export const useVendedor = (id: string, options?: { enabled?: boolean }) => {
   });
 };
 
-// Hook para buscar vendedores por admin (Legacy - used in NovaVendaAtacado)
 export const useVendedoresByAdmin = (administrador_id: string, options?: { enabled?: boolean }) => {
   const query = supabase
     .from('vendedores')
@@ -121,10 +114,9 @@ export const useVendedoresByAdmin = (administrador_id: string, options?: { enabl
   }) as { data: Vendedor[]; isLoading: boolean; error: any };
 };
 
-// Hook para atualizar vendedor
 export const useUpdateVendedor = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<Vendedor> & { id: string }) => {
       const { data, error } = await supabase
@@ -133,43 +125,37 @@ export const useUpdateVendedor = () => {
         .eq('id', id)
         .select()
         .single();
-      
-      if (error) {
-        throw new Error(handleSupabaseError(error));
-      }
-      
+
+      if (error) throw new Error(handleSupabaseError(error));
+
       return data as Vendedor;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.VENDEDORES] });
       toast.success('Vendedor atualizado com sucesso!');
-    }
+    },
   });
 };
 
-// Hook para deletar vendedor
 export const useDeleteVendedor = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async ({ id }: { id: string }) => {
       const { error } = await supabase
         .from('vendedores')
         .delete()
         .eq('id', id);
-      
-      if (error) {
-        throw new Error(handleSupabaseError(error));
-      }
+
+      if (error) throw new Error(handleSupabaseError(error));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.VENDEDORES] });
       toast.success('Vendedor removido com sucesso!');
-    }
+    },
   });
 };
 
-// Hook para estatísticas de vendedores
 export const useEstatisticasVendedores = (
   administrador_id?: string,
   options?: { enabled?: boolean }
@@ -188,7 +174,6 @@ export const useEstatisticasVendedores = (
   });
 };
 
-// Hook para vendedores com performance (entregas e vendas)
 export const useVendedoresComPerformance = (
   administrador_id?: string,
   options?: { enabled?: boolean }
@@ -206,7 +191,7 @@ export const useVendedoresComPerformance = (
     .eq('ativo', true);
 
   if (administrador_id) {
-    query = query.eq('administrador_id', administrador_id || '');
+    query = query.eq('administrador_id', administrador_id);
   }
 
   return useSupabaseQuery('VENDEDORES', query, [CACHE_KEYS.VENDEDORES, 'performance', administrador_id], {

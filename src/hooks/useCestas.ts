@@ -119,18 +119,24 @@ export const useCestas = () => {
               return null;
             }
 
-            const itens = itensResult.data?.map((item: any) => ({
-              produto: {
-                id: item.produtos_cadastrado?.id,
-                produto_nome: item.produtos_cadastrado?.produto_nome,
-                produto_cod: item.produtos_cadastrado?.produto_cod,
-                categoria: item.produtos_cadastrado?.categoria,
-                qtd_estoque: item.produtos_cadastrado?.qtd_estoque,
-                preco_unt: item.produtos_cadastrado?.preco_unt,
-                descricao: undefined
-              },
-              quantidade: item.quantidade
-            })) || [];
+            const itens = itensResult.data?.map((item: any) => {
+              const prodData = Array.isArray(item.produtos_cadastrado) 
+                ? item.produtos_cadastrado[0] 
+                : item.produtos_cadastrado;
+
+              return {
+                produto: {
+                  id: prodData?.id,
+                  produto_nome: prodData?.produto_nome,
+                  produto_cod: prodData?.produto_cod,
+                  categoria: prodData?.categoria,
+                  qtd_estoque: prodData?.qtd_estoque,
+                  preco_unt: prodData?.preco_unt,
+                  descricao: undefined
+                },
+                quantidade: item.quantidade
+              };
+            }) || [];
 
             const quantidadeDisponivel: number | null =
               estoqueResult.data?.quantidade_disponivel ?? null;
@@ -223,17 +229,23 @@ export const useCestaDetalhes = (cestaId: string, options?: { enabled?: boolean 
 
       if (itensError) throw itensError;
 
-      const itens = itensData?.map((item: any) => ({
-        produto: {
-          id: item.produtos_cadastrado?.id,
-          produto_nome: item.produtos_cadastrado?.produto_nome,
-          produto_cod: item.produtos_cadastrado?.produto_cod,
-          categoria: item.produtos_cadastrado?.categoria,
-          qtd_estoque: item.produtos_cadastrado?.qtd_estoque,
-          preco_unt: item.produtos_cadastrado?.preco_unt,
-        },
-        quantidade: item.quantidade
-      })) || [];
+      const itens = itensData?.map((item: any) => {
+        const prodData = Array.isArray(item.produtos_cadastrado) 
+          ? item.produtos_cadastrado[0] 
+          : item.produtos_cadastrado;
+
+        return {
+          produto: {
+            id: prodData?.id,
+            produto_nome: prodData?.produto_nome,
+            produto_cod: prodData?.produto_cod,
+            categoria: prodData?.categoria,
+            qtd_estoque: prodData?.qtd_estoque,
+            preco_unt: prodData?.preco_unt,
+          },
+          quantidade: item.quantidade
+        };
+      }) || [];
 
       return { itens };
     },

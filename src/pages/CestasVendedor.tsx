@@ -6,11 +6,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { toast } from '@/utils/toast';
+import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, AlertTriangle, Calendar, CheckCircle2, Edit, Eye, Filter, Loader2, MoreHorizontal, Package, PackagePlus, Plus, Search, ShoppingBasket, Trash2, User, X } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { CestaData, useCestaDetalhes, useCestas, useEntregarCestas } from '../hooks/useCestas';
+import { supabase } from '../lib/supabase';
 import { CestaService } from '../services/cestaService';
 
 type Cesta = CestaData;
@@ -42,6 +44,54 @@ const CestasVendedor: React.FC = () => {
     modalEntrega?.cestaId || '',
     { enabled: !!modalEntrega?.cestaId }
   );
+
+  // ── IDs dos produtos da cesta aberta no modal ──
+  const produtoIdsModal = useMemo(() => {
+    if (!detalhesCesta?.itens?.length) return [];
+    return detalhesCesta.itens.map((item: any) => item.produto?.id).filter(Boolean);
+  }, [detalhesCesta]);
+
+  // ── Estoque atualizado via view_estoque_atual ──
+  const { data: estoqueAtualModal = [] } = useQuery<{ id: string; qtd_estoque: number }[]>({
+    queryKey: ['view_estoque_atual_modal', produtoIdsModal],
+    queryFn: async () => {
+      if (!produtoIdsModal.length) return [];
+      const { data, error } = await supabase
+        .from('view_estoque_atual')
+        .select('id, qtd_estoque')
+        .in('id', produtoIdsModal);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: produtoIdsModal.length > 0,
+  });
+
+  // ── Map produto_id → qtd_estoque ──
+  const estoqueMapModal = useMemo(() => {
+    const map: Record<string, number> = {};
+    estoqueAtualModal.forEach(e => { map[e.id] = e.qtd_estoque; });
+    return map;
+  }, [estoqueAtualModal]);
+
+  // ── Máximo de cestas que o estoque permite montar ──
+  const maxCestasModal = useMemo(() => {
+    if (!detalhesCesta?.itens?.length) return 0;
+    let max = Infinity;
+    for (const item of detalhesCesta.itens) {
+      const prodId = item.produto?.id;
+      const estoque = (prodId ? estoqueMapModal[prodId] : undefined) ?? item.produto?.qtd_estoque ?? 0;
+      const possivel = Math.floor(estoque / item.quantidade);
+      if (possivel < max) max = possivel;
+    }
+    return max === Infinity ? 0 : max;
+  }, [detalhesCesta, estoqueMapModal]);
+
+  // Ajusta qtdEntrega se ultrapassar o máximo disponível
+  useEffect(() => {
+    if (maxCestasModal > 0 && qtdEntrega > maxCestasModal) {
+      setQtdEntrega(maxCestasModal);
+    }
+  }, [maxCestasModal, qtdEntrega]);
 
   useEffect(() => {
     let filtered = cestas;
@@ -97,6 +147,18 @@ const CestasVendedor: React.FC = () => {
 
   const handleConfirmarEntrega = async () => {
     if (!modalEntrega || qtdEntrega <= 0) return;
+
+    // Validação client-side antes de chamar a RPC
+    if (maxCestasModal === 0) {
+      toast.error('Estoque insuficiente para montar ao menos 1 cesta.');
+      return;
+    }
+    if (qtdEntrega > maxCestasModal) {
+      toast.error(`Estoque permite no máximo ${maxCestasModal} cesta(s).`);
+      setQtdEntrega(maxCestasModal);
+      return;
+    }
+
     try {
       await entregarCestasMutation.mutateAsync({
         administrador_id: adminId || user?.id || '',
@@ -212,7 +274,6 @@ const CestasVendedor: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          {/* ✅ ALTERADO */}
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Cestas dos Vendedores</h1>
           <p className="text-gray-600 dark:text-gray-400">Cestas distribuídas aos vendedores</p>
         </div>
@@ -222,7 +283,6 @@ const CestasVendedor: React.FC = () => {
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 gap-2 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
           >
             <PackagePlus className="w-4 h-4" />
-            {/* ✅ ALTERADO */}
             Modelos de Cesta
           </button>
           <button 
@@ -230,7 +290,6 @@ const CestasVendedor: React.FC = () => {
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
           >
             <Plus className="w-4 h-4" />
-            {/* ✅ ALTERADO */}
             <span>Emitir Cesta</span>
           </button>
         </div>
@@ -381,12 +440,16 @@ const CestasVendedor: React.FC = () => {
                               Editar
                             </DropdownMenuItem>
                           )}
-                          <DropdownMenuItem onClick={() => setModalEntrega({
-                            cestaId: cesta.id,
-                            cestaNome: cesta.cesta_nome,
-                            vendedorId: cesta.vendedor_id,
-                            quantidadeAtual: cesta.quantidade_disponivel ?? 0,
-                          })}>
+                          <DropdownMenuItem onClick={() => {
+                            setQtdEntrega(1);
+                            setObsEntrega('');
+                            setModalEntrega({
+                              cestaId: cesta.id,
+                              cestaNome: cesta.cesta_nome,
+                              vendedorId: cesta.vendedor_id,
+                              quantidadeAtual: cesta.quantidade_disponivel ?? 0,
+                            });
+                          }}>
                             <Package className="w-4 h-4 mr-2 text-blue-500" />
                             Entregar Cestas
                           </DropdownMenuItem>
@@ -419,7 +482,7 @@ const CestasVendedor: React.FC = () => {
             <p className="text-gray-500 dark:text-gray-400 mb-6">
               {searchTerm || statusFilter !== 'todos'
                 ? 'Tente ajustar os filtros de busca.'
-                : 'Comece emitindo a primeira cesta para um vendedor.'  /* ✅ ALTERADO */
+                : 'Comece emitindo a primeira cesta para um vendedor.'
               }
             </p>
             {!searchTerm && statusFilter === 'todos' && (
@@ -428,7 +491,6 @@ const CestasVendedor: React.FC = () => {
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors mx-auto"
               >
                 <Plus className="w-4 h-4" />
-                {/* ✅ ALTERADO */}
                 <span>Emitir Primeira Cesta</span>
               </button>
             )}
@@ -525,6 +587,7 @@ const CestasVendedor: React.FC = () => {
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Categoria</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Quantidade</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Preço Unit.</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Estoque</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -552,6 +615,9 @@ const CestasVendedor: React.FC = () => {
                               </td>
                               <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                                 R$ {(item.produto?.preco_unt || 0).toFixed(2)}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                                {item.produto?.qtd_estoque ?? 0}
                               </td>
                             </tr>
                           ))
@@ -629,11 +695,32 @@ const CestasVendedor: React.FC = () => {
                   <p className="text-xs text-gray-500 dark:text-gray-400">{modalEntrega.cestaNome}</p>
                 </div>
               </div>
-              <button onClick={() => { setModalEntrega(null); setQtdEntrega(1); }} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+              <button onClick={() => { setModalEntrega(null); setQtdEntrega(1); setObsEntrega(''); }} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
                 <X size={20} className="text-gray-500" />
               </button>
             </div>
             <div className="p-6 space-y-6">
+
+              {/* Aviso de estoque zerado */}
+              {detalhesCesta && maxCestasModal === 0 && (
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                  <p className="text-sm text-red-700 dark:text-red-300 font-medium">
+                    Estoque insuficiente para montar ao menos 1 cesta completa.
+                  </p>
+                </div>
+              )}
+
+              {/* Aviso de limite */}
+              {detalhesCesta && maxCestasModal > 0 && (
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-blue-500 shrink-0" />
+                  <p className="text-sm text-blue-700 dark:text-blue-300">
+                    Estoque permite até <span className="font-bold">{maxCestasModal}</span> cesta(s) completa(s).
+                  </p>
+                </div>
+              )}
+
               <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mt-0.5" />
@@ -646,7 +733,7 @@ const CestasVendedor: React.FC = () => {
                           <thead className="bg-gray-50 dark:bg-gray-700/50 sticky top-0">
                             <tr>
                               <th className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 uppercase">Produto</th>
-                              <th className="px-3 py-2 text-right text-[10px] font-medium text-gray-500 uppercase">Qtd</th>
+                              <th className="px-3 py-2 text-right text-[10px] font-medium text-gray-500 uppercase">Necessário</th>
                               <th className="px-3 py-2 text-right text-[10px] font-medium text-gray-500 uppercase">Estoque</th>
                               <th className="px-3 py-2 text-center text-[10px] font-medium text-gray-500 uppercase">Status</th>
                             </tr>
@@ -654,7 +741,8 @@ const CestasVendedor: React.FC = () => {
                           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                             {detalhesCesta.itens.map((item: any) => {
                               const necessario = item.quantidade * qtdEntrega;
-                              const disponivel = item.produto.qtd_estoque || 0;
+                              // Usa estoque da view; fallback para campo estático
+                              const disponivel = (item.produto?.id ? estoqueMapModal[item.produto.id] : undefined) ?? item.produto?.qtd_estoque ?? 0;
                               const temEstoque = disponivel >= necessario;
                               return (
                                 <tr key={item.produto.id}>
@@ -679,22 +767,44 @@ const CestasVendedor: React.FC = () => {
                   </div>
                 </div>
               </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Quantidade de Cestas a Entregar *
+                  {maxCestasModal > 0 && (
+                    <span className="ml-2 text-xs font-normal text-gray-400 dark:text-gray-500">
+                      (máx: {maxCestasModal})
+                    </span>
+                  )}
                 </label>
                 <div className="flex items-center gap-4">
-                  <button onClick={() => setQtdEntrega(Math.max(1, qtdEntrega - 1))} className="w-10 h-10 flex items-center justify-center rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700">-</button>
+                  <button
+                    onClick={() => setQtdEntrega(prev => Math.max(1, prev - 1))}
+                    disabled={qtdEntrega <= 1}
+                    className="w-10 h-10 flex items-center justify-center rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >-</button>
                   <input
                     type="number"
                     min="1"
+                    max={maxCestasModal > 0 ? maxCestasModal : undefined}
                     className="flex-1 text-center py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-lg font-bold bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                     value={qtdEntrega}
-                    onChange={(e) => setQtdEntrega(Math.max(1, parseInt(e.target.value) || 0))}
+                    onChange={(e) => {
+                      const val = Math.max(1, parseInt(e.target.value) || 1);
+                      setQtdEntrega(maxCestasModal > 0 ? Math.min(val, maxCestasModal) : val);
+                    }}
                   />
-                  <button onClick={() => setQtdEntrega(qtdEntrega + 1)} className="w-10 h-10 flex items-center justify-center rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700">+</button>
+                  <button
+                    onClick={() => {
+                      if (maxCestasModal > 0 && qtdEntrega >= maxCestasModal) return;
+                      setQtdEntrega(prev => prev + 1);
+                    }}
+                    disabled={maxCestasModal > 0 && qtdEntrega >= maxCestasModal}
+                    className="w-10 h-10 flex items-center justify-center rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                >+</button>
                 </div>
               </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Observação (opcional)</label>
                 <input
@@ -707,12 +817,15 @@ const CestasVendedor: React.FC = () => {
               </div>
             </div>
             <div className="flex gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
-              <button onClick={() => { setModalEntrega(null); setQtdEntrega(1); }} className="flex-1 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+              <button
+                onClick={() => { setModalEntrega(null); setQtdEntrega(1); setObsEntrega(''); }}
+                className="flex-1 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
                 Cancelar
               </button>
               <button
                 onClick={handleConfirmarEntrega}
-                disabled={entregarCestasMutation.isPending || qtdEntrega <= 0}
+                disabled={entregarCestasMutation.isPending || qtdEntrega <= 0 || maxCestasModal === 0}
                 className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
               >
                 {entregarCestasMutation.isPending ? <span>Registrando...</span> : <><Package size={16} /> Confirmar Entrega</>}

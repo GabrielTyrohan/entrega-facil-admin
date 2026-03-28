@@ -8,9 +8,11 @@ import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../utils/currencyUtils';
 import { toast } from '../utils/toast';
 
+
 // ─────────────────────────────────────────────────────────────
 // Tipos
 // ─────────────────────────────────────────────────────────────
+
 
 interface ItemCestaBase {
   id: string;
@@ -32,6 +34,7 @@ interface ItemCestaBase {
   }[];
 }
 
+
 interface CestaBase {
   id: string;
   administrador_id: string;
@@ -41,6 +44,7 @@ interface CestaBase {
   ativo: boolean;
   cestas_base_itens: ItemCestaBase[];
 }
+
 
 interface Vendedor {
   id: string;
@@ -56,19 +60,23 @@ interface Vendedor {
   updated_at: string;
 }
 
+
 // ─────────────────────────────────────────────────────────────
 // Componente
 // ─────────────────────────────────────────────────────────────
+
 
 const NovaCesta: React.FC = () => {
   const navigate = useNavigate();
   const { user, adminId } = useAuth();
   const targetId = adminId || user?.id;
 
+
   // ── Vendedores ──
   const { data: vendedores = [], isLoading: loadingVendedores } = useVendedoresByAdmin(targetId || '', {
     enabled: !!targetId
   }) as { data: Vendedor[]; isLoading: boolean };
+
 
   // ── Cestas Base ──
   const { data: cestasBase = [], isLoading: loadingCestas } = useQuery<CestaBase[]>({
@@ -94,7 +102,7 @@ const NovaCesta: React.FC = () => {
         .eq('administrador_id', targetId!)
         .eq('ativo', true)
         .order('nome');
-      
+
       if (error) {
         console.error('Erro query cestas_base:', JSON.stringify(error));
         throw error;
@@ -104,6 +112,43 @@ const NovaCesta: React.FC = () => {
     enabled: !!targetId
   });
 
+
+  // ── IDs de todos os produtos presentes nas cestas ──
+  const produtoIdsNasCestas = useMemo(() => {
+    const ids = new Set<string>();
+    cestasBase.forEach(cesta =>
+      cesta.cestas_base_itens.forEach(item =>
+        ids.add(item.produto_cadastrado_id)
+      )
+    );
+    return Array.from(ids);
+  }, [cestasBase]);
+
+
+  // ── Estoque atualizado via view_estoque_atual ──
+  const { data: estoqueAtual = [] } = useQuery<{ id: string; qtd_estoque: number }[]>({
+    queryKey: ['view_estoque_atual', produtoIdsNasCestas],
+    queryFn: async () => {
+      if (!produtoIdsNasCestas.length) return [];
+      const { data, error } = await supabase
+        .from('view_estoque_atual')
+        .select('id, qtd_estoque')
+        .in('id', produtoIdsNasCestas);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: produtoIdsNasCestas.length > 0
+  });
+
+
+  // ── Map produto_id → qtd_estoque para acesso O(1) ──
+  const estoqueMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    estoqueAtual.forEach(e => { map[e.id] = e.qtd_estoque; });
+    return map;
+  }, [estoqueAtual]);
+
+
   // ── Estados do formulário ──
   const [cestaSelecionadaId, setCestaSelecionadaId] = useState<string>('');
   const [vendedorSelecionado, setVendedorSelecionado] = useState<string>('');
@@ -111,10 +156,12 @@ const NovaCesta: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
+
   // Cesta base atualmente selecionada (objeto completo)
   const cestaSelecionada = cestasBase.find(c => c.id === cestaSelecionadaId);
 
-  // ── Cálculo do máximo de cestas com base no estoque ──
+
+  // ── Cálculo do máximo de cestas com base no estoque atualizado ──
   const { maxCestasDisponivel, itemGargalo } = useMemo(() => {
     if (!cestaSelecionada?.cestas_base_itens?.length)
       return { maxCestasDisponivel: 0, itemGargalo: null };
@@ -123,13 +170,12 @@ const NovaCesta: React.FC = () => {
     let gargalo: string | null = null;
 
     for (const item of cestaSelecionada.cestas_base_itens) {
-      const prod = Array.isArray(item.produto)
-        ? item.produto[0]
-        : item.produto;
+      const prod = Array.isArray(item.produto) ? item.produto[0] : item.produto;
 
-      const possivel = Math.floor(
-        (prod?.qtd_estoque ?? 0) / item.quantidade
-      );
+      // Usa o estoque da view_estoque_atual; fallback para o campo estático
+      const estoqueReal = estoqueMap[item.produto_cadastrado_id] ?? prod?.qtd_estoque ?? 0;
+
+      const possivel = Math.floor(estoqueReal / item.quantidade);
       if (possivel < max) {
         max = possivel;
         gargalo = prod?.produto_nome ?? null;
@@ -140,7 +186,8 @@ const NovaCesta: React.FC = () => {
       maxCestasDisponivel: max === Infinity ? 0 : max,
       itemGargalo: gargalo
     };
-  }, [cestaSelecionada]);
+  }, [cestaSelecionada, estoqueMap]);
+
 
   // Ajusta quantidade automaticamente se ultrapassar o máximo
   useEffect(() => {
@@ -149,11 +196,13 @@ const NovaCesta: React.FC = () => {
     }
   }, [maxCestasDisponivel]);
 
+
   // Reseta quantidade ao trocar cesta
   useEffect(() => {
     setQuantidadeParaVendedor(1);
     setErrors({});
   }, [cestaSelecionadaId]);
+
 
   // ── Submit ──
   const handleSubmit = async (e: React.FormEvent) => {
@@ -203,9 +252,11 @@ const NovaCesta: React.FC = () => {
     }
   };
 
+
   // ─────────────────────────────────────────────────────────────
   // Render
   // ─────────────────────────────────────────────────────────────
+
 
   return (
     <div className="space-y-6">
@@ -408,7 +459,9 @@ const NovaCesta: React.FC = () => {
                     : item.produto || {};
                   const preco = prod?.preco_unt || 0;
                   const subtotal = preco * item.quantidade;
-                  const estoque = prod?.qtd_estoque || 0;
+
+                  // Usa o estoque da view_estoque_atual; fallback para o campo estático
+                  const estoque = estoqueMap[item.produto_cadastrado_id] ?? prod?.qtd_estoque ?? 0;
 
                   return (
                     <div
@@ -497,5 +550,6 @@ const NovaCesta: React.FC = () => {
     </div>
   );
 };
+
 
 export default NovaCesta;
