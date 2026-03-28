@@ -3,10 +3,9 @@ const path = require('path');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
 
-// ✅ Detecção mais robusta de ambiente de desenvolvimento
 const isDev = process.env.NODE_ENV === 'development' 
            || process.env.ELECTRON_IS_DEV === 'true'
-           || !app.isPackaged; // fallback garantido: false só em build final
+           || !app.isPackaged;
 
 let mainWindow;
 
@@ -19,11 +18,13 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
+    show: false, // ✅ Evita flash e foco instável na inicialização
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: true,
       allowRunningInsecureContent: false,
+      backgroundThrottling: false,
     },
     icon: path.join(__dirname, '../public/icon.png'),
     title: 'Entrega Fácil Admin',
@@ -32,16 +33,30 @@ function createWindow() {
   if (isDev) {
     const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
     mainWindow.loadURL(devServerUrl);
-    mainWindow.webContents.openDevTools();
-
-    // ✅ Log para confirmar que entrou em modo dev
+    // ✅ DevTools em janela separada para não conflitar com foco
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
     log.info(`[DEV] Carregando: ${devServerUrl}`);
   } else {
-    // ✅ Caminho correto para o build de produção
     const prodPath = path.join(__dirname, '../dist/index.html');
     mainWindow.loadFile(prodPath);
     log.info(`[PROD] Carregando arquivo: ${prodPath}`);
   }
+
+  // ✅ Só exibe a janela quando o conteúdo estiver completamente carregado
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    mainWindow.focus();
+  });
+
+  // ✅ Reativa foco do webContents ao focar a janela
+  mainWindow.on('focus', () => {
+    mainWindow.webContents.focus();
+  });
+
+  // ✅ Reativa foco ao restaurar da minimização
+  mainWindow.on('restore', () => {
+    mainWindow.webContents.focus();
+  });
 
   mainWindow.on('closed', () => { mainWindow = null; });
 }

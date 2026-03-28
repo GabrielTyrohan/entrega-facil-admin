@@ -6,7 +6,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { toast } from '@/utils/toast';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, AlertTriangle, Calendar, CheckCircle2, Edit, Eye, Filter, Loader2, MoreHorizontal, Package, PackagePlus, Plus, Search, ShoppingBasket, Trash2, User, X } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -15,13 +15,14 @@ import { CestaData, useCestaDetalhes, useCestas, useEntregarCestas } from '../ho
 import { supabase } from '../lib/supabase';
 import { CestaService } from '../services/cestaService';
 
+
 type Cesta = CestaData;
 
 const CestasVendedor: React.FC = () => {
   const navigate = useNavigate();
   const { user, adminId } = useAuth();
   const entregarCestasMutation = useEntregarCestas();
-  
+  const queryClient = useQueryClient();
   const { data: cestas = [], isLoading, error, refetch } = useCestas();
   const [filteredCestas, setFilteredCestas] = useState<Cesta[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -146,39 +147,42 @@ const CestasVendedor: React.FC = () => {
   };
 
   const handleConfirmarEntrega = async () => {
-    if (!modalEntrega || qtdEntrega <= 0) return;
+  if (!modalEntrega || qtdEntrega <= 0) return;
 
-    // Validação client-side antes de chamar a RPC
-    if (maxCestasModal === 0) {
-      toast.error('Estoque insuficiente para montar ao menos 1 cesta.');
-      return;
-    }
-    if (qtdEntrega > maxCestasModal) {
-      toast.error(`Estoque permite no máximo ${maxCestasModal} cesta(s).`);
-      setQtdEntrega(maxCestasModal);
-      return;
-    }
+  if (maxCestasModal === 0) {
+    toast.error('Estoque insuficiente para montar ao menos 1 cesta.');
+    return;
+  }
+  if (qtdEntrega > maxCestasModal) {
+    toast.error(`Estoque permite no máximo ${maxCestasModal} cesta(s).`);
+    setQtdEntrega(maxCestasModal);
+    return;
+  }
 
-    try {
-      await entregarCestasMutation.mutateAsync({
-        administrador_id: adminId || user?.id || '',
-        vendedor_id: modalEntrega.vendedorId,
-        cesta_id: modalEntrega.cestaId,
-        quantidade: qtdEntrega,
-        usuario_id: user?.id,
-        usuario_nome: user?.email,
-        observacao: obsEntrega || undefined,
-      });
+  try {
+    await entregarCestasMutation.mutateAsync({
+      administrador_id: adminId || user?.id || '',
+      vendedor_id: modalEntrega.vendedorId,
+      cesta_id: modalEntrega.cestaId,
+      quantidade: qtdEntrega,
+      usuario_id: user?.id,
+      usuario_nome: user?.email,
+      observacao: obsEntrega || undefined,
+    });
 
-      toast.success(`${qtdEntrega} cesta(s) entregue(s) com sucesso!`);
-      setModalEntrega(null);
-      setQtdEntrega(1);
-      setObsEntrega('');
-      await refetch();
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao registrar entrega.');
-    }
-  };
+    toast.success(`${qtdEntrega} cesta(s) entregue(s) com sucesso!`);
+
+    // ✅ Invalida o cache do estoque para forçar refetch com dados atualizados
+    await queryClient.invalidateQueries({ queryKey: ['view_estoque_atual_modal'] });
+
+    setModalEntrega(null);
+    setQtdEntrega(1);
+    setObsEntrega('');
+    await refetch();
+  } catch (err: any) {
+    toast.error(err.message || 'Erro ao registrar entrega.');
+  }
+};
 
   const getStatusColor = (status: string) => {
     switch (status) {
