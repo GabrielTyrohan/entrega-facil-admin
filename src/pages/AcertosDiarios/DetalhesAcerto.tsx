@@ -90,14 +90,19 @@ const DetalheAcerto = () => {
   const saldoFinal    = totalRecebido - valorEsperado;
 
   const handleAdicionarLancamento = async () => {
-    if (novoLancamento.valor <= 0) {
-      toast.error('Informe um valor válido');
-      return;
-    }
-    if (!user) return;
+  if (novoLancamento.valor <= 0) {
+    toast.error('Informe um valor válido');
+    return;
+  }
+  if (!user) return;
 
-    try {
-      await createLancamento.mutateAsync({
+  const novoSaldo = saldoFinal +
+    (novoLancamento.tipo === 'recebimento' ? novoLancamento.valor : -novoLancamento.valor);
+
+  try {
+    // ✅ Executa as duas mutations em paralelo — evita dois re-renders sequenciais
+    await Promise.all([
+      createLancamento.mutateAsync({
         acerto_id: id!,
         tipo: novoLancamento.tipo,
         forma: novoLancamento.forma,
@@ -106,54 +111,56 @@ const DetalheAcerto = () => {
         criado_por_id: user.id,
         criado_por_nome: user.user_metadata?.nome || user.email || 'Usuário',
         criado_por_tipo: 'admin',
-      });
-
-      const novoSaldo = saldoFinal +
-        (novoLancamento.tipo === 'recebimento' ? novoLancamento.valor : -novoLancamento.valor);
-
-      await atualizarStatus.mutateAsync({
+      }),
+      atualizarStatus.mutateAsync({
         acertoId: id!,
         saldoReal: novoSaldo,
-        conferido_por: user.id
-      });
+        conferido_por: user.id,
+      }),
+    ]);
 
-      if (novoSaldo === 0) {
-        toast.success('✅ Acerto fechado! Valor bateu certinho — aprovado automaticamente.');
-      } else if (novoSaldo > 0) {
-        toast.success(`Lançamento adicionado! Ainda sobram ${formatCurrency(novoSaldo)}.`);
-      } else {
-        toast.success(`Lançamento adicionado! Ainda faltam ${formatCurrency(Math.abs(novoSaldo))}.`);
-      }
-
-      setNovoLancamento({ tipo: 'recebimento', forma: 'Dinheiro', valor: 0, observacao: '' });
-      setValorRaw('');
-    } catch {
-      toast.error('Erro ao adicionar lançamento');
+    if (novoSaldo === 0) {
+      toast.success('✅ Acerto fechado! Valor bateu certinho — aprovado automaticamente.');
+    } else if (novoSaldo > 0) {
+      toast.success(`Lançamento adicionado! Ainda sobram ${formatCurrency(novoSaldo)}.`);
+    } else {
+      toast.success(`Lançamento adicionado! Ainda faltam ${formatCurrency(Math.abs(novoSaldo))}.`);
     }
-  };
+
+    setNovoLancamento({ tipo: 'recebimento', forma: 'Dinheiro', valor: 0, observacao: '' });
+    setValorRaw('');
+  } catch {
+    toast.error('Erro ao adicionar lançamento');
+  }
+};
 
   const handleRemoverLancamento = async (lancamentoId: string) => {
-    try {
-      const lancamento = lancamentos.find(l => l.id === lancamentoId);
+  // ✅ Captura user antes de qualquer await — evita user ser null após re-render
+  const currentUser = user;
+  if (!currentUser) return;
 
-      await deleteLancamento.mutateAsync({ id: lancamentoId, acerto_id: id! });
+  try {
+    const lancamento = lancamentos.find(l => l.id === lancamentoId);
 
-      if (lancamento) {
-        const saldoAposRemocao = saldoFinal -
-          (lancamento.tipo === 'recebimento' ? lancamento.valor : -lancamento.valor);
+    const saldoAposRemocao = lancamento
+      ? saldoFinal - (lancamento.tipo === 'recebimento' ? lancamento.valor : -lancamento.valor)
+      : saldoFinal;
 
-        await atualizarStatus.mutateAsync({
-          acertoId: id!,
-          saldoReal: saldoAposRemocao,
-          conferido_por: user?.id || ''
-        });
-      }
+    // ✅ Também em paralelo
+    await Promise.all([
+      deleteLancamento.mutateAsync({ id: lancamentoId, acerto_id: id! }),
+      atualizarStatus.mutateAsync({
+        acertoId: id!,
+        saldoReal: saldoAposRemocao,
+        conferido_por: currentUser.id,
+      }),
+    ]);
 
-      toast.success('Lançamento removido');
-    } catch {
-      toast.error('Erro ao remover lançamento');
-    }
-  };
+    toast.success('Lançamento removido');
+  } catch {
+    toast.error('Erro ao remover lançamento');
+  }
+};
 
   if (isLoading) {
     return (

@@ -1,8 +1,9 @@
-import { useSupabaseQuery, CACHE_KEYS } from '../lib/supabaseCache';
-import { useQueryClient, useMutation } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
-import { handleSupabaseError } from '@/utils/supabaseErrorHandler';
 import { useAuth } from '@/contexts/AuthContext';
+import { handleSupabaseError } from '@/utils/supabaseErrorHandler';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '../lib/supabase';
+import { CACHE_KEYS, useSupabaseQuery } from '../lib/supabaseCache';
+
 
 export interface Pagamento {
   id: string;
@@ -36,7 +37,7 @@ export interface Pagamento {
   };
 }
 
-// Hook para listar todos os pagamentos
+
 export const usePagamentos = (options?: {
   enabled?: boolean;
   entrega_id?: string;
@@ -66,16 +67,14 @@ export const usePagamentos = (options?: {
     `)
     .order('data_pagamento', { ascending: false });
 
-  // Filtro por administrador (obrigatório para segurança)
   if (targetAdminId) {
     query = query.eq('entregas.vendedores.administrador_id', targetAdminId);
   }
 
-  // Filtros opcionais
   if (options?.entrega_id) {
     query = query.eq('entrega_id', options.entrega_id);
   }
-  
+
   if (options?.vendedor_id) {
     query = query.eq('entregas.vendedor_id', options.vendedor_id);
   }
@@ -93,7 +92,7 @@ export const usePagamentos = (options?: {
   });
 };
 
-// Hook para buscar pagamento por ID
+
 export const usePagamento = (id: string, options?: { enabled?: boolean }) => {
   const query = supabase
     .from('pagamentos')
@@ -117,7 +116,7 @@ export const usePagamento = (id: string, options?: { enabled?: boolean }) => {
   });
 };
 
-// Hook para pagamentos por entrega
+
 export const usePagamentosPorEntrega = (
   entrega_id: string,
   options?: { enabled?: boolean }
@@ -133,10 +132,10 @@ export const usePagamentosPorEntrega = (
   });
 };
 
-// Hook para criar pagamento
+
 export const useCreatePagamento = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async (pagamento: Omit<Pagamento, 'id' | 'created_at' | 'updated_at'>) => {
       const { data, error } = await supabase
@@ -144,25 +143,26 @@ export const useCreatePagamento = () => {
         .insert(pagamento)
         .select()
         .single();
-      
-      if (error) {
-        throw new Error(handleSupabaseError(error));
-      }
-      
+
+      if (error) throw new Error(handleSupabaseError(error));
+
       return data as Pagamento;
     },
+    // ✅ CORRIGIDO — 3 invalidações agrupadas em Promise.all
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] });
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.VENDEDORES] });
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] }),
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] }),
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.VENDEDORES] }),
+      ]);
     }
   });
 };
 
-// Hook para atualizar pagamento
+
 export const useUpdatePagamento = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<Pagamento> & { id: string }) => {
       const { data, error } = await supabase
@@ -171,43 +171,45 @@ export const useUpdatePagamento = () => {
         .eq('id', id)
         .select()
         .single();
-      
-      if (error) {
-        throw new Error(handleSupabaseError(error));
-      }
-      
+
+      if (error) throw new Error(handleSupabaseError(error));
+
       return data as Pagamento;
     },
+    // ✅ CORRIGIDO — 2 invalidações agrupadas em Promise.all
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] });
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] }),
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] }),
+      ]);
     }
   });
 };
 
-// Hook para deletar pagamento
+
 export const useDeletePagamento = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async ({ id }: { id: string }) => {
       const { error } = await supabase
         .from('pagamentos')
         .delete()
         .eq('id', id);
-      
-      if (error) {
-        throw new Error(handleSupabaseError(error));
-      }
+
+      if (error) throw new Error(handleSupabaseError(error));
     },
+    // ✅ CORRIGIDO — 2 invalidações agrupadas em Promise.all
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] });
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] }),
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] }),
+      ]);
     }
   });
 };
 
-// Hook para estatísticas de pagamentos
+
 export const useEstatisticasPagamentos = (
   administrador_id?: string,
   options?: { enabled?: boolean }

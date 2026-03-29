@@ -1,22 +1,26 @@
 import { toast } from '@/utils/toast';
 import { ArrowLeft, FileText, Save, Upload, X } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react'; // ✅ useEffect removido do import
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCreateLancamento, useUploadComprovante } from '../../hooks/useFluxoCaixa';
+
 
 const CATEGORIAS = {
   entrada: ['Venda', 'Acerto', 'Outros'],
   saida: ['Fornecedor', 'Boleto', 'Salário', 'Combustível', 'Outros']
 };
 
+
 const FORMAS_PAGAMENTO = ['Dinheiro', 'PIX', 'Boleto', 'Cartão', 'Transferência'];
+
 
 const LancamentoCaixa = () => {
   const navigate = useNavigate();
   const { user, adminId } = useAuth();
   const createMutation = useCreateLancamento();
   const uploadMutation = useUploadComprovante();
+
 
   const [tipo, setTipo] = useState<'entrada' | 'saida'>('saida');
   const [formData, setFormData] = useState({
@@ -29,16 +33,20 @@ const LancamentoCaixa = () => {
     status: 'pendente' as 'pendente' | 'pago' | 'cancelado'
   });
 
+
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Reset categoria quando muda o tipo
-  useEffect(() => {
+
+  // ✅ CORRIGIDO — useEffect removido, categoria resetada diretamente no onChange do radio
+  const handleTipoChange = (novoTipo: 'entrada' | 'saida') => {
+    setTipo(novoTipo);
     setFormData(prev => ({
       ...prev,
-      categoria: CATEGORIAS[tipo][0]
+      categoria: CATEGORIAS[novoTipo][0]
     }));
-  }, [tipo]);
+  };
+
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -46,10 +54,15 @@ const LancamentoCaixa = () => {
     }
   };
 
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!user?.id || !adminId) return;
+
+    // ✅ CORRIGIDO — user capturado antes dos awaits para evitar race condition
+    const currentUserId = user.id;
+    const currentAdminId = adminId;
 
     const valorNumerico = parseFloat(formData.valor);
     if (isNaN(valorNumerico) || valorNumerico <= 0) {
@@ -69,8 +82,8 @@ const LancamentoCaixa = () => {
         setIsUploading(true);
         const fileExt = file.name.split('.').pop();
         const fileName = `${Math.random()}.${fileExt}`;
-        const filePath = `${adminId}/${fileName}`;
-        
+        const filePath = `${currentAdminId}/${fileName}`;
+
         try {
           anexoUrl = await uploadMutation.mutateAsync({ file, path: filePath });
         } catch (error) {
@@ -82,8 +95,8 @@ const LancamentoCaixa = () => {
       }
 
       await createMutation.mutateAsync({
-        administrador_id: adminId,
-        lancado_por: user.id,
+        administrador_id: currentAdminId,  // ✅ usa valor capturado antes dos awaits
+        lancado_por: currentUserId,         // ✅ usa valor capturado antes dos awaits
         tipo,
         categoria: formData.categoria,
         descricao: formData.descricao,
@@ -102,6 +115,7 @@ const LancamentoCaixa = () => {
     }
   };
 
+
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
@@ -117,6 +131,7 @@ const LancamentoCaixa = () => {
         </div>
       </div>
 
+
       <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 space-y-6">
         {/* Tipo de Lançamento */}
         <div className="flex gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
@@ -125,7 +140,7 @@ const LancamentoCaixa = () => {
               type="radio"
               name="tipo"
               checked={tipo === 'entrada'}
-              onChange={() => setTipo('entrada')}
+              onChange={() => handleTipoChange('entrada')} // ✅ usa handler unificado
               className="w-4 h-4 text-green-600 focus:ring-green-500"
             />
             <span className="font-medium text-gray-900 dark:text-white">Entrada</span>
@@ -135,12 +150,13 @@ const LancamentoCaixa = () => {
               type="radio"
               name="tipo"
               checked={tipo === 'saida'}
-              onChange={() => setTipo('saida')}
+              onChange={() => handleTipoChange('saida')} // ✅ usa handler unificado
               className="w-4 h-4 text-red-600 focus:ring-red-500"
             />
             <span className="font-medium text-gray-900 dark:text-white">Saída</span>
           </label>
         </div>
+
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Valor */}
@@ -159,6 +175,7 @@ const LancamentoCaixa = () => {
             />
           </div>
 
+
           {/* Categoria */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -175,6 +192,7 @@ const LancamentoCaixa = () => {
             </select>
           </div>
 
+
           {/* Data Lançamento */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -188,6 +206,7 @@ const LancamentoCaixa = () => {
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             />
           </div>
+
 
           {/* Data Vencimento (Condicional) */}
           {(tipo === 'saida' && formData.categoria === 'Boleto') && (
@@ -205,6 +224,7 @@ const LancamentoCaixa = () => {
             </div>
           )}
 
+
           {/* Forma de Pagamento */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -220,6 +240,7 @@ const LancamentoCaixa = () => {
               ))}
             </select>
           </div>
+
 
           {/* Status */}
           <div>
@@ -238,6 +259,7 @@ const LancamentoCaixa = () => {
           </div>
         </div>
 
+
         {/* Descrição */}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -251,6 +273,7 @@ const LancamentoCaixa = () => {
             placeholder="Detalhes do lançamento..."
           />
         </div>
+
 
         {/* Anexo */}
         <div>
@@ -300,6 +323,7 @@ const LancamentoCaixa = () => {
           </div>
         </div>
 
+
         <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
           <button
             type="button"
@@ -321,5 +345,6 @@ const LancamentoCaixa = () => {
     </div>
   );
 };
+
 
 export default LancamentoCaixa;

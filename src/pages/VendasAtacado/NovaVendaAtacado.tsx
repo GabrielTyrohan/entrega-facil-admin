@@ -26,6 +26,7 @@ import { useVendedoresByAdmin } from '../../hooks/useVendedores';
 import { supabase } from '../../lib/supabase';
 import { applyCurrencyMask, currencyMaskToNumber, formatCurrency } from '../../utils/currencyUtils';
 
+
 const NovaVendaAtacado = () => {
   const navigate = useNavigate();
   const { user, adminId } = useAuth();
@@ -33,8 +34,8 @@ const NovaVendaAtacado = () => {
   const createVendaMutation = useCreateVendaAtacado();
   const createLancamentoMutation = useCreateLancamento();
 
-  // Form State
-  const [open, setOpen] = useState(false)
+
+  const [open, setOpen] = useState(false);
   const [clienteSearch, setClienteSearch] = useState('');
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
   const [vendedorId, setVendedorId] = useState('');
@@ -44,23 +45,20 @@ const NovaVendaAtacado = () => {
   const [itens, setItens] = useState<VendaAtacadoItem[]>([]);
   const [valorPago, setValorPago] = useState('');
 
-  // Item Addition State
   const [selectedProdutoId, setSelectedProdutoId] = useState('');
   const [qtd, setQtd] = useState(1);
   const [precoUnit, setPrecoUnit] = useState('');
 
-  // Queries
   const { data: vendedores } = useVendedoresByAdmin(targetId || '', { enabled: !!targetId });
-  
-  const { data: clientesData, isLoading: isLoadingClientes } = useClientesByAdmin(targetId || '', { 
+
+  const { data: clientesData, isLoading: isLoadingClientes } = useClientesByAdmin(targetId || '', {
     enabled: !!targetId,
     search: clienteSearch,
-    pageSize: 50 // Aumentado para melhor experiência no combobox
+    pageSize: 50
   });
 
   const { data: produtosData } = useListaCestas();
 
-  // Derived State
   const clientes = clientesData || [];
   const produtos = produtosData || [];
 
@@ -75,49 +73,34 @@ const NovaVendaAtacado = () => {
 
   const isPago = statusPagamento === 'pago';
 
-  // Effect: Calculate Data Pagamento
   useEffect(() => {
     if (!dataEntrega) return;
-    
+
     const entrega = new Date(dataEntrega);
     if (!isValid(entrega)) return;
 
-    // O pedido foi "30 dias por padrão", mas editável.
-    
-    // Se a data de entrega é alterada, vamos recalcular o vencimento com base na forma de pagamento selecionada
-    // Se a forma de pagamento é alterada, também recalculamos
-    
-    let dias = 30; // Padrão 30 dias para qualquer forma de pagamento não listada explicitamente abaixo
-    
+    let dias = 30;
+
     if (formaPagamento === 'Boleto 7 dias') {
       dias = 7;
     } else if (formaPagamento === 'Boleto 14 dias') {
       dias = 14;
     } else if (formaPagamento === 'Boleto 30 dias') {
       dias = 30;
-    } 
-    // Para 'Cheque', 'PIX', 'Dinheiro' ou outros, mantém o padrão de 30 dias conforme solicitado
-    // O usuário pode editar manualmente para data de hoje se for pagamento à vista
+    }
 
-    // Corrige problema de fuso horário criando a data com componentes locais
     const [year, month, day] = dataEntrega.split('-').map(Number);
-    // Nota: O mês no construtor Date é base 0 (0-11), mas aqui usamos base 1 e deixamos o Date corrigir
-    // Ex: new Date(2026, 2, 24) = 24/03/2026 (Mês 2 = Março)
-    // Se month for 2 (fevereiro), month - 1 = 1 (fevereiro)
     const entregaDate = new Date(year, month - 1, day);
-    
+
     if (dias > 0) {
-      // Usa addDays do date-fns que lida corretamente com viradas de mês/ano
       const novaData = addDays(entregaDate, dias);
       setDataPagamento(format(novaData, 'yyyy-MM-dd'));
     } else {
-      setDataPagamento(dataEntrega); 
+      setDataPagamento(dataEntrega);
     }
   }, [dataEntrega, formaPagamento]);
 
-  // ✅ precoUnit is set directly in the onChange handler — no useEffect sync needed
 
-  // Handlers
   const handleAddItem = () => {
     if (!selectedProdutoId || !precoUnit || qtd <= 0) return;
 
@@ -125,7 +108,7 @@ const NovaVendaAtacado = () => {
     if (!produto) return;
 
     const preco = currencyMaskToNumber(precoUnit);
-    
+
     const newItem: VendaAtacadoItem = {
       produto_cadastrado_id: produto.id,
       descricao: produto.nome,
@@ -135,16 +118,16 @@ const NovaVendaAtacado = () => {
     };
 
     setItens([...itens, newItem]);
-    
-    // Reset item form
     setSelectedProdutoId('');
     setQtd(1);
     setPrecoUnit('');
   };
 
+
   const handleRemoveItem = (index: number) => {
     setItens(itens.filter((_, i) => i !== index));
   };
+
 
   const handleSave = async () => {
     if (!user?.id || !selectedCliente || !vendedorId || itens.length === 0) {
@@ -152,12 +135,16 @@ const NovaVendaAtacado = () => {
       return;
     }
 
+    // ✅ Captura user e adminId antes de qualquer await — evita race condition após re-renders
+    const currentUserId = user.id;
+    const currentAdminId = adminId || user.id;
+
     try {
       const vendaData = {
-  administrador_id: user.id,
-  cliente_id: selectedCliente.id,
-  vendedor_id: vendedorId,
-  data_entrega: dataEntrega,
+        administrador_id: currentAdminId,  // ✅ valor capturado
+        cliente_id: selectedCliente.id,
+        vendedor_id: vendedorId,
+        data_entrega: dataEntrega,
         data_pagamento: dataPagamento,
         forma_pagamento: formaPagamento as any,
         valor_pago: currencyMaskToNumber(valorPago),
@@ -165,14 +152,12 @@ const NovaVendaAtacado = () => {
         valor_total: totalVenda,
         pago: isPago,
         numero_produto: itens.map(item => item.produto_cadastrado_id).filter(Boolean) as string[],
-        itens,  
-
-  quantidade_total: itens.reduce((acc, item) => acc + item.quantidade, 0),
-  nome_cliente_cache: selectedCliente.tipo_pessoa === 'PJ'
-    ? (selectedCliente.responsavel_pj_nome || selectedCliente.nome)
-    : `${selectedCliente.nome} ${selectedCliente.sobrenome || ''}`.trim(),
-};
-
+        itens,
+        quantidade_total: itens.reduce((acc, item) => acc + item.quantidade, 0),
+        nome_cliente_cache: selectedCliente.tipo_pessoa === 'PJ'
+          ? (selectedCliente.responsavel_pj_nome || selectedCliente.nome)
+          : `${selectedCliente.nome} ${selectedCliente.sobrenome || ''}`.trim(),
+      };
 
       const novaVenda = await createVendaMutation.mutateAsync(vendaData);
 
@@ -193,11 +178,11 @@ const NovaVendaAtacado = () => {
         }
       }
 
-      // Integrar com Fluxo de Caixa (Lançamento de Entrada)
+      // Integrar com Fluxo de Caixa
       try {
         await createLancamentoMutation.mutateAsync({
-          administrador_id: adminId || user.id,
-          lancado_por: user.id,
+          administrador_id: currentAdminId,  // ✅ valor capturado
+          lancado_por: currentUserId,          // ✅ valor capturado
           tipo: 'entrada',
           categoria: 'Venda',
           descricao: `Venda Atacado #${novaVenda?.numero_pedido || 'N/A'} - ${selectedCliente.nome}`,
@@ -205,7 +190,7 @@ const NovaVendaAtacado = () => {
           data_lancamento: new Date().toISOString(),
           data_vencimento: dataPagamento || null,
           forma_pagamento: formaPagamento,
-          status: 'pendente', // Venda inicia como pendente
+          status: 'pendente',
           referencia_id: novaVenda?.id,
           referencia_tipo: 'venda'
         });
@@ -215,9 +200,8 @@ const NovaVendaAtacado = () => {
         toast.success('Venda realizada, mas houve erro ao criar lançamento financeiro.');
       }
 
-      navigate('/vendas-atacado'); 
+      navigate('/vendas-atacado');
     } catch (error: any) {
-      // Ignora erro PGRST204 se a venda foi salva (verificação adicional)
       if (error?.message?.includes('PGRST204') || error?.code === 'PGRST204') {
         toast.success('Venda realizada com sucesso!');
         navigate('/vendas-atacado');
@@ -228,13 +212,14 @@ const NovaVendaAtacado = () => {
     }
   };
 
+
   return (
     <div className="p-6 max-w-6xl mx-auto pb-24">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
-          <button 
-            onClick={() => navigate('/vendas-atacado')} 
+          <button
+            onClick={() => navigate('/vendas-atacado')}
             className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors text-gray-600 dark:text-gray-400"
           >
             <ArrowLeft size={24} />
@@ -246,17 +231,18 @@ const NovaVendaAtacado = () => {
         </div>
       </div>
 
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column: Form Info */}
+        {/* Left Column */}
         <div className="lg:col-span-2 space-y-6">
-          
+
           {/* Cliente & Vendedor */}
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
             <h2 className="text-lg font-semibold mb-6 flex items-center text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-3">
               <User size={20} className="mr-2 text-blue-600 dark:text-blue-400" />
               Dados da Venda
             </h2>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="relative">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cliente *</label>
@@ -269,7 +255,7 @@ const NovaVendaAtacado = () => {
                     >
                       {selectedCliente ? (
                         <span className="truncate">
-                          {selectedCliente.tipo_pessoa === 'PJ' 
+                          {selectedCliente.tipo_pessoa === 'PJ'
                             ? (selectedCliente.responsavel_pj_nome || selectedCliente.nome)
                             : `${selectedCliente.nome} ${selectedCliente.sobrenome || ''}`.trim()}
                         </span>
@@ -281,8 +267,8 @@ const NovaVendaAtacado = () => {
                   </PopoverTrigger>
                   <PopoverContent className="w-[400px] p-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-xl rounded-lg">
                     <Command shouldFilter={false} className="w-full">
-                      <CommandInput 
-                        placeholder="Buscar cliente..." 
+                      <CommandInput
+                        placeholder="Buscar cliente..."
                         value={clienteSearch}
                         onValueChange={setClienteSearch}
                         className="border-none focus:ring-0"
@@ -301,7 +287,7 @@ const NovaVendaAtacado = () => {
                               const displayName = cliente.tipo_pessoa === 'PJ'
                                 ? (cliente.responsavel_pj_nome || cliente.nome)
                                 : `${cliente.nome} ${cliente.sobrenome || ''}`.trim();
-                              
+
                               return (
                                 <CommandItem
                                   key={cliente.id}
@@ -311,7 +297,6 @@ const NovaVendaAtacado = () => {
                                     setOpen(false);
                                     setClienteSearch('');
                                   }}
-                                  // Impede que o clique roube o foco do input antes da seleção ocorrer
                                   onPointerDown={(e) => e.preventDefault()}
                                   className="cursor-pointer aria-selected:bg-blue-50 dark:aria-selected:bg-blue-900/20 px-4 py-2 !pointer-events-auto"
                                 >
@@ -356,13 +341,14 @@ const NovaVendaAtacado = () => {
             </div>
           </div>
 
+
           {/* Datas e Pagamento */}
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
             <h2 className="text-lg font-semibold mb-6 flex items-center text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-3">
               <Calendar size={20} className="mr-2 text-green-600 dark:text-green-400" />
               Pagamento e Entrega
             </h2>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Data de Entrega</label>
@@ -402,6 +388,7 @@ const NovaVendaAtacado = () => {
             </div>
           </div>
 
+
           {/* Itens */}
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
             <h2 className="text-lg font-semibold mb-6 flex items-center text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-3">
@@ -409,7 +396,6 @@ const NovaVendaAtacado = () => {
               Itens do Pedido
             </h2>
 
-            {/* Add Item Form */}
             <div className="flex flex-col md:flex-row gap-4 items-end mb-6 bg-gray-50 dark:bg-gray-700/30 p-5 rounded-xl border border-gray-100 dark:border-gray-700">
               <div className="flex-grow relative w-full md:w-auto">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Produto (Cesta)</label>
@@ -419,7 +405,6 @@ const NovaVendaAtacado = () => {
                   onChange={(e) => {
                     const id = e.target.value;
                     setSelectedProdutoId(id);
-                    // Set price directly — avoids a useEffect sync render cycle
                     if (id) {
                       const produto = produtos.find(p => p.id === id);
                       setPrecoUnit(produto ? applyCurrencyMask((produto.preco * 100).toFixed(0)) : '');
@@ -468,7 +453,6 @@ const NovaVendaAtacado = () => {
               </button>
             </div>
 
-            {/* Items List */}
             {itens.length > 0 ? (
               <div className="overflow-hidden border border-gray-200 dark:border-gray-700 rounded-xl">
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -510,7 +494,8 @@ const NovaVendaAtacado = () => {
           </div>
         </div>
 
-        {/* Right Column: Summary & Actions */}
+
+        {/* Right Column */}
         <div className="lg:col-span-1">
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 sticky top-6">
             <h2 className="text-lg font-semibold mb-6 text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-3">
@@ -532,7 +517,6 @@ const NovaVendaAtacado = () => {
               </div>
             </div>
 
-            { /* Valor Pago */ }
             <div className="p-4 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-600 mb-6 space-y-3">
               <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
                 <DollarSign size={16} className="text-green-500" />
@@ -545,7 +529,6 @@ const NovaVendaAtacado = () => {
                 value={valorPago}
                 onChange={(e) => setValorPago(applyCurrencyMask(e.target.value))}
               />
-              { /* Badge de status dinâmico */ }
               <div className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium ${
                 statusPagamento === 'pago'
                   ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
@@ -587,7 +570,7 @@ const NovaVendaAtacado = () => {
                   </>
                 )}
               </button>
-              
+
               <button
                 onClick={() => navigate('/vendas-atacado')}
                 className="w-full flex justify-center items-center px-4 py-3.5 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
@@ -601,5 +584,6 @@ const NovaVendaAtacado = () => {
     </div>
   );
 };
+
 
 export default NovaVendaAtacado;

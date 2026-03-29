@@ -1,10 +1,11 @@
-import { useQueryClient } from '@tanstack/react-query'; // ✅ ADICIONADO
+import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Calendar, CreditCard, FileText, Lock, Mail, MapPin, Phone, Save, User } from 'lucide-react';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { toast } from '../utils/toast';
+
 
 interface DadosBancarios {
   banco: string;
@@ -14,19 +15,23 @@ interface DadosBancarios {
   pix?: string;
 }
 
+
 const NovoVendedor: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const queryClient = useQueryClient(); // ✅ ADICIONADO
+  const queryClient = useQueryClient();
+
 
   const gerarSenhaAleatoria = (): string => {
     return Math.floor(100000 + Math.random() * 900000).toString();
   };
 
+
   const obterDataAtual = (): string => {
     const hoje = new Date();
     return hoje.toISOString().split('T')[0];
   };
+
 
   const [formData, setFormData] = useState({
     nome: '',
@@ -42,6 +47,7 @@ const NovoVendedor: React.FC = () => {
     status: true
   });
 
+
   const [dadosBancarios, setDadosBancarios] = useState<DadosBancarios>({
     banco: '',
     agencia: '',
@@ -50,7 +56,9 @@ const NovoVendedor: React.FC = () => {
     pix: ''
   });
 
+
   const [loading, setLoading] = useState(false);
+
 
   const formatTelefone = (value: string): string => {
     const numbers = value.replace(/\D/g, '').slice(0, 11);
@@ -59,12 +67,15 @@ const NovoVendedor: React.FC = () => {
     return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7)}`;
   };
 
+
   const formatAgencia = (value: string): string => value.replace(/\D/g, '').slice(0, 4);
+
 
   const formatConta = (value: string): string => {
     const numbers = value.replace(/\D/g, '').slice(0, 6);
     return numbers.length > 5 ? `${numbers.slice(0, 5)}-${numbers.slice(5)}` : numbers;
   };
+
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -80,6 +91,7 @@ const NovoVendedor: React.FC = () => {
     }
   };
 
+
   const handleBankDataChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     if (name === 'agencia') {
@@ -91,9 +103,13 @@ const NovoVendedor: React.FC = () => {
     }
   };
 
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
+    // ✅ user capturado antes de qualquer await — evita race condition após re-renders
+    const currentUserId = user?.id;
 
     try {
       if (!/^\d{6}$/.test(formData.senha)) {
@@ -109,7 +125,7 @@ const NovoVendedor: React.FC = () => {
       }
 
       const { data, error } = await supabase.rpc('criar_vendedor_com_hash', {
-        p_administrador_id: user?.id,
+        p_administrador_id: currentUserId, // ✅ usa valor capturado
         p_nome: formData.nome,
         p_senha_plain: formData.senha,
         p_telefone: formData.telefone || null,
@@ -130,9 +146,11 @@ const NovoVendedor: React.FC = () => {
         throw new Error(resultado.erro || 'Erro desconhecido ao criar vendedor');
       }
 
-      // ✅ Invalida o cache — lista de vendedores atualiza automaticamente ao voltar
-      await queryClient.invalidateQueries({ queryKey: ['vendedores'], exact: false });
-      await queryClient.invalidateQueries({ queryKey: ['dashboard'], exact: false });
+      // ✅ CORRIGIDO — invalidações agrupadas em Promise.all — um único ciclo de re-render
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['vendedores'], exact: false }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'], exact: false }),
+      ]);
 
       // Salvar dados bancários se preenchidos
       if (dadosBancarios.banco || dadosBancarios.agencia || dadosBancarios.conta) {
@@ -163,6 +181,7 @@ const NovoVendedor: React.FC = () => {
     }
   };
 
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -179,6 +198,7 @@ const NovoVendedor: React.FC = () => {
           </div>
         </div>
       </div>
+
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Informações Pessoais */}
@@ -241,6 +261,7 @@ const NovoVendedor: React.FC = () => {
           </div>
         </div>
 
+
         {/* Informações Profissionais */}
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="flex items-center space-x-2 mb-6">
@@ -281,6 +302,7 @@ const NovoVendedor: React.FC = () => {
             </div>
           </div>
         </div>
+
 
         {/* Dados Bancários */}
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
@@ -325,6 +347,7 @@ const NovoVendedor: React.FC = () => {
           </div>
         </div>
 
+
         {/* Status */}
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Status</h2>
@@ -342,6 +365,7 @@ const NovoVendedor: React.FC = () => {
           </div>
         </div>
 
+
         {/* Botões de Ação */}
         <div className="flex justify-end space-x-4">
           <button type="button" onClick={() => navigate('/vendedores')}
@@ -358,5 +382,6 @@ const NovoVendedor: React.FC = () => {
     </div>
   );
 };
+
 
 export default NovoVendedor;

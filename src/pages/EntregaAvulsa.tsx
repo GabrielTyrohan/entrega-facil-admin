@@ -18,7 +18,7 @@ import {
     User,
     X,
 } from 'lucide-react';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useProdutos } from '../hooks/useProdutos';
@@ -110,7 +110,6 @@ const EntregaAvulsa: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [filtroEstoque, setFiltroEstoque] = useState<'todos' | 'emEstoque'>('todos');
-  const [produtosFiltrados, setProdutosFiltrados] = useState<Produto[]>([]);
   const [paginaAtual, setPaginaAtual] = useState(1);
   const PRODUTOS_POR_PAGINA = 9;
 
@@ -165,7 +164,7 @@ const EntregaAvulsa: React.FC = () => {
 
   const isBuscando = loadingProdutos || searchTerm !== debouncedSearchTerm;
 
-  useEffect(() => {
+  const produtosFiltrados = useMemo<Produto[]>(() => {
     let filtered: Produto[] = produtos;
 
     if (filtroEstoque === 'emEstoque') {
@@ -183,9 +182,13 @@ const EntregaAvulsa: React.FC = () => {
       });
     }
 
-    setProdutosFiltrados(filtered);
-    setPaginaAtual(1);
+    return filtered;
   }, [produtos, searchTerm, filtroEstoque]);
+
+  // Resetar paginação ao mudar os filtros
+  useEffect(() => {
+    setPaginaAtual(1);
+  }, [searchTerm, filtroEstoque]);
 
   // ── Products search (edit modal) ──────────────────────────────────────────
   const { data: produtosEdit = [], isLoading: loadingProdutosEdit } = useQuery<Produto[]>({

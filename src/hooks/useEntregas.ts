@@ -1,4 +1,5 @@
 import { useAuth } from '@/contexts/AuthContext';
+import { PAGINATION } from '@/lib/constants/pagination';
 import { handleSupabaseError } from '@/utils/supabaseErrorHandler';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
@@ -100,10 +101,10 @@ export const useEntregas = (options?: {
         .from('vendedores')
         .select('id')
         .eq('administrador_id', targetAdminId);
-      
+
       if (vErr) throw vErr;
       vendedorIds = vendedores?.map(v => v.id) || [];
-      
+
       if (vendedorIds.length === 0) {
         return { data: [], count: 0 };
       }
@@ -126,7 +127,7 @@ export const useEntregas = (options?: {
     if (options?.status) {
       query = query.or(`status_entrega.eq.${options.status},status_pagamento.eq.${options.status}`);
     }
-    
+
     if (options?.vendedor_id) {
       query = query.eq('vendedor_id', options.vendedor_id);
     }
@@ -150,7 +151,7 @@ export const useEntregas = (options?: {
 
     const { data, error, count } = await query;
     if (error) throw error;
-    
+
     return { data: data || [], count };
   };
 
@@ -293,7 +294,7 @@ export const useEntregasPorCliente = (
 
 export const useCreateEntrega = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async (entrega: Omit<Entrega, 'id'>) => {
       const { data, error } = await supabase
@@ -301,20 +302,21 @@ export const useCreateEntrega = () => {
         .insert(entrega)
         .select()
         .single();
-      
-      if (error) {
-        throw new Error(handleSupabaseError(error));
-      }
-      
+
+      if (error) throw new Error(handleSupabaseError(error));
+
       return data as Entrega;
     },
+    // ✅ CORRIGIDO — 6 invalidações agrupadas em Promise.all
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CLIENTES] });
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.VENDEDORES] });
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] });
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.MOVIMENTACOES_ESTOQUE] });
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PRODUTOS] });
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] }),
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CLIENTES] }),
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.VENDEDORES] }),
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] }),
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.MOVIMENTACOES_ESTOQUE] }),
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PRODUTOS] }),
+      ]);
     }
   });
 };
@@ -322,7 +324,7 @@ export const useCreateEntrega = () => {
 
 export const useUpdateEntrega = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<Entrega> & { id: string }) => {
       const { data, error } = await supabase
@@ -331,18 +333,19 @@ export const useUpdateEntrega = () => {
         .eq('id', id)
         .select()
         .single();
-      
-      if (error) {
-        throw new Error(handleSupabaseError(error));
-      }
-      
+
+      if (error) throw new Error(handleSupabaseError(error));
+
       return data as Entrega;
     },
+    // ✅ CORRIGIDO — 4 invalidações agrupadas em Promise.all
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CLIENTES] });
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.VENDEDORES] });
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] });
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] }),
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CLIENTES] }),
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.VENDEDORES] }),
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] }),
+      ]);
     }
   });
 };
@@ -350,22 +353,23 @@ export const useUpdateEntrega = () => {
 
 export const useDeleteEntrega = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
     mutationFn: async ({ id }: { id: string }) => {
       const { error } = await supabase
         .from('entregas')
         .delete()
         .eq('id', id);
-      
-      if (error) {
-        throw new Error(handleSupabaseError(error));
-      }
+
+      if (error) throw new Error(handleSupabaseError(error));
     },
+    // ✅ CORRIGIDO — 3 invalidações agrupadas em Promise.all
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] });
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CESTAS] });
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] }),
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PAGAMENTOS] }),
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CESTAS] }),
+      ]);
     }
   });
 };
@@ -390,9 +394,6 @@ export const useEstatisticasEntregas = (
 };
 
 
-import { PAGINATION } from '@/lib/constants/pagination';
-
-
 export const useEntregasPaginadas = (
   page: number = 1,
   limit: number = PAGINATION.BACKEND_PAGE_SIZE,
@@ -405,7 +406,7 @@ export const useEntregasPaginadas = (
   }
 ) => {
   const { from, to } = PAGINATION.calculateRange(page - 1, limit);
-  
+
   const queryFn = async () => {
     let vendedorIds: string[] = [];
 
@@ -414,10 +415,10 @@ export const useEntregasPaginadas = (
         .from('vendedores')
         .select('id')
         .eq('administrador_id', options.administrador_id);
-      
+
       if (vErr) throw vErr;
       vendedorIds = vendedores?.map(v => v.id) || [];
-      
+
       if (vendedorIds.length === 0) {
         return { data: [], count: 0 };
       }
@@ -451,7 +452,7 @@ export const useEntregasPaginadas = (
     if (options?.status) {
       query = query.or(`status_entrega.eq.${options.status},status_pagamento.eq.${options.status}`);
     }
-    
+
     if (options?.vendedor_id) {
       query = query.eq('vendedor_id', options.vendedor_id);
     }
@@ -462,12 +463,12 @@ export const useEntregasPaginadas = (
 
     const { data, error, count } = await query;
     if (error) throw error;
-    
+
     const formattedData = data?.map(item => ({
       ...item,
       produto: item.itens?.[0]?.produto || null
     })) || [];
-    
+
     return { data: formattedData, count };
   };
 
@@ -487,18 +488,16 @@ export const useEntregasPaginadas = (
 
 export const useInvalidateEntregas = () => {
   const queryClient = useQueryClient();
-  
+
   return () => {
-    queryClient.invalidateQueries({
-      queryKey: [CACHE_KEYS.ENTREGAS],
-    });
+    queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
   };
 };
 
 
 export const usePrefetchEntrega = () => {
   const queryClient = useQueryClient();
-  
+
   return (id: string) => {
     queryClient.prefetchQuery({
       queryKey: [CACHE_KEYS.ENTREGAS, id],
@@ -525,14 +524,12 @@ export const usePrefetchEntrega = () => {
 };
 
 
-// Hook para buscar entregas de um vendedor em uma data específica (Acerto Diário)
 export const useEntregasByVendedorData = (
   vendedor_id: string,
   data: string,
   options?: { enabled?: boolean }
 ) => {
   const queryFn = async () => {
-    // Monta o intervalo do dia completo em UTC-3 (Brasília)
     const dataInicio = `${data}T00:00:00-03:00`;
     const dataFim = `${data}T23:59:59-03:00`;
 

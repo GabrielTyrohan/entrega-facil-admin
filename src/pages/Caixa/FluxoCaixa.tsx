@@ -1,5 +1,5 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { format, isAfter, parseISO, subDays } from 'date-fns';
-import { supabase } from '../../lib/supabase';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
@@ -20,7 +20,9 @@ import { Link } from 'react-router-dom';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useAuth } from '../../contexts/AuthContext';
 import { useDeleteLancamento, useFluxoCaixa, useFluxoCaixaStats, useUpdateLancamento } from '../../hooks/useFluxoCaixa';
+import { supabase } from '../../lib/supabase';
 import { formatCurrency } from '../../utils/currencyUtils';
+
 
 interface Lancamento {
   id: string;
@@ -39,11 +41,15 @@ interface Lancamento {
   grupo_parcela_id?: string;
 }
 
+
 const ALLOWED_TIPOS = ['todos', 'entrada', 'saida'] as const;
 type TipoFiltro = typeof ALLOWED_TIPOS[number];
 
+
 const FluxoCaixa = () => {
   const { adminId, userProfile } = useAuth();
+  const queryClient = useQueryClient(); // ✅ adicionado
+
   const [dateRange, setDateRange] = useState({
     startDate: subDays(new Date(), 30).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0]
@@ -52,10 +58,12 @@ const FluxoCaixa = () => {
   const [currentPage, setCurrentPage] = useState(0);
   const ITEMS_PER_PAGE = 15;
 
+
   const safeTipo = useMemo(
     () => ALLOWED_TIPOS.includes(tipoFiltro) ? tipoFiltro : 'todos',
     [tipoFiltro]
   );
+
 
   const { data: stats, isLoading: statsLoading } = useFluxoCaixaStats(
     adminId || '',
@@ -63,7 +71,8 @@ const FluxoCaixa = () => {
     dateRange.endDate
   );
 
-  const { data: lancamentos, isLoading: listLoading, refetch, totalCount, totalPages } = useFluxoCaixa(
+
+  const { data: lancamentos, isLoading: listLoading, totalCount, totalPages } = useFluxoCaixa( // ✅ refetch removido
     adminId || '',
     {
       startDate: dateRange.startDate,
@@ -74,45 +83,55 @@ const FluxoCaixa = () => {
     }
   );
 
+
   const deleteMutation = useDeleteLancamento();
   const updateMutation = useUpdateLancamento();
 
-  const handleDelete = async (item: Lancamento & { grupo_parcela_id?: string; total_parcelas?: number }) => {
-  if (item.status === 'pago') return;
 
-  // Se tem grupo e mais de 1 parcela, oferece a opção
-  if (item.grupo_parcela_id && (item.total_parcelas ?? 1) > 1) {
-    const excluirTodas = window.confirm(
-      `Este lançamento faz parte de uma recorrência de ${item.total_parcelas} parcelas.\n\nClicar em OK excluirá TODAS as parcelas pendentes.\nClicar em Cancelar excluirá só esta.`
-    );
-    if (excluirTodas) {
-      await supabase
-        .from('lancamentos_caixa')
-        .delete()
-        .eq('grupo_parcela_id', item.grupo_parcela_id)
-        .eq('status', 'pendente'); // garante que só exclui as pendentes
-      refetch();
-      return;
-    }
-  }
-
-  await deleteMutation.mutateAsync(item.id);
-  refetch();
-};
-
-
+  // ✅ CORRIGIDO — sem refetch() após mutateAsync
   const handleConfirmarPagamento = async (id: string) => {
     if (window.confirm('Confirmar pagamento deste lançamento?')) {
       await updateMutation.mutateAsync({ id, status: 'pago' });
-      refetch();
+      // refetch() removido — useUpdateLancamento já invalida o cache via onSuccess
     }
   };
+
+
+  // ✅ CORRIGIDO — refetch() removido, invalidação agrupada com Promise.all
+  const handleDelete = async (item: Lancamento & { grupo_parcela_id?: string; total_parcelas?: number }) => {
+    if (item.status === 'pago') return;
+
+    if (item.grupo_parcela_id && (item.total_parcelas ?? 1) > 1) {
+      const excluirTodas = window.confirm(
+        `Este lançamento faz parte de uma recorrência de ${item.total_parcelas} parcelas.\n\nClicar em OK excluirá TODAS as parcelas pendentes.\nClicar em Cancelar excluirá só esta.`
+      );
+      if (excluirTodas) {
+        await supabase
+          .from('lancamentos_caixa')
+          .delete()
+          .eq('grupo_parcela_id', item.grupo_parcela_id)
+          .eq('status', 'pendente');
+
+        // ✅ Invalidação agrupada — um único ciclo de re-render
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['fluxo-caixa'] }),
+          queryClient.invalidateQueries({ queryKey: ['fluxo-caixa-stats'] }),
+        ]);
+        return;
+      }
+    }
+
+    await deleteMutation.mutateAsync(item.id);
+    // refetch() removido — useDeleteLancamento já invalida o cache via onSuccess
+  };
+
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 0 && newPage < totalPages) {
       setCurrentPage(newPage);
     }
   };
+
 
   const handleOpenAnexo = (url: string) => {
     try {
@@ -125,6 +144,7 @@ const FluxoCaixa = () => {
       // URL inválida — não faz nada
     }
   };
+
 
   const handleExport = () => {
     if (!lancamentos.length) return;
@@ -201,11 +221,13 @@ const FluxoCaixa = () => {
     doc.save(`fluxo_caixa_${dateRange.startDate}_${dateRange.endDate}.pdf`);
   };
 
+
   const isBoletoVencido = (lancamento: Lancamento) => {
     if (lancamento.tipo !== 'saida' || lancamento.categoria !== 'Boleto' || lancamento.status === 'pago') return false;
     if (!lancamento.data_vencimento) return false;
     return isAfter(new Date(), parseISO(lancamento.data_vencimento));
   };
+
 
   return (
     <div className="p-6 mx-auto space-y-6">
@@ -300,7 +322,7 @@ const FluxoCaixa = () => {
             {statsLoading ? (
               <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">Carregando gráfico...</div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                 <LineChart data={stats?.graphData || []}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#374151" />
                   <XAxis dataKey="date" stroke="#9CA3AF" />
@@ -523,5 +545,6 @@ const FluxoCaixa = () => {
     </div>
   );
 };
+
 
 export default FluxoCaixa;

@@ -3,18 +3,20 @@ import { CACHE_KEYS, useSupabaseQuery } from '@/lib/supabaseCache';
 import { handleSupabaseError } from '@/utils/supabaseErrorHandler';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+
 export interface VendaAtacadoItem {
-  id?: string; // Opcional pois é gerado no banco
-  venda_atacado_id?: string; // Opcional antes de salvar
+  id?: string;
+  venda_atacado_id?: string;
   produto_cadastrado_id?: string;
   descricao: string;
   quantidade: number;
   preco_unitario: number;
   subtotal: number;
-  produto_nome?: string; // Para compatibilidade temporária se necessário, mas idealmente usar descricao
+  produto_nome?: string;
   sincronizado?: boolean;
   created_at?: string;
 }
+
 
 export interface CreateVendaAtacadoPayload {
   administrador_id: string;
@@ -32,6 +34,7 @@ export interface CreateVendaAtacadoPayload {
   nome_cliente_cache?: string;
   observacoes?: string;
 }
+
 
 export interface VendaAtacado {
   id: string;
@@ -53,6 +56,7 @@ export interface VendaAtacado {
   updated_at?: string;
 }
 
+
 export interface UseVendasAtacadoOptions {
   enabled?: boolean;
   status_pagamento?: string;
@@ -63,12 +67,13 @@ export interface UseVendasAtacadoOptions {
   pageSize?: number;
 }
 
-// Hook to fetch sales list
+
 export const useVendasAtacado = (adminId: string, options?: UseVendasAtacadoOptions) => {
   const page = options?.page || 0;
   const pageSize = options?.pageSize || 20;
   const from = page * pageSize;
   const to = from + pageSize - 1;
+
 
   let query = supabase
     .from('vendas_atacado')
@@ -87,6 +92,7 @@ export const useVendasAtacado = (adminId: string, options?: UseVendasAtacadoOpti
     .order('created_at', { ascending: false })
     .range(from, to);
 
+
   if (options?.status_pagamento && options.status_pagamento !== 'todos') {
     query = query.eq('status_pagamento', options.status_pagamento);
   }
@@ -103,6 +109,7 @@ export const useVendasAtacado = (adminId: string, options?: UseVendasAtacadoOpti
     query = query.lte('data_venda', options.endDate);
   }
 
+
   const queryResult = useSupabaseQuery<VendaAtacado>(
     'VENDAS_ATACADO',
     query,
@@ -110,8 +117,10 @@ export const useVendasAtacado = (adminId: string, options?: UseVendasAtacadoOpti
     { enabled: options?.enabled !== false && !!adminId }
   );
 
+
   const totalCount = queryResult.count || 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
 
   return {
     data: Array.isArray(queryResult.data) ? queryResult.data : [],
@@ -124,25 +133,27 @@ export const useVendasAtacado = (adminId: string, options?: UseVendasAtacadoOpti
   };
 };
 
-// Hook to create a new sale
+
 export const useCreateVendaAtacado = () => {
   const queryClient = useQueryClient();
+
 
   return useMutation({
     mutationFn: async (payload: CreateVendaAtacadoPayload) => {
       const { itens, ...resto } = payload;
 
-      // 1. Insere venda com itens no JSONB
+
       const { data: novaVenda, error: vendaError } = await supabase
         .from('vendas_atacado')
-        .insert({ ...resto, itens })   // <-- itens vai pro JSONB também
+        .insert({ ...resto, itens })
         .select('id, numero_pedido')
         .single();
+
 
       if (vendaError) throw vendaError;
       if (!novaVenda) throw new Error('Venda não retornou dados.');
 
-      // 2. Insere na tabela filha (para relatórios relacionais)
+
       if (itens && itens.length > 0) {
         const itensPayload = itens.map(item => ({
           venda_atacado_id: novaVenda.id,
@@ -154,28 +165,37 @@ export const useCreateVendaAtacado = () => {
           sincronizado: false,
         }));
 
+
         const { error: itensError } = await supabase
           .from('vendas_atacado_itens')
           .insert(itensPayload);
+
 
         if (itensError) {
           console.error('Erro ao inserir itens na tabela filha:', itensError);
         }
       }
 
+
       return novaVenda;
     },
+
+    // ✅ CORRIGIDO — três invalidações agrupadas em Promise.all — um único ciclo de re-render
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.VENDAS_ATACADO || 'VENDAS_ATACADO'] });
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.MOVIMENTACOES_ESTOQUE] });
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PRODUTOS] });
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.VENDAS_ATACADO || 'VENDAS_ATACADO'] }),
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.MOVIMENTACOES_ESTOQUE] }),
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PRODUTOS] }),
+      ]);
     },
+
     onError: (error: any) => {
-      // Ignorar erro PGRST204 se for apenas sobre cache de schema, pois a inserção funcionou
       if (error?.code === 'PGRST204') {
         console.warn('Aviso Supabase (PGRST204):', error.message);
-        // Forçar sucesso invalidando queries mesmo com "erro"
-        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.VENDAS_ATACADO || 'VENDAS_ATACADO'] });
+        // ✅ CORRIGIDO — também agrupado aqui
+        Promise.all([
+          queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.VENDAS_ATACADO || 'VENDAS_ATACADO'] }),
+        ]);
         return;
       }
       console.error('Erro ao criar venda:', error);
@@ -184,36 +204,35 @@ export const useCreateVendaAtacado = () => {
   });
 };
 
-// Hook to get total sales by seller
+
 export const useVendasPorVendedor = (adminId: string, options?: { startDate?: string; endDate?: string }) => {
-  // Opção A: Usar uma query raw customizada via RPC se o Supabase suportar
-  // Opção B: Buscar todas e agregar no cliente (menos performático mas funciona sem RPC)
-  
   return useQuery({
     queryKey: ['VENDAS_POR_VENDEDOR', adminId, options],
     queryFn: async () => {
-      // 1. Buscar todas as vendas do período
       let query = supabase
         .from('vendas_atacado')
         .select('vendedor_id, valor_total, vendedores(nome)')
         .eq('administrador_id', adminId);
 
+
       if (options?.startDate) {
-        query = query.gte('data_entrega', options.startDate); // Usar data_entrega que é mais relevante para comissão
+        query = query.gte('data_entrega', options.startDate);
       }
 
       if (options?.endDate) {
         query = query.lte('data_entrega', options.endDate);
       }
 
+
       const { data, error } = await query;
       if (error) throw error;
 
-      // 2. Agregar dados manualmente
+
       const stats = (data || []).reduce((acc: any, curr: any) => {
         const vendedorId = curr.vendedor_id;
         const vendedorNome = curr.vendedores?.nome || 'Desconhecido';
         const valor = Number(curr.valor_total) || 0;
+
 
         if (!acc[vendedorId]) {
           acc[vendedorId] = {
@@ -224,19 +243,21 @@ export const useVendasPorVendedor = (adminId: string, options?: { startDate?: st
           };
         }
 
+
         acc[vendedorId].total_valor += valor;
         acc[vendedorId].total_vendas += 1;
         return acc;
       }, {});
 
+
       return Object.values(stats).sort((a: any, b: any) => b.total_valor - a.total_valor);
     },
     enabled: !!adminId,
-    staleTime: 5 * 60 * 1000 // Cache por 5 minutos
+    staleTime: 5 * 60 * 1000
   });
 };
 
-// Hook to fetch single sale details
+
 export const useVendaAtacadoById = (id: string, enabled = true) => {
   const query = supabase
     .from('vendas_atacado')
@@ -258,6 +279,7 @@ export const useVendaAtacadoById = (id: string, enabled = true) => {
     .eq('id', id)
     .maybeSingle();
 
+
   return useSupabaseQuery<VendaAtacado>(
     'VENDA_ATACADO_DETALHES',
     query,
@@ -266,8 +288,10 @@ export const useVendaAtacadoById = (id: string, enabled = true) => {
   );
 };
 
+
 export const useRegistrarPagamento = () => {
   const queryClient = useQueryClient();
+
 
   return useMutation({
     mutationFn: async ({
@@ -293,7 +317,7 @@ export const useRegistrarPagamento = () => {
           ? 'parcial'
           : 'pendente';
 
-      // 1. Atualiza valor_pago e status na venda
+
       const { error: updateError } = await supabase
         .from('vendas_atacado')
         .update({
@@ -304,9 +328,10 @@ export const useRegistrarPagamento = () => {
         })
         .eq('id', vendaId);
 
+
       if (updateError) throw updateError;
 
-      // 2. Registra o pagamento no histórico
+
       const { error: insertError } = await supabase
         .from('vendas_atacado_pagamentos')
         .insert({
@@ -316,15 +341,21 @@ export const useRegistrarPagamento = () => {
           observacao: observacao || null,
         });
 
+
       if (insertError) throw insertError;
+
 
       return { novoValorPago, novoStatus };
     },
+
+    // ✅ CORRIGIDO — duas invalidações agrupadas em Promise.all — um único ciclo de re-render
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: [CACHE_KEYS.VENDA_ATACADO_DETALHES || 'VENDA_ATACADO_DETALHES', variables.vendaId],
-      });
-      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.VENDAS_ATACADO || 'VENDAS_ATACADO'] });
+      Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: [CACHE_KEYS.VENDA_ATACADO_DETALHES || 'VENDA_ATACADO_DETALHES', variables.vendaId],
+        }),
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.VENDAS_ATACADO || 'VENDAS_ATACADO'] }),
+      ]);
     },
   });
 };
