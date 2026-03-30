@@ -88,7 +88,17 @@ function App() {
 
   return (
     <>
-     <Toaster position="top-right" richColors />
+<Toaster
+  position="top-right"
+  richColors
+  closeButton
+  duration={4000}
+  toastOptions={{
+    style: {
+      borderRadius: '8px',
+    },
+  }}
+/>
     <ErrorBoundary>
       <ThemeProvider>
         <AuthProvider>

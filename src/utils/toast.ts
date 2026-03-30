@@ -1,38 +1,8 @@
+import { toast as sonnerToast } from 'sonner';
+
 export const toast = {
-  success: (message: string, options?: { duration?: number }) => {
-    try {
-      const globalToast = (window as any).toast;
-      if (globalToast?.success) {
-        globalToast.success(message, options);
-      } else {
-        alert(message);
-      }
-    } catch {
-      alert(message);
-    }
-  },
-  error: (message: string, options?: { duration?: number }) => {
-    try {
-      const globalToast = (window as any).toast;
-      if (globalToast?.error) {
-        globalToast.error(message, options);
-      } else {
-        alert(message);
-      }
-    } catch {
-      alert(message);
-    }
-  },
-  info: (message: string, options?: { duration?: number }) => {
-    try {
-      const globalToast = (window as any).toast;
-      if (globalToast?.info) {
-        globalToast.info(message, options);
-      } else {
-        alert(message);
-      }
-    } catch {
-      alert(message);
-    }
-  }
+  success: (message: string) => sonnerToast.success(message),
+  error:   (message: string) => sonnerToast.error(message),
+  warning: (message: string) => sonnerToast.warning(message),
+  info:    (message: string) => sonnerToast.info(message),
 };

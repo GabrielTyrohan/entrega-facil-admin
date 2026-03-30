@@ -11,7 +11,7 @@ import {
   Users,
   X
 } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAdicionarClienteAdmin } from '../hooks/useAdicionarClienteAdmin';
 import { useVendedoresByAdmin } from '../hooks/useVendedores';
@@ -27,15 +27,10 @@ interface PessoaAutorizada { nome: string; }
 interface Responsavel { nome: string; cpf: string; telefone: string; parentesco: string; }
 
 interface FormData {
-  // Etapa 0
   autorizou_cadastro: boolean;
   tipo_pessoa: 'PF' | 'PJ';
   menor_idade: boolean;
-
-  // Vínculo
   vendedor_id: string;
-
-  // PF — Dados Pessoais
   nome: string;
   sobrenome: string;
   cpf: string;
@@ -46,8 +41,6 @@ interface FormData {
   nacionalidade: string;
   nome_pai: string;
   nome_mae: string;
-
-  // PJ — Dados da Empresa
   razao_social: string;
   nome_fantasia: string;
   cnpj: string;
@@ -57,12 +50,8 @@ interface FormData {
   responsavel_pj_cpf: string;
   responsavel_pj_cargo: string;
   responsavel_pj_telefone: string;
-
-  // Comuns
   telefone: string;
   email: string;
-
-  // Endereço
   cep: string;
   logradouro: string;
   numero: string;
@@ -70,8 +59,6 @@ interface FormData {
   bairro: string;
   cidade: string;
   estado: string;
-
-  // Complementares
   nome_conjuge: string;
   renda_mensal: string;
   ponto_referencia: string;
@@ -168,31 +155,47 @@ const validateCNPJ = (cnpj: string) => {
   return calc(c,12) === parseInt(c[12]) && calc(c,13) === parseInt(c[13]);
 };
 
+// ─── Componente auxiliar ──────────────────────────────────────────────────────
+const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <div>
+    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
+    {children}
+  </div>
+);
+
+const inputCls = "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 text-sm";
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onClose }) => {
   const { user, userType, userProfile } = useAuth();
   const { mutateAsync: adicionarCliente, isPending } = useAdicionarClienteAdmin();
-  
+
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState<FormData>(INITIAL_DATA);
   const [adminId, setAdminId] = useState<string | null>(null);
 
-  // Buscar vendedores do admin
-  const { data: vendedores = [] } = useVendedoresByAdmin(adminId || '', { 
-    enabled: !!adminId 
+  // ✅ Ref para evitar auto-seleção repetida de vendedor
+  const autoSelecionouVendedor = useRef(false);
+
+  const { data: vendedores = [] } = useVendedoresByAdmin(adminId || '', {
+    enabled: !!adminId
   });
 
+  // ✅ Reset da ref ao reabrir o modal
   useEffect(() => {
     if (isOpen) {
       setCurrentStep(0);
       setFormData(INITIAL_DATA);
+      autoSelecionouVendedor.current = false;
       resolveAdminId();
     }
   }, [isOpen]);
 
-  // Auto-selecionar vendedor se houver apenas um
+  // ✅ Auto-seleciona vendedor apenas uma vez — sem re-render em loop
   useEffect(() => {
+    if (autoSelecionouVendedor.current) return;
     if (vendedores.length === 1 && !formData.vendedor_id) {
+      autoSelecionouVendedor.current = true;
       setFormData(prev => ({ ...prev, vendedor_id: vendedores[0].id }));
     }
   }, [vendedores, formData.vendedor_id]);
@@ -286,7 +289,7 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
         return true;
 
       case 3:
-        return true; // Complementares são opcionais
+        return true;
 
       case 4:
         if (!isPJ && formData.menor_idade && formData.responsaveis.length === 0) {
@@ -359,7 +362,6 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
             responsavel_pj_cpf: formData.responsavel_pj_cpf.replace(/\D/g,'') || undefined,
             responsavel_pj_cargo: formData.responsavel_pj_cargo || undefined,
             responsavel_pj_telefone: formData.responsavel_pj_telefone.replace(/\D/g,'') || undefined,
-            // Workaround: Database requires CPF (not null), using CNPJ for PJ
             cpf: formData.cnpj.replace(/\D/g,''),
             renda_mensal: formData.renda_mensal
               ? parseFloat(formData.renda_mensal.replace(/\./g, '').replace(',', '.'))
@@ -399,14 +401,13 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
 
   const isPJ = formData.tipo_pessoa === 'PJ';
 
-  // Etapas dinâmicas baseadas no tipo
   const allSteps = [
-    { id: 0, icon: AlertCircle,   label: 'Verificação'   },
+    { id: 0, icon: AlertCircle,   label: 'Verificação'    },
     { id: 1, icon: isPJ ? Building2 : UserIcon, label: isPJ ? 'Empresa' : 'Dados Pessoais' },
-    { id: 2, icon: Home,          label: 'Endereço'      },
-    { id: 3, icon: FileText,      label: 'Complementares'},
+    { id: 2, icon: Home,          label: 'Endereço'       },
+    { id: 3, icon: FileText,      label: 'Complementares' },
     { id: 4, icon: Users,         label: 'Responsáveis', hiddenWhen: shouldSkipStep4 },
-    { id: 5, icon: CheckCircle2,  label: 'Finalizar'     },
+    { id: 5, icon: CheckCircle2,  label: 'Finalizar'      },
   ];
   const visibleSteps = allSteps.filter(s => !('hiddenWhen' in s && s.hiddenWhen));
 
@@ -418,7 +419,6 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white">Novo Cliente</h2>
-            {/* Badge PF/PJ */}
             <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${
               isPJ
                 ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
@@ -440,17 +440,19 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
               const isActive = step.id === currentStep;
               const isCompleted = step.id < currentStep;
               return (
-                <div key={step.id} className={`flex flex-col items-center mx-4 cursor-pointer ${
-                  isActive
-                    ? 'text-blue-600 dark:text-blue-400'
-                    : isCompleted
-                    ? 'text-green-600 dark:text-green-400'
-                    : 'text-gray-400'
-                }`}
+                <div
+                  key={step.id}
+                  className={`flex flex-col items-center mx-4 cursor-pointer ${
+                    isActive
+                      ? 'text-blue-600 dark:text-blue-400'
+                      : isCompleted
+                      ? 'text-green-600 dark:text-green-400'
+                      : 'text-gray-400'
+                  }`}
                   onClick={() => { if (step.id < currentStep) setCurrentStep(step.id); }}
                 >
                   <div className={`p-2 rounded-full mb-1 ${
-                    isActive ? 'bg-blue-100 dark:bg-blue-900/30'
+                    isActive   ? 'bg-blue-100 dark:bg-blue-900/30'
                     : isCompleted ? 'bg-green-100 dark:bg-green-900/30'
                     : 'bg-gray-200 dark:bg-gray-700'
                   }`}>
@@ -520,8 +522,8 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
               {/* Checkboxes */}
               <div className="space-y-3">
                 <label className={`flex items-center space-x-3 p-3 border rounded-lg cursor-pointer transition-colors ${
-                  formData.autorizou_cadastro 
-                    ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800' 
+                  formData.autorizou_cadastro
+                    ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
                     : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
                 }`}>
                   <input
@@ -535,11 +537,10 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
                   </span>
                 </label>
 
-                {/* Menor de idade — apenas PF */}
                 {!isPJ && (
                   <label className={`flex items-center space-x-3 p-3 border rounded-lg cursor-pointer transition-colors ${
-                    formData.menor_idade 
-                      ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800' 
+                    formData.menor_idade
+                      ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
                       : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
                   }`}>
                     <input
@@ -587,7 +588,9 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
                 <select className={inputCls} value={formData.estado_civil} onChange={e => handleChange('estado_civil', e.target.value)}>
                   <option value="">Selecione</option>
                   {['Solteiro','Casado','Divorciado','Viuvo','UniaoEstavel'].map(v => (
-                    <option key={v} value={v}>{v.replace('Viuvo','Viúvo(a)').replace('UniaoEstavel','União Estável').replace('Solteiro','Solteiro(a)').replace('Casado','Casado(a)').replace('Divorciado','Divorciado(a)')}</option>
+                    <option key={v} value={v}>
+                      {v.replace('Viuvo','Viúvo(a)').replace('UniaoEstavel','União Estável').replace('Solteiro','Solteiro(a)').replace('Casado','Casado(a)').replace('Divorciado','Divorciado(a)')}
+                    </option>
                   ))}
                 </select>
               </Field>
@@ -630,7 +633,6 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
                 <input className={inputCls} value={formData.inscricao_municipal} onChange={e => handleChange('inscricao_municipal', e.target.value)} />
               </Field>
 
-              {/* Divisória responsável */}
               <div className="md:col-span-2 pt-2 border-t border-gray-200 dark:border-gray-700">
                 <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">
                   Responsável / Contato
@@ -650,7 +652,6 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
                 <input className={inputCls} value={formData.responsavel_pj_telefone} onChange={e => handleChange('responsavel_pj_telefone', maskPhone(e.target.value))} placeholder="(00) 00000-0000" maxLength={15} />
               </Field>
 
-              {/* Divisória contato geral */}
               <div className="md:col-span-2 pt-2 border-t border-gray-200 dark:border-gray-700">
                 <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">
                   Contato Geral da Empresa
@@ -665,7 +666,7 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
             </div>
           )}
 
-          {/* ── Step 2: Endereço (igual para ambos) ── */}
+          {/* ── Step 2: Endereço ── */}
           {currentStep === 2 && (
             <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
               <div className="md:col-span-2">
@@ -711,13 +712,13 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
             </div>
           )}
 
-          {/* ── Step 3: Vendedor (Comum) ── */}
+          {/* ── Step 3: Vendedor ── */}
           {currentStep === 3 && (
             <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-200 dark:border-gray-700">
               <Field label="Vendedor Responsável *">
-                <select 
-                  className={inputCls} 
-                  value={formData.vendedor_id} 
+                <select
+                  className={inputCls}
+                  value={formData.vendedor_id}
                   onChange={e => handleChange('vendedor_id', e.target.value)}
                 >
                   <option value="">Selecione um vendedor</option>
@@ -742,8 +743,8 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
                   <input className={inputCls} value={formData.nome_conjuge} onChange={e => handleChange('nome_conjuge', e.target.value)} />
                 </Field>
                 <Field label="Renda Mensal (R$)">
-                <input className={inputCls} value={formData.renda_mensal} onChange={e => handleChange('renda_mensal', maskCurrency(e.target.value))} placeholder="0,00" />
-              </Field>
+                  <input className={inputCls} value={formData.renda_mensal} onChange={e => handleChange('renda_mensal', maskCurrency(e.target.value))} placeholder="0,00" />
+                </Field>
                 <div className="md:col-span-2">
                   <Field label="Ponto de Referência">
                     <input className={inputCls} value={formData.ponto_referencia} onChange={e => handleChange('ponto_referencia', e.target.value)} placeholder="Próximo a..." />
@@ -844,70 +845,54 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
                   <span className="text-gray-500 dark:text-gray-400">{isPJ ? 'CNPJ:' : 'CPF:'}</span>
                   <span className="font-medium text-gray-900 dark:text-gray-200">{isPJ ? formData.cnpj : formData.cpf}</span>
                 </div>
-                {isPJ && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500 dark:text-gray-400">Responsável:</span>
-                    <span className="font-medium text-gray-900 dark:text-gray-200">{formData.responsavel_pj_nome}</span>
-                  </div>
-                )}
                 <div className="flex justify-between">
                   <span className="text-gray-500 dark:text-gray-400">Telefone:</span>
-                  <span className="font-medium text-gray-900 dark:text-gray-200">
-                    {isPJ ? formData.responsavel_pj_telefone || formData.telefone : formData.telefone}
-                  </span>
+                  <span className="font-medium text-gray-900 dark:text-gray-200">{formData.telefone}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500 dark:text-gray-400">Cidade:</span>
-                  <span className="font-medium text-gray-900 dark:text-gray-200">{formData.cidade}/{formData.estado}</span>
+                  <span className="font-medium text-gray-900 dark:text-gray-200">{formData.cidade} - {formData.estado}</span>
                 </div>
-              </div>
-
-              <div className="pt-4">
-                <button
-                  onClick={handleSubmit}
-                  disabled={isPending}
-                  className="w-full sm:w-auto px-8 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-lg shadow-green-600/20 transition-all flex items-center justify-center mx-auto gap-2 disabled:opacity-60"
-                >
-                  {isPending ? 'Salvando...' : 'Finalizar Cadastro'}
-                  {!isPending && <CheckCircle2 className="w-5 h-5" />}
-                </button>
               </div>
             </div>
           )}
         </div>
 
-        {/* Footer Navigation */}
-        {currentStep !== 5 && (
-          <div className="p-4 sm:p-6 border-t border-gray-200 dark:border-gray-700 flex justify-between">
+        {/* Footer */}
+        <div className="flex items-center justify-between p-4 sm:p-6 border-t border-gray-200 dark:border-gray-700">
+          <button
+            type="button"
+            onClick={currentStep === 0 ? onClose : handleBack}
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium text-sm"
+          >
+            {currentStep === 0 ? 'Cancelar' : 'Voltar'}
+          </button>
+
+          {currentStep < 5 ? (
             <button
-              onClick={currentStep === 0 ? onClose : handleBack}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600"
-            >
-              {currentStep === 0 ? 'Cancelar' : 'Voltar'}
-            </button>
-            <button
+              type="button"
               onClick={handleNext}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center gap-1"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-md font-medium text-sm flex items-center gap-2"
             >
               Próximo <ChevronRight className="w-4 h-4" />
             </button>
-          </div>
-        )}
+          ) : (
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={isPending}
+              className={`px-6 py-2 rounded-md text-white font-medium text-sm flex items-center gap-2 ${
+                isPending
+                  ? 'bg-green-400 cursor-not-allowed'
+                  : 'bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600'
+              }`}
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              {isPending ? 'Salvando...' : 'Confirmar Cadastro'}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
 };
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-const inputCls = `w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white 
-  focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 
-  text-sm text-gray-900 placeholder-gray-400 dark:placeholder-gray-500 transition-all`;
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
-      {children}
-    </div>
-  );
-}

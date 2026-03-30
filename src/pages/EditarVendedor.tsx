@@ -78,7 +78,7 @@ const EditarVendedor: React.FC = () => {
         const vendedor = await vendedorService.getById(id);
         
         if (!vendedor) {
-          alert('Vendedor não encontrado.');
+          toast.error('Vendedor não encontrado.');
           navigate('/vendedores');
           return;
         }
@@ -106,7 +106,7 @@ const EditarVendedor: React.FC = () => {
         }
       } catch {
         // Error handling without logging sensitive data
-        alert('Erro ao carregar dados do vendedor.');
+        toast.error('Erro ao carregar dados do vendedor.');
       } finally {
         setLoadingData(false);
       }

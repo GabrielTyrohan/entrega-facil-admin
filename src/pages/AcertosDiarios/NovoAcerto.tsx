@@ -1,6 +1,6 @@
 import { toast } from '@/utils/toast';
 import { AlertCircle, ArrowLeft, Calculator, CheckCircle, HelpCircle, Plus, Save, Trash2 } from 'lucide-react';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Modal } from '../../components/ui/Modal';
 import { useAuth } from '../../contexts/AuthContext';
@@ -10,7 +10,7 @@ import { useVendedoresByAdmin } from '../../hooks/useVendedores';
 import { applyCurrencyMask, currencyMaskToNumber, formatCurrency } from '../../utils/currencyUtils';
 
 
-const CurrencyInput = ({ label, field, value, onChange }: {
+const CurrencyInput = React.memo(({ label, field, value, onChange }: {
   label: string;
   field: string;
   value: number;
@@ -25,14 +25,14 @@ const CurrencyInput = ({ label, field, value, onChange }: {
       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-blue-500 focus:border-blue-500 text-right bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
     />
   </div>
-);
+));
 
 
 interface Venda {
   id: string;
   valor: number;
   label?: string;
-  fromEntrega?: boolean; // flag para saber se veio automático
+  fromEntrega?: boolean;
 }
 
 
@@ -45,6 +45,8 @@ const NovoAcerto = () => {
   const createMutation = useCreateAcerto();
   const [showHelp, setShowHelp] = useState(false);
 
+  const usuarioEditouVendas = useRef(false);
+
   const [formData, setFormData] = useState({
     vendedor_id: '',
     data_acerto: new Date().toISOString().split('T')[0],
@@ -53,9 +55,8 @@ const NovoAcerto = () => {
     valor_dinheiro: 0,
     valor_cheque: 0,
     valor_debito: 0,
-  valor_credito: 0,
+    valor_credito: 0,
     valor_cartao: 0,
-    // DESPESAS 
     valor_gasolina: 0,
     valor_borracharia: 0,
     valor_pedagio: 0,
@@ -68,7 +69,6 @@ const NovoAcerto = () => {
     { id: crypto.randomUUID(), valor: 0 }
   ]);
 
-  // Busca entregas do vendedor na data selecionada
   const { data: entregasDoDia, isLoading: loadingEntregas } = useEntregasByVendedorData(
     formData.vendedor_id,
     formData.data_acerto,
@@ -77,11 +77,22 @@ const NovoAcerto = () => {
 
   const { data: acertoExistente } = useAcertoPorData(formData.vendedor_id, formData.data_acerto);
 
-  // Preenche vendas automaticamente quando mudar vendedor ou data
+  const handleVendedorChange = useCallback((vendedor_id: string) => {
+    usuarioEditouVendas.current = false;
+    setFormData(prev => ({ ...prev, vendedor_id }));
+  }, []);
+
+  const handleDataChange = useCallback((data_acerto: string) => {
+    usuarioEditouVendas.current = false;
+    setFormData(prev => ({ ...prev, data_acerto }));
+  }, []);
+
   useEffect(() => {
     if (!formData.vendedor_id) return;
+    if (!entregasDoDia) return;
+    if (usuarioEditouVendas.current) return;
 
-    if (!entregasDoDia || entregasDoDia.length === 0) {
+    if (entregasDoDia.length === 0) {
       setVendas([{ id: crypto.randomUUID(), valor: 0 }]);
       return;
     }
@@ -101,11 +112,8 @@ const NovoAcerto = () => {
     setVendas(vendasGeradas);
   }, [entregasDoDia, formData.vendedor_id]);
 
-  useEffect(() => {
-    if (acertoExistente) {
-      toast.error('Já existe acerto para este vendedor nesta data');
-    }
-  }, [acertoExistente]);
+  // ✅ useEffect do toast REMOVIDO — o bloco visual vermelho já avisa o usuário
+  // e o toast disparava setState no ToastContext causando perda de foco
 
   // ===== CÁLCULOS =====
   const totalRecebido = useMemo(() =>
@@ -114,9 +122,17 @@ const NovoAcerto = () => {
     formData.valor_dinheiro +
     formData.valor_cheque +
     formData.valor_debito +
-  formData.valor_credito +
+    formData.valor_credito +
     formData.valor_cartao,
-    [formData]
+    [
+      formData.valor_pix,
+      formData.valor_deposito,
+      formData.valor_dinheiro,
+      formData.valor_cheque,
+      formData.valor_debito,
+      formData.valor_credito,
+      formData.valor_cartao,
+    ]
   );
 
   const totalDespesas = useMemo(() =>
@@ -125,7 +141,13 @@ const NovoAcerto = () => {
     formData.valor_pedagio +
     formData.valor_mecanico +
     formData.valor_outras_despesas,
-    [formData]
+    [
+      formData.valor_gasolina,
+      formData.valor_borracharia,
+      formData.valor_pedagio,
+      formData.valor_mecanico,
+      formData.valor_outras_despesas,
+    ]
   );
 
   const totalVendas = useMemo(() =>
@@ -137,28 +159,32 @@ const NovoAcerto = () => {
 
   const saldoLiquido = useMemo(() => totalRecebido - valorEsperado, [totalRecebido, valorEsperado]);
 
-  const handleCurrencyChange = (field: string, rawValue: string) => {
+  const handleCurrencyChange = useCallback((field: string, rawValue: string) => {
     const masked = applyCurrencyMask(rawValue);
     const number = currencyMaskToNumber(masked);
     setFormData(prev => ({ ...prev, [field]: number }));
-  };
+  }, []);
 
   // ===== GERENCIAR VENDAS =====
-  const adicionarVenda = () => {
+  const adicionarVenda = useCallback(() => {
+    usuarioEditouVendas.current = true;
     setVendas(prev => [...prev, { id: crypto.randomUUID(), valor: 0 }]);
-  };
+  }, []);
 
-  const removerVenda = (id: string) => {
-    if (vendas.length > 1) {
-      setVendas(prev => prev.filter(v => v.id !== id));
-    }
-  };
+  const removerVenda = useCallback((id: string) => {
+    usuarioEditouVendas.current = true;
+    setVendas(prev => {
+      if (prev.length <= 1) return prev;
+      return prev.filter(v => v.id !== id);
+    });
+  }, []);
 
-  const atualizarVenda = (id: string, rawValue: string) => {
+  const atualizarVenda = useCallback((id: string, rawValue: string) => {
+    usuarioEditouVendas.current = true;
     const masked = applyCurrencyMask(rawValue);
     const number = currencyMaskToNumber(masked);
     setVendas(prev => prev.map(v => v.id === id ? { ...v, valor: number } : v));
-  };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -231,7 +257,7 @@ const NovoAcerto = () => {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Vendedor</label>
               <select
                 value={formData.vendedor_id}
-                onChange={(e) => setFormData(prev => ({ ...prev, vendedor_id: e.target.value }))}
+                onChange={(e) => handleVendedorChange(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 required
               >
@@ -246,7 +272,7 @@ const NovoAcerto = () => {
               <input
                 type="date"
                 value={formData.data_acerto}
-                onChange={(e) => setFormData(prev => ({ ...prev, data_acerto: e.target.value }))}
+                onChange={(e) => handleDataChange(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 required
               />
@@ -321,7 +347,6 @@ const NovoAcerto = () => {
                 </button>
               </div>
 
-              {/* Status da importação automática */}
               {loadingEntregas && formData.vendedor_id && (
                 <p className="text-sm text-blue-500 dark:text-blue-400 flex items-center gap-1 mb-3">
                   <span className="animate-spin inline-block">⏳</span> Buscando entregas do dia...

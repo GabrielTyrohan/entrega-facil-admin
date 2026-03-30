@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { type Produto } from '../../hooks/useProdutos';
 import { CreateProdutoData, ProdutoService } from '../../services/produtoService';
 import { applyCurrencyMask, currencyMaskToNumber } from '../../utils/currencyUtils';
+import { toast } from '@/utils/toast';
 
 interface ProdutoModalProps {
   produto: Produto | null;
@@ -163,18 +164,18 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
 
   const handleSave = async () => {
     try {
-      if (!formData.produto_nome.trim()) { alert('Nome do produto é obrigatório'); return; }
-      if (!formData.produto_cod.trim()) { alert('Código do produto é obrigatório'); return; }
-      if (formData.produto_cod.length !== 10) { alert('O código SKU deve ter 10 caracteres (XXX-######).'); return; }
-      if (!formData.categoria.trim()) { alert('Categoria é obrigatória'); return; }
-      if (formData.preco_unt < 0) { alert('Preço não pode ser negativo'); return; }
-      if (formData.qtd_estoque < 0) { alert('Quantidade não pode ser negativa'); return; }
+      if (!formData.produto_nome.trim()) { toast.error('Nome do produto é obrigatório'); return; }
+      if (!formData.produto_cod.trim()) { toast.error('Código do produto é obrigatório'); return; }
+      if (formData.produto_cod.length !== 10) { toast.error('O código SKU deve ter 10 caracteres (XXX-######).'); return; }
+      if (!formData.categoria.trim()) { toast.error('Categoria é obrigatória'); return; }
+      if (formData.preco_unt < 0) { toast.error('Preço não pode ser negativo'); return; }
+      if (formData.qtd_estoque < 0) { toast.error('Quantidade não pode ser negativa'); return; }
 
       if (mode === 'create') {
-        if (!user?.id) { alert('Usuário não autenticado'); return; }
+        if (!user?.id) { toast.error('Usuário não autenticado'); return; }
 
         const existingProduct = await ProdutoService.checkExistingCode(formData.produto_cod, user.id);
-        if (existingProduct) { alert('Já existe um produto com este código'); return; }
+        if (existingProduct) { toast.error('Já existe um produto com este código'); return; }
 
         const createData: CreateProdutoData = {
           administrador_id: user.id,
@@ -205,14 +206,14 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
 
         const newProduct = await ProdutoService.createProduto(createData);
         if (onSave) onSave(newProduct);
-        alert('Produto criado com sucesso!');
+        toast.success('Produto criado com sucesso!');
         onClose();
       } else if (mode === 'edit') {
-        if (!user?.id) { alert('Usuário não autenticado'); return; }
+        if (!user?.id) { toast.error('Usuário não autenticado'); return; }
 
         const produtoService = new ProdutoService(user.id);
         const codigoExiste = await produtoService.verificarCodigoExistente(formData.produto_cod, formData.id);
-        if (codigoExiste) { alert('Já existe um produto com este código'); return; }
+        if (codigoExiste) { toast.error('Já existe um produto com este código'); return; }
 
         const produtoAtualizado = await produtoService.updateProduto(formData.id, {
           produto_nome: formData.produto_nome,
@@ -241,11 +242,11 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
         });
 
         if (onSave) onSave(produtoAtualizado);
-        alert('Produto atualizado com sucesso!');
+        toast.success('Produto atualizado com sucesso!');
         onClose();
       }
     } catch {
-      alert('Erro ao salvar produto. Tente novamente.');
+      toast.error('Erro ao salvar produto. Tente novamente.');
     }
   };
 

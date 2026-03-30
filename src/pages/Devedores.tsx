@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useCreatePagamento } from '../hooks/usePagamentos';
 import { supabase } from '../lib/supabase';
+import { toast } from '@/utils/toast';
 
 interface DevedorData {
   cliente_id: string;
@@ -105,7 +106,7 @@ const Devedores: React.FC = () => {
       
       const valor = parseFloat(valorPagar);
       if (isNaN(valor) || valor <= 0) {
-        alert('Valor inválido');
+        toast.error('Valor inválido');
         return;
       }
 
@@ -142,7 +143,7 @@ const Devedores: React.FC = () => {
       setPagamentoEntrega(null);
     } catch (error) {
       console.error('Erro ao realizar pagamento:', error);
-      alert('Erro ao realizar pagamento. Tente novamente.');
+      toast.error('Erro ao realizar pagamento. Tente novamente.');
     } finally {
       setIsSubmittingPagamento(false);
     }

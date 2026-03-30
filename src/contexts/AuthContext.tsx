@@ -241,7 +241,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         throw new Error('ACESSO_DESATIVADO');
       }
 
-      toast.success('Bem-vindo!');
+      toast.success('Login realizado com sucesso! Bem-vindo ao sistema 👋');
     } catch (error: any) {
       console.error('❌ Erro no login:', error);
       if (error.message === 'ACESSO_DESATIVADO') throw error;
@@ -318,17 +318,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // ===== ERRO DE PERFIL =====
   useEffect(() => {
     if (profileError) {
-      console.error('❌ Erro no perfil:', profileError);
+      console.error('Erro de perfil detectado');
       const errorMsg = (profileError as Error).message;
-
-      if (errorMsg === 'ACESSO_DESATIVADO') {
-        toast.error('Seu acesso foi desativado. Entre em contato com o administrador.');
-      } else if (errorMsg === 'PAGAMENTO_INATIVO') {
-        toast.error('Assinatura inativa. Regularize seu pagamento para acessar o sistema.');
-      } else {
-        toast.error('Erro de autorização. Faça login novamente.');
-      }
-
       localStorage.setItem('loginErrorMsg', errorMsg);
       signOut();
     }

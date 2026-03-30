@@ -1,387 +1,446 @@
-import { useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Calendar, CreditCard, FileText, Lock, Mail, MapPin, Phone, Save, User } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Pagination } from "@/components/ui/pagination";
+import { Skeleton } from "@/components/ui/Skeleton";
+import VendedorModal from '@/components/ui/VendedorModal';
+import { Edit, Eye, MoreHorizontal, Plus, Search, Trash2 } from 'lucide-react';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
-import { toast } from '../utils/toast';
+import { useTotalEntregasPorAdministrador } from '../hooks/useDashboard';
+import {
+  useDeleteVendedor,
+  useVendedores,
+  type Vendedor
+} from '../hooks/useVendedores';
 
 
-interface DadosBancarios {
-  banco: string;
-  agencia: string;
-  conta: string;
-  tipoConta: string;
-  pix?: string;
-}
-
-
-const NovoVendedor: React.FC = () => {
+const Vendedores: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
+  const { user, adminId } = useAuth();
+  const targetId = adminId || user?.id; // Usa adminId se for funcionário, ou user.id se for admin
+  
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedVendedor, setSelectedVendedor] = useState<Vendedor | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [vendedorParaExcluir, setVendedorParaExcluir] = useState<Vendedor | null>(null);
 
+  // React Query hooks para dados
+  // CORREÇÃO: Usar isLoading ao invés de loading e passar currentPage
+  const { data, isLoading, error } = useVendedores(currentPage);
+  
+  // Acessar os dados corretamente:
+  const vendedores = data?.vendedores || [];
+  const totalPages = data?.totalPages || 1;
+  const total = data?.total || 0;
 
-  const gerarSenhaAleatoria = (): string => {
-    return Math.floor(100000 + Math.random() * 900000).toString();
-  };
-
-
-  const obterDataAtual = (): string => {
-    const hoje = new Date();
-    return hoje.toISOString().split('T')[0];
-  };
-
-
-  const [formData, setFormData] = useState({
-    nome: '',
-    email: '',
-    telefone: '',
-    senha: gerarSenhaAleatoria(),
-    endereco: '',
-    dataInicio: obterDataAtual(),
-    tipoVinculo: 'CLT',
-    percentualMinimo: 50,
-    contrato: '',
-    ativo: true,
-    status: true
+  const deleteVendedorMutation = useDeleteVendedor();
+  
+  // Hook para total de entregas por vendedor
+  const { data: entregasPorVendedor = {}, isLoading: isLoadingEntregas } = useTotalEntregasPorAdministrador(targetId || '', {
+    enabled: !!targetId
   });
 
-
-  const [dadosBancarios, setDadosBancarios] = useState<DadosBancarios>({
-    banco: '',
-    agencia: '',
-    conta: '',
-    tipoConta: 'corrente',
-    pix: ''
-  });
-
-
-  const [loading, setLoading] = useState(false);
-
-
-  const formatTelefone = (value: string): string => {
-    const numbers = value.replace(/\D/g, '').slice(0, 11);
-    if (numbers.length <= 2) return numbers;
-    if (numbers.length <= 7) return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`;
-    return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7)}`;
+  // Handlers para as ações do dropdown
+  const handleViewVendedor = (vendedor: Vendedor) => {
+    setSelectedVendedor(vendedor);
+    setIsModalOpen(true);
   };
 
-
-  const formatAgencia = (value: string): string => value.replace(/\D/g, '').slice(0, 4);
-
-
-  const formatConta = (value: string): string => {
-    const numbers = value.replace(/\D/g, '').slice(0, 6);
-    return numbers.length > 5 ? `${numbers.slice(0, 5)}-${numbers.slice(5)}` : numbers;
+  const handleEditVendedor = (vendedor: Vendedor) => {
+    navigate(`/vendedores/editar/${vendedor.id}`);
   };
 
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value, type } = e.target;
-    if (type === 'checkbox') {
-      const checked = (e.target as HTMLInputElement).checked;
-      setFormData(prev => ({ ...prev, [name]: checked }));
-    } else if (name === 'percentualMinimo') {
-      setFormData(prev => ({ ...prev, [name]: parseFloat(value) || 0 }));
-    } else if (name === 'telefone') {
-      setFormData(prev => ({ ...prev, [name]: formatTelefone(value) }));
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
-    }
-  };
-
-
-  const handleBankDataChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    if (name === 'agencia') {
-      setDadosBancarios(prev => ({ ...prev, [name]: formatAgencia(value) }));
-    } else if (name === 'conta') {
-      setDadosBancarios(prev => ({ ...prev, [name]: formatConta(value) }));
-    } else {
-      setDadosBancarios(prev => ({ ...prev, [name]: value }));
-    }
-  };
-
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    // ✅ user capturado antes de qualquer await — evita race condition após re-renders
-    const currentUserId = user?.id;
-
+  const handleDeleteVendedor = async (vendedor: Vendedor) => {
     try {
-      if (!/^\d{6}$/.test(formData.senha)) {
-        toast.error('Senha deve conter exatamente 6 números');
-        setLoading(false);
-        return;
-      }
-
-      if (!formData.nome || !formData.email) {
-        toast.error('Preencha todos os campos obrigatórios');
-        setLoading(false);
-        return;
-      }
-
-      const { data, error } = await supabase.rpc('criar_vendedor_com_hash', {
-        p_administrador_id: currentUserId, // ✅ usa valor capturado
-        p_nome: formData.nome,
-        p_senha_plain: formData.senha,
-        p_telefone: formData.telefone || null,
-        p_email: formData.email || null,
-        p_endereco: formData.endereco || null,
-        p_data_inicio: formData.dataInicio || null,
-        p_tipo_vinculo: formData.tipoVinculo || null,
-        p_percentual_minimo: formData.percentualMinimo || 0,
-        p_tipo_cobranca: 'pago_admin',
-        p_valor_assinatura: 100
-      });
-
-      if (error) throw new Error(error.message || 'Erro ao criar vendedor');
-
-      const resultado = data as { success: boolean; vendedor_id?: string; erro?: string };
-
-      if (!resultado.success) {
-        throw new Error(resultado.erro || 'Erro desconhecido ao criar vendedor');
-      }
-
-      // ✅ CORRIGIDO — invalidações agrupadas em Promise.all — um único ciclo de re-render
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['vendedores'], exact: false }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard'], exact: false }),
-      ]);
-
-      // Salvar dados bancários se preenchidos
-      if (dadosBancarios.banco || dadosBancarios.agencia || dadosBancarios.conta) {
-        const { error: updateError } = await supabase
-          .from('vendedores')
-          .update({ dados_bancarios: dadosBancarios })
-          .eq('id', resultado.vendedor_id);
-
-        if (updateError) {
-          console.warn('Erro ao salvar dados bancários:', updateError);
-        }
-      }
-
-      toast.success(
-        `✅ Vendedor criado com sucesso!\n\n🔐 SENHA DE ACESSO: ${formData.senha}\n\n⚠️ Anote esta senha! Ela não poderá ser recuperada.`,
-        { duration: 15000 }
-      );
-
-      setTimeout(() => {
-        navigate('/vendedores');
-      }, 2000);
-
-    } catch (error: any) {
-      console.error('Erro ao criar vendedor:', error);
-      toast.error(`Erro ao criar vendedor: ${error.message}`);
-    } finally {
-      setLoading(false);
+      // A API de delete espera um objeto com a chave primária
+      await deleteVendedorMutation.mutateAsync({ id: vendedor.id });
+    } catch {
+      // Error handling without logging sensitive data
     }
   };
 
+  // Filtragem local apenas na página atual (já que a paginação é no servidor)
+  const currentVendedores = vendedores.filter((vendedor: Vendedor) =>
+    vendedor.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    vendedor.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    vendedor.telefone?.includes(searchTerm)
+  );
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={() => navigate('/vendedores')}
-            className="p-2 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-          </button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Novo Vendedor</h1>
-            <p className="text-gray-600 dark:text-gray-400">Cadastre um novo vendedor na equipe</p>
+  // Formatação de data
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('pt-BR');
+  };
+
+  // Formatação de percentual
+  const formatPercentual = (percentual?: number | null) => {
+    return percentual ? `${percentual}%` : 'N/A';
+  };
+
+  // Formatação de telefone
+  const formatPhone = (phone?: string | null) => {
+    if (!phone) return 'N/A';
+    const cleaned = phone.replace(/\D/g, '');
+    if (cleaned.length === 11) {
+      return cleaned.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+    } else if (cleaned.length === 10) {
+      return cleaned.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
+    }
+    return phone;
+  };
+
+  // Estados de loading e error do React Query
+  if (isLoading) {
+    return (
+      <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <Skeleton className="h-10 w-40 rounded-lg" />
+        </div>
+
+        {/* Filters Skeleton */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+          <div className="flex flex-col space-y-3 sm:flex-row sm:space-y-0 sm:space-x-4">
+            <Skeleton className="h-10 flex-1" />
+          </div>
+          <div className="mt-3 sm:mt-4 flex justify-between items-center">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+        </div>
+
+        {/* Vendedores Table Skeleton */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px]">
+              <thead className="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  {[...Array(7)].map((_, i) => (
+                    <th key={i} className="px-6 py-3 text-left">
+                      <Skeleton className="h-4 w-24" />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
+                {[...Array(8)].map((_, i) => (
+                  <tr key={i}>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-3">
+                        <Skeleton className="h-8 w-8 rounded-full" />
+                        <div className="space-y-1">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-3 w-20" />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 hidden sm:table-cell">
+                      <div className="space-y-1">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-24" />
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 hidden md:table-cell">
+                      <Skeleton className="h-6 w-16 rounded-full" />
+                    </td>
+                    <td className="px-6 py-4 hidden lg:table-cell">
+                      <Skeleton className="h-5 w-10 rounded-full" />
+                    </td>
+                    <td className="px-6 py-4 hidden lg:table-cell">
+                      <Skeleton className="h-4 w-12" />
+                    </td>
+                    <td className="px-6 py-4 hidden xl:table-cell">
+                      <Skeleton className="h-4 w-24" />
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end gap-2">
+                        <Skeleton className="h-8 w-8 rounded-md" />
+                        <Skeleton className="h-8 w-8 rounded-md" />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
+    );
+  }
 
-
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Informações Pessoais */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-          <div className="flex items-center space-x-2 mb-6">
-            <User className="w-5 h-5 text-blue-600" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Informações Pessoais</h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Nome Completo *</label>
-              <input type="text" name="nome" value={formData.nome} onChange={handleInputChange} required
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Digite o nome completo" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Email *</label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input type="email" name="email" value={formData.email} onChange={handleInputChange} required
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="email@exemplo.com" />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Telefone</label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input type="tel" name="telefone" value={formData.telefone} onChange={handleInputChange}
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="(11) 99999-9999" />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Senha de Acesso *</label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input type="number" name="senha" value={formData.senha} onChange={handleInputChange} required
-                    min="0" max="999999"
-                    className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Senha numérica (6 dígitos)" />
-                </div>
-                <button type="button" onClick={() => setFormData(prev => ({ ...prev, senha: gerarSenhaAleatoria() }))}
-                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors" title="Gerar nova senha">
-                  🔄
-                </button>
-              </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Senha numérica de 6 dígitos gerada automaticamente</p>
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Endereço</label>
-              <div className="relative">
-                <MapPin className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
-                <textarea name="endereco" value={formData.endereco} onChange={handleInputChange} rows={3}
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Endereço completo" />
-              </div>
-            </div>
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Vendedores</h1>
+            <p className="text-gray-600 dark:text-gray-400">Gerencie sua equipe de vendas</p>
           </div>
         </div>
-
-
-        {/* Informações Profissionais */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-          <div className="flex items-center space-x-2 mb-6">
-            <FileText className="w-5 h-5 text-green-600" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Informações Profissionais</h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Data de Início</label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input type="date" name="dataInicio" value={formData.dataInicio} onChange={handleInputChange}
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tipo de Vínculo</label>
-              <select name="tipoVinculo" value={formData.tipoVinculo} onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="CLT">CLT</option>
-                <option value="PJ">Pessoa Jurídica</option>
-                <option value="Freelancer">Freelancer</option>
-                <option value="Terceirizado">Terceirizado</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Percentual Mínimo (%)</label>
-              <input type="number" name="percentualMinimo" value={formData.percentualMinimo} onChange={handleInputChange}
-                min="0" max="100" step="0.1"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="0.0" />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Observações do Contrato</label>
-              <textarea name="contrato" value={formData.contrato} onChange={handleInputChange} rows={3}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Observações sobre o contrato" />
-            </div>
-          </div>
-        </div>
-
-
-        {/* Dados Bancários */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-          <div className="flex items-center space-x-2 mb-6">
-            <CreditCard className="w-5 h-5 text-purple-600" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Dados Bancários</h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Banco</label>
-              <input type="text" name="banco" value={dadosBancarios.banco} onChange={handleBankDataChange}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Nome do banco" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Agência</label>
-              <input type="text" name="agencia" value={dadosBancarios.agencia} onChange={handleBankDataChange}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Número da agência" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Conta</label>
-              <input type="text" name="conta" value={dadosBancarios.conta} onChange={handleBankDataChange}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Número da conta" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tipo de Conta</label>
-              <select name="tipoConta" value={dadosBancarios.tipoConta} onChange={handleBankDataChange}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="corrente">Conta Corrente</option>
-                <option value="poupanca">Poupança</option>
-                <option value="salario">Conta Salário</option>
-              </select>
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Chave PIX (Opcional)</label>
-              <input type="text" name="pix" value={dadosBancarios.pix} onChange={handleBankDataChange}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="CPF, email, telefone ou chave aleatória" />
-            </div>
-          </div>
-        </div>
-
-
-        {/* Status */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Status</h2>
-          <div className="flex flex-col space-y-4">
-            <label className="flex items-center">
-              <input type="checkbox" name="ativo" checked={formData.ativo} onChange={handleInputChange}
-                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600" />
-              <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Vendedor ativo</span>
-            </label>
-            <label className="flex items-center">
-              <input type="checkbox" name="status" checked={formData.status} onChange={handleInputChange}
-                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600" />
-              <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Status habilitado</span>
-            </label>
-          </div>
-        </div>
-
-
-        {/* Botões de Ação */}
-        <div className="flex justify-end space-x-4">
-          <button type="button" onClick={() => navigate('/vendedores')}
-            className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-            Cancelar
-          </button>
-          <button type="submit" disabled={loading}
-            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg font-medium flex items-center space-x-2 transition-colors">
-            <Save className="w-4 h-4" />
-            <span>{loading ? 'Salvando...' : 'Salvar Vendedor'}</span>
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <p className="text-red-600 dark:text-red-400">
+            {error instanceof Error ? error.message : 'Erro ao carregar vendedores'}
+          </p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="mt-2 text-red-600 dark:text-red-400 underline hover:no-underline"
+          >
+            Tentar novamente
           </button>
         </div>
-      </form>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Vendedores</h1>
+          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">Gerencie sua equipe de vendas</p>
+        </div>
+        <button 
+          onClick={() => navigate('/vendedores/novo')}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 sm:py-2 rounded-lg font-medium flex items-center justify-center space-x-2 transition-colors touch-manipulation"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Novo Vendedor</span>
+        </button>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="flex flex-col space-y-3 sm:flex-row sm:space-y-0 sm:space-x-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Buscar vendedores..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 pr-4 py-2.5 sm:py-2 w-full border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent touch-manipulation"
+            />
+          </div>
+        </div>
+        
+        {/* Informações de paginação */}
+        <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+          <span>
+            Mostrando {currentVendedores.length} de {total} vendedores
+          </span>
+          <span>
+            Página {currentPage + 1} de {totalPages}
+          </span>
+        </div>
+      </div>
+
+      {/* Vendedores Table */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[900px]">
+            <thead className="bg-gray-50 dark:bg-gray-700">
+              <tr>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Vendedor
+                </th>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden sm:table-cell">
+                  Contato
+                </th>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden md:table-cell">
+                  Status
+                </th>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden lg:table-cell">
+                  Entregas
+                </th>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden lg:table-cell">
+                  PERCENTUAL.MIN
+                </th>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden xl:table-cell">
+                  Data Cadastro
+                </th>
+                <th className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Ações
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
+              {currentVendedores.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-3 sm:px-6 py-8 sm:py-12 text-center">
+                    <div className="text-sm sm:text-base text-gray-500 dark:text-gray-400">
+                      {searchTerm ? 'Nenhum vendedor encontrado com os critérios de busca.' : 'Nenhum vendedor cadastrado ainda.'}
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                currentVendedores.map((vendedor: Vendedor, index) => (
+                  <tr 
+                    key={vendedor.id} 
+                    className="hover:bg-gray-50 dark:hover:bg-gray-700 animate-fade-in-up"
+                    style={{ animationDelay: `${index * 75}ms` }}
+                  >
+                    <td className="px-3 sm:px-6 py-3 sm:py-4">
+                      <div className="flex items-center">
+                        <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
+                          {vendedor.nome.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="ml-3 min-w-0 flex-1">
+                          <div className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                            {vendedor.nome}
+                          </div>
+                          <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">
+                            ID: {vendedor.id.slice(0, 8)}...
+                          </div>
+                          {/* Mobile-only info */}
+                          <div className="sm:hidden mt-1 space-y-1">
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
+                              {vendedor.email || 'N/A'}
+                            </div>
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
+                              {formatPhone(vendedor.telefone)}
+                            </div>
+                            <div className="md:hidden">
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                vendedor.ativo 
+                                  ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+                                  : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
+                              }`}>
+                                {vendedor.ativo ? 'Ativo' : 'Inativo'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden sm:table-cell">
+                      <div className="text-sm text-gray-900 dark:text-white">{vendedor.email || 'N/A'}</div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">{formatPhone(vendedor.telefone)}</div>
+                    </td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden md:table-cell">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        vendedor.ativo 
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+                          : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
+                      }`}>
+                        {vendedor.ativo ? 'Ativo' : 'Inativo'}
+                      </span>
+                    </td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden lg:table-cell">
+                       {isLoadingEntregas ? (
+                         <div className="animate-pulse bg-gray-200 dark:bg-gray-600 h-4 w-8 rounded"></div>
+                       ) : (
+                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">
+                           {entregasPorVendedor[vendedor.id] || 0}
+                         </span>
+                       )}
+                     </td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white hidden lg:table-cell">
+                      {formatPercentual(vendedor.percentual_minimo)}
+                    </td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white hidden xl:table-cell">
+                      {formatDate(vendedor.created_at)}
+                    </td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex items-center justify-end gap-1">
+
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button 
+                              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-2 touch-manipulation"
+                              disabled={deleteVendedorMutation.isPending}
+                            >
+                              <MoreHorizontal className="w-4 h-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleViewVendedor(vendedor)}>
+                              <Eye className="w-4 h-4 mr-2" />
+                              Visualizar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleEditVendedor(vendedor)}>
+                              <Edit className="w-4 h-4 mr-2" />
+                              Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => setVendedorParaExcluir(vendedor)}
+                              className="text-red-600 dark:text-red-400"
+                              disabled={deleteVendedorMutation.isPending}
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              {deleteVendedorMutation.isPending ? 'Excluindo...' : 'Excluir'}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Paginação */}
+      {totalPages > 1 && (
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalCount={total}
+          pageSize={15}
+          onPageChange={setCurrentPage}
+        />
+      )}
+      
+      {/* Modal de Visualização */}
+      <VendedorModal 
+        vendedor={selectedVendedor}
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+      />
+
+
+
+      {vendedorParaExcluir && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg w-[90%] max-w-sm p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Confirmar exclusão</h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+              Tem certeza que deseja excluir o vendedor {vendedorParaExcluir.nome}?
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                onClick={() => setVendedorParaExcluir(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                disabled={deleteVendedorMutation.isPending}
+                onClick={async () => {
+                  await handleDeleteVendedor(vendedorParaExcluir);
+                  setVendedorParaExcluir(null);
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-
-export default NovoVendedor;
+export default Vendedores;
