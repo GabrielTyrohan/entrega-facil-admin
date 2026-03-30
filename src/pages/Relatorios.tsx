@@ -36,12 +36,13 @@ const Relatorios: React.FC = () => {
   const [selectedPeriod, setSelectedPeriod] = useState('30'); // dias
   const [selectedReport, setSelectedReport] = useState<'vendas' | 'vendedores' | 'entregas' | 'produtos' | 'financeiro' | 'fluxo_pagamentos' | 'vendas_atacado_pj'>('vendas');
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedVendedor, setSelectedVendedor] = useState<string>('');
   const itemsPerPage = 15;
 
   // Reset page when report type or period changes
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [selectedReport, selectedPeriod]);
+  }, [selectedReport, selectedPeriod, selectedVendedor]);
 
   // Hooks para buscar dados com administrador_id
   const administrador_id = adminId || undefined;
@@ -131,7 +132,9 @@ const Relatorios: React.FC = () => {
         .limit(10000);
       return data || []; 
     }, 
-    enabled: !!administrador_id 
+    enabled: !!administrador_id,
+    staleTime: 1000 * 60 * 5,
+    refetchOnWindowFocus: false,
   }); 
   
   const { data: acertosDiarios = [] } = useQuery({ 
@@ -145,7 +148,9 @@ const Relatorios: React.FC = () => {
         .limit(10000);
       return data || []; 
     }, 
-    enabled: !!administrador_id 
+    enabled: !!administrador_id,
+    staleTime: 1000 * 60 * 5,
+    refetchOnWindowFocus: false,
   }); 
   
   const { data: lancamentosCaixa = [] } = useQuery({ 
@@ -159,7 +164,9 @@ const Relatorios: React.FC = () => {
         .limit(10000);
       return data || []; 
     }, 
-    enabled: !!administrador_id 
+    enabled: !!administrador_id,
+    staleTime: 1000 * 60 * 5,
+    refetchOnWindowFocus: false,
   }); 
   
   const { data: orcamentosPJ = [] } = useQuery({ 
@@ -173,7 +180,9 @@ const Relatorios: React.FC = () => {
         .limit(10000);
       return data || []; 
     }, 
-    enabled: !!administrador_id 
+    enabled: !!administrador_id,
+    staleTime: 1000 * 60 * 5,
+    refetchOnWindowFocus: false,
   });
 
   // Verificar se há erros
@@ -222,9 +231,8 @@ const Relatorios: React.FC = () => {
         isDateInPeriod(p?.data_pagamento as string)
       );
       
-      const entregasComPagamentos = pagamentosFiltrados.map((p: Record<string, unknown>) => p.entrega_id).filter(Boolean);
-      const entregasFiltradas = entregas.filter((e: Record<string, unknown>) => 
-        entregasComPagamentos.includes(e?.id)
+      const entregasFiltradas = entregas.filter((e: any) => 
+        isDateInPeriod(e.data_entrega)
       );
 
       // 2. Vendas Atacado - Usar data_entrega ou created_at
@@ -714,7 +722,7 @@ const Relatorios: React.FC = () => {
             <div class="card">Total de Vendas: <strong>${formatCurrency(Number(vendedor.totalVendas) || 0)}</strong></div>
             <div class="card">Total de Pagamentos: <strong>${formatCurrency(Number(vendedor.totalPagamentos) || 0)}</strong></div>
             <div class="card">Entregas Pagas: <strong>${Number(vendedor.entregasPagas) || 0}</strong></div>
-            <div clas: <strong>${String(vendedor.taxaConversao || '0')}%</strong></div>
+            <div class="card">Taxa de Conversão: <strong>${String(vendedor.taxaConversao || '0')}</strong></div>
           </div>
 
           <h2>Entregas</h2>
@@ -826,7 +834,9 @@ const Relatorios: React.FC = () => {
   const { currentItems, totalPages, startIndex, endIndex, totalItems } = getPaginatedData(
     selectedReport === 'vendedores' ? metricas.vendedorPerformance :
     selectedReport === 'produtos' ? metricas.produtoVendas :
-    selectedReport === 'entregas' ? dadosPeriodo.entregas :
+    selectedReport === 'entregas' ? dadosPeriodo.entregas.filter((e: any) => 
+      selectedVendedor ? e.vendedor_id === selectedVendedor : true
+    ) :
     selectedReport === 'fluxo_pagamentos' ? [
       ...dadosPeriodo.pagamentos.map((p: any) => ({ ...p, _tipo: 'entrega' })),
       ...dadosPeriodo.vendasAtacado.flatMap((v: any) => 
@@ -995,6 +1005,25 @@ const Relatorios: React.FC = () => {
                 <option value="vendas_atacado_pj">Vendas Atacado & PJ</option>
               </select>
             </div>
+
+            {selectedReport === 'entregas' && (
+              <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
+                <div className="flex items-center space-x-2">
+                  <Users className="w-4 h-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Vendedor:</label>
+                </div>
+                <select
+                  value={selectedVendedor}
+                  onChange={(e) => setSelectedVendedor(e.target.value)}
+                  className="w-full sm:w-auto px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm dark:bg-gray-700 dark:text-white touch-manipulation"
+                >
+                  <option value="">Todos os Vendedores</option>
+                  {Array.isArray(vendedores) && vendedores.map((v: any) => (
+                    <option key={v.id} value={v.id}>{v.nome}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1504,12 +1533,12 @@ const Relatorios: React.FC = () => {
               </table>
             </div>
             <Pagination
-  currentPage={currentPage - 1}
-  totalPages={totalPages}
-  totalCount={totalItems}
-  pageSize={itemsPerPage}
-  onPageChange={(page) => setCurrentPage(page + 1)}
-/>
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalCount={totalItems}
+              pageSize={itemsPerPage}
+              onPageChange={(page) => setCurrentPage(page)}
+            />
           </div>
         )}
 
@@ -1591,12 +1620,12 @@ const Relatorios: React.FC = () => {
               </table>
             </div>
             <Pagination
-  currentPage={currentPage - 1}
-  totalPages={totalPages}
-  totalCount={totalItems}
-  pageSize={itemsPerPage}
-  onPageChange={(page) => setCurrentPage(page + 1)}
-/>
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalCount={totalItems}
+              pageSize={itemsPerPage}
+              onPageChange={(page) => setCurrentPage(page)}
+            />
           </div>
         )}
 
@@ -1664,11 +1693,11 @@ const Relatorios: React.FC = () => {
                       </td>
                       <td className="px-3 sm:px-6 py-4 text-xs sm:text-sm">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          entrega.pago 
+                          entrega.status_pagamento === 'pago' 
                             ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
                             : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
                         }`}>
-                          {entrega.pago ? 'Pago' : 'Pendente'}
+                          {entrega.status_pagamento === 'pago' ? 'Pago' : 'Pendente'}
                         </span>
                       </td>
                     </tr>
@@ -1677,12 +1706,12 @@ const Relatorios: React.FC = () => {
               </table>
             </div>
             <Pagination
-  currentPage={currentPage - 1}
-  totalPages={totalPages}
-  totalCount={totalItems}
-  pageSize={itemsPerPage}
-  onPageChange={(page) => setCurrentPage(page + 1)}
-/>
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalCount={totalItems}
+              pageSize={itemsPerPage}
+              onPageChange={(page) => setCurrentPage(page)}
+            />
           </div>
         )}
       </div>
