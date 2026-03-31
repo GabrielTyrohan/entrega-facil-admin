@@ -70,7 +70,6 @@ function App() {
         const isMigrated = localStorage.getItem(MIGRATION_KEY);
 
         if (!isMigrated) {
-          console.log('Iniciando migração de cache para IndexedDB...');
           localStorage.removeItem('REACT_QUERY_OFFLINE_CACHE');
           Object.keys(localStorage).forEach((key) => {
             if (key.startsWith('REACT_QUERY')) {
@@ -78,7 +77,6 @@ function App() {
             }
           });
           localStorage.setItem(MIGRATION_KEY, 'true');
-          console.log('Migração para IndexedDB concluída com sucesso. Cache antigo do localStorage limpo.');
         }
       }
     } catch (error) {
