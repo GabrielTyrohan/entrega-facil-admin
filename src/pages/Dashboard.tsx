@@ -2,11 +2,13 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCountUp } from '@/hooks/useCountUp';
 import { useDashboard, useIsVisible } from '@/hooks/useDashboard';
+import { supabase } from '@/lib/supabase';
 import { EstoqueAtual } from '@/types/estoque';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Activity, AlertTriangle, ArrowRight, Calendar,
-  DollarSign, FileText, HelpCircle, TrendingDown,
-  TrendingUp, Truck, Users
+  DollarSign, FileText, HelpCircle, Package,
+  TrendingDown, TrendingUp, Truck, Users
 } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
@@ -21,10 +23,7 @@ const Tooltip: React.FC<{ text: string }> = ({ text }) => {
   const show = () => {
     if (!btnRef.current) return;
     const rect = btnRef.current.getBoundingClientRect();
-    setPos({
-      top:  rect.top - 8,          // 8px acima do botão
-      left: rect.left + rect.width / 2,
-    });
+    setPos({ top: rect.top - 8, left: rect.left + rect.width / 2 });
     setVisible(true);
   };
 
@@ -43,7 +42,6 @@ const Tooltip: React.FC<{ text: string }> = ({ text }) => {
       >
         <HelpCircle className="w-3.5 h-3.5" />
       </button>
-
       {visible && typeof window !== 'undefined' && ReactDOM.createPortal(
         <div
           className="fixed z-[9999] w-52 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg px-3 py-2 shadow-xl pointer-events-none leading-relaxed -translate-x-1/2 -translate-y-full"
@@ -107,7 +105,6 @@ const StatCard: React.FC<StatCardProps> = ({
     ) : (
       <div className="flex items-center justify-between">
         <div className="flex-1 min-w-0 animate-fade-in-up">
-          {/* Título + tooltip */}
           <div className="flex items-center gap-0.5 mb-1">
             <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 truncate">{title}</p>
             {tooltip && <Tooltip text={tooltip} />}
@@ -168,12 +165,9 @@ const InadimplenciaCard: React.FC<{
           Ver devedores <ArrowRight className="w-3 h-3" />
         </Link>
       </div>
-
       {isLoading || !isVisible ? (
         <div className="space-y-3">
-          {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-12 w-full rounded-lg" />
-          ))}
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
         </div>
       ) : !data ? (
         <p className="text-sm text-gray-500 text-center py-4">Sem dados</p>
@@ -215,7 +209,6 @@ const FaturamentoMensalChart: React.FC<{ data: MonthData[]; isLoading: boolean }
         </h3>
         <Tooltip text="Total recebido por mês nos últimos 12 meses, somando pagamentos de entregas e vendas atacado." />
       </div>
-
       {isLoading || !isVisible ? (
         <div className="flex-1 flex items-end justify-between space-x-1 sm:space-x-2">
           {[...Array(12)].map((_, i) => (
@@ -289,7 +282,6 @@ const TopVendedoresCard: React.FC<{
         </h3>
         <Tooltip text="Os 5 vendedores com maior valor total em entregas e vendas atacado no mês corrente." />
       </div>
-
       {isLoading || !isVisible ? (
         <div className="space-y-4">
           {[...Array(5)].map((_, i) => (
@@ -339,6 +331,80 @@ const TopVendedoresCard: React.FC<{
   );
 };
 
+// ─── TopProdutosCard ──────────────────────────────────────────────────────────
+interface TopProdutoItem { id: string; nome: string; unidade: string; qtd: number; }
+
+const TopProdutosCard: React.FC<{ data: TopProdutoItem[]; isLoading: boolean }> = ({ data, isLoading }) => {
+  const { ref, isVisible } = useIsVisible();
+  const cores = ['bg-orange-500', 'bg-orange-400', 'bg-orange-300', 'bg-orange-200', 'bg-orange-100'];
+
+  return (
+    <div ref={ref} className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 h-80 overflow-hidden flex flex-col">
+      <div className="flex items-center gap-2 mb-4 flex-shrink-0">
+        <Package className="w-5 h-5 text-orange-500 flex-shrink-0" />
+        <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
+          Top Produtos — Mês Atual
+        </h3>
+        <Tooltip text="Os 5 produtos mais entregues via cestas no mês corrente." />
+      </div>
+      {isLoading || !isVisible ? (
+        <div className="space-y-4">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <Skeleton className="w-5 h-5 rounded flex-shrink-0" />
+              <div className="flex-1 space-y-1.5">
+                <div className="flex justify-between">
+                  <Skeleton className="h-3.5 w-2/3" />
+                  <Skeleton className="h-3.5 w-12" />
+                </div>
+                <Skeleton className="h-1.5 w-full rounded-full" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-3 overflow-y-auto pr-1 flex-1">
+          {data.length > 0 ? data.map((produto, index) => {
+            const maxQtd = data[0]?.qtd || 1;
+            const pct = Math.round((produto.qtd / maxQtd) * 100);
+            return (
+              <div
+                key={produto.id}
+                className="flex items-center gap-3 animate-fade-in-up"
+                style={{ animationDelay: `${index * 150}ms` }}
+              >
+                <span className="w-5 text-xs font-bold text-gray-400 text-center shrink-0">{index + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate">{produto.nome}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0 ml-2">
+                      {produto.qtd} {produto.unidade}
+                    </span>
+                  </div>
+                  <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-700 ${cores[index] ?? 'bg-orange-100'}`}
+                      style={{ width: isVisible ? `${pct}%` : '0%' }}
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          }) : (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+              <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center mb-3">
+                <Package className="w-6 h-6 text-orange-500" />
+              </div>
+              <p className="text-sm font-medium text-gray-900 dark:text-white">Sem entregas no mês</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Nenhuma cesta entregue registrada ainda.</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── EstoqueAlertsCard ────────────────────────────────────────────────────────
 const EstoqueAlertsCard: React.FC<{ data: EstoqueAtual[]; isLoading: boolean }> = ({ data, isLoading }) => {
   const { ref, isVisible } = useIsVisible();
@@ -360,7 +426,6 @@ const EstoqueAlertsCard: React.FC<{ data: EstoqueAtual[]; isLoading: boolean }> 
           Ver todos <ArrowRight className="w-3 h-3" />
         </Link>
       </div>
-
       {isLoading || !isVisible ? (
         <div className="space-y-4">
           {[...Array(3)].map((_, i) => (
@@ -405,9 +470,72 @@ const EstoqueAlertsCard: React.FC<{ data: EstoqueAtual[]; isLoading: boolean }> 
 
 // ─── Dashboard Principal ──────────────────────────────────────────────────────
 const Dashboard: React.FC = () => {
-  const { userType, permissions } = useAuth();
+  const { userType, permissions, adminId } = useAuth();
+  const queryClient = useQueryClient();
   const isExpedicao = userType !== 'admin' && permissions?.expedicao === true;
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
+
+  // ── Realtime integrado diretamente ──────────────────────────────────────────
+useEffect(() => {
+  if (!adminId) {
+    console.warn('⚠️ [Realtime] adminId ainda não disponível, aguardando...');
+    return;
+  }
+
+  console.log('🔌 [Realtime] Iniciando canal — adminId:', adminId);
+
+  // Refetch por prefixo — invalida QUALQUER query que começa com essa chave,
+  // independente de adminId, data ou outros parâmetros extras na queryKey
+  const refetch = (keys: string[]) => {
+    keys.forEach(key =>
+      queryClient.refetchQueries({
+        predicate: (query) => query.queryKey[0] === key,
+        type: 'active',
+      })
+    );
+  };
+
+  const channel = supabase
+    .channel(`dashboard-realtime-${adminId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'entregas' }, (payload) => {
+      console.log('📦 [Realtime] entregas:', payload.eventType);
+      refetch(['dashboard_core', 'dashboard_entregas_hoje', 'dashboard_inadimplencia', 'dashboard_top_vendedores']);
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'entregas_cestas_vendedor' }, (payload) => {
+      console.log('📦 [Realtime] entregas_cestas_vendedor:', payload.eventType);
+      refetch(['dashboard_core', 'dashboard_top_produtos']);
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'pagamentos' }, (payload) => {
+      console.log('📦 [Realtime] pagamentos:', payload.eventType);
+      refetch(['dashboard_core', 'dashboard_inadimplencia', 'dashboard_faturamento_mensal']);
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'movimentacoes_estoque' }, (payload) => {
+      console.log('📦 [Realtime] movimentacoes_estoque:', payload.eventType);
+      refetch(['dashboard_estoque_alerts']);
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'estoque_vendedor' }, (payload) => {
+      console.log('📦 [Realtime] estoque_vendedor:', payload.eventType);
+      refetch(['dashboard_estoque_alerts']);
+    })
+    .subscribe((status, err) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('✅ [Realtime] Canal conectado com sucesso!');
+      } else if (status === 'CHANNEL_ERROR') {
+        console.error('❌ [Realtime] Erro no canal:', err);
+      } else if (status === 'TIMED_OUT') {
+        console.error('⏱️ [Realtime] Timeout na conexão');
+      } else if (status === 'CLOSED') {
+        console.warn('🔒 [Realtime] Canal fechado');
+      } else {
+        console.log('ℹ️ [Realtime] Status:', status);
+      }
+    });
+
+  return () => {
+    console.log('🗑️ [Realtime] Canal removido');
+    supabase.removeChannel(channel);
+  };
+}, [adminId, queryClient]);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentDateTime(new Date()), 60000);
@@ -416,7 +544,7 @@ const Dashboard: React.FC = () => {
 
   const {
     stats, breakdown, entregasHoje, inadimplencia, vendedores,
-    estoqueAlerts, charts, isLoading, someLoading, loadingStates
+    topProdutos, estoqueAlerts, charts, isLoading, someLoading, loadingStates,
   } = useDashboard();
 
   const faturamentoAnimado = useCountUp({ end: stats?.faturamentoAtual  || 0, duration: 800, decimals: 2 });
@@ -437,7 +565,6 @@ const Dashboard: React.FC = () => {
     return ((stats.valoresEmFalta / stats.faturamentoAtual) * 100).toFixed(1);
   }, [stats]);
 
-  // ── Linha 1: métricas financeiras ─────────────────────────────────────────
   const statsRow1 = [
     {
       title: 'Faturamento do Mês',
@@ -468,11 +595,10 @@ const Dashboard: React.FC = () => {
     },
   ] as const;
 
-  // ── Linha 2: métricas operacionais ────────────────────────────────────────
   const statsRow2 = [
     {
       title: 'Entregas do Mês',
-      tooltip: 'Total de entregas, vendas atacado e orçamentos PJ registrados no mês corrente.',
+      tooltip: 'Total de entregas e vendas atacado registradas no mês corrente.',
       value: String(stats?.entregasAtual || 0),
       change: `${stats?.percentualEntregas >= 0 ? '+' : ''}${stats?.percentualEntregas}%`,
       changeType: stats?.percentualEntregas >= 0 ? 'increase' : 'decrease',
@@ -498,7 +624,6 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-6 sm:space-y-8 p-4 sm:p-6 lg:p-8">
-
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0">
         <div className="text-center sm:text-left">
@@ -519,52 +644,38 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Stats — 2 linhas de 3 cards */}
+      {/* Stats */}
       {!isExpedicao && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {statsRow1.map((stat, index) => (
-              <StatCard key={index} {...stat} />
-            ))}
+            {statsRow1.map((stat, index) => <StatCard key={index} {...stat} />)}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {statsRow2.map((stat, index) => (
-              <StatCard key={index} {...stat} />
-            ))}
+            {statsRow2.map((stat, index) => <StatCard key={index} {...stat} />)}
           </div>
         </div>
       )}
 
       {/* Gráfico mensal */}
       {!isExpedicao && (
-        <FaturamentoMensalChart
-          data={charts.faturamentoMensal}
-          isLoading={loadingStates.grafico}
-        />
+        <FaturamentoMensalChart data={charts.faturamentoMensal} isLoading={loadingStates.grafico} />
       )}
 
       {/* Inadimplência + Estoque */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {!isExpedicao && (
-          <InadimplenciaCard
-            data={inadimplencia}
-            isLoading={loadingStates.inadimplencia}
-          />
+          <InadimplenciaCard data={inadimplencia} isLoading={loadingStates.inadimplencia} />
         )}
-        <EstoqueAlertsCard
-          data={estoqueAlerts}
-          isLoading={loadingStates.estoque}
-        />
+        <EstoqueAlertsCard data={estoqueAlerts} isLoading={loadingStates.estoque} />
       </div>
 
-      {/* Top Vendedores */}
+      {/* Top Vendedores + Top Produtos */}
       {!isExpedicao && (
-        <TopVendedoresCard
-          data={vendedores}
-          isLoading={loadingStates.vendedores}
-        />
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <TopVendedoresCard data={vendedores} isLoading={loadingStates.vendedores} />
+          <TopProdutosCard data={topProdutos} isLoading={loadingStates.topProdutos} />
+        </div>
       )}
-
     </div>
   );
 };

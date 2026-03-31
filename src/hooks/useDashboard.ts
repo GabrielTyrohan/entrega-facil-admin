@@ -102,8 +102,8 @@ export const useDashboardCore = (adminId: string) => {
       ]);
 
       // ── Faturamento geral: apenas entregas + atacado ──────────────────────
-      const fat_entregas_atual  = soma(entregasAtual.data  || [], 'valor');
-      const fat_atacado_atual   = soma(atacadoAtual.data   || [], 'valor_total');
+      const fat_entregas_atual    = soma(entregasAtual.data    || [], 'valor');
+      const fat_atacado_atual     = soma(atacadoAtual.data     || [], 'valor_total');
       const fat_entregas_anterior = soma(entregasAnterior.data || [], 'valor');
       const fat_atacado_anterior  = soma(atacadoAnterior.data  || [], 'valor_total');
 
@@ -115,9 +115,9 @@ export const useDashboardCore = (adminId: string) => {
       const entregas_anterior = (entregasAnterior.data?.length || 0) + (atacadoAnterior.data?.length || 0);
 
       // ── Orçamentos PJ — breakdown isolado ────────────────────────────────
-      const fat_orcamentos_atual     = soma(orcamentosAtual.data     || [], 'valor_total');
-      const fat_orcamentos_anterior  = soma(orcamentosAnterior.data  || [], 'valor_total');
-      const qtd_orcamentos_atual     = orcamentosAtual.data?.length  || 0;
+      const fat_orcamentos_atual    = soma(orcamentosAtual.data    || [], 'valor_total');
+      const fat_orcamentos_anterior = soma(orcamentosAnterior.data || [], 'valor_total');
+      const qtd_orcamentos_atual    = orcamentosAtual.data?.length || 0;
 
       // ── Valores em falta ──────────────────────────────────────────────────
       let valores_em_falta = 0;
@@ -138,7 +138,6 @@ export const useDashboardCore = (adminId: string) => {
         entregas_atual,
         entregas_anterior,
         valores_em_falta,
-        // Orçamentos PJ isolados — card próprio no dashboard
         breakdown: {
           fat_entregas_atual,
           fat_atacado_atual,
@@ -291,18 +290,86 @@ export const useEstoqueAlertsDashboard = (adminId: string, enabled: boolean) => 
       return (data || [])
         .filter(p => (p.qtd_estoque || 0) < 20)
         .map(p => ({
-          id:              p.id,
-          produto_nome:    p.produto_nome,
-          qtd_estoque:     p.qtd_estoque     || 0,
-          estoque_minimo:  p.estoque_minimo  || 0,
-          unidade_medida:  p.unidade_medida  || 'un',
-          status_estoque:  (p.qtd_estoque || 0) <= 0 ? 'ZERADO' : 'BAIXO',
+          id:             p.id,
+          produto_nome:   p.produto_nome,
+          qtd_estoque:    p.qtd_estoque    || 0,
+          estoque_minimo: p.estoque_minimo || 0,
+          unidade_medida: p.unidade_medida || 'un',
+          status_estoque: (p.qtd_estoque || 0) <= 0 ? 'ZERADO' : 'BAIXO',
         }))
         .sort((a, b) => a.qtd_estoque - b.qtd_estoque) as EstoqueAtual[];
     },
     enabled: enabled && !!adminId,
     staleTime: 0,
     refetchOnWindowFocus: true,
+  });
+};
+
+// ─── ONDA 3: Top Produtos mais vendidos (via cestas) ─────────────────────────
+export const useTopProdutosDashboard = (adminId: string, enabled: boolean) => {
+  const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+    .toISOString().split('T')[0];
+
+  return useQuery({
+    queryKey: ['dashboard_top_produtos', adminId, firstDay],
+    queryFn: async () => {
+      // 1. Entregas de cestas do mês atual do admin
+      const { data: entregas, error: errEntregas } = await supabase
+        .from('entregas_cestas_vendedor')
+        .select('cesta_id, quantidade')
+        .eq('administrador_id', adminId)
+        .gte('created_at', firstDay);
+
+      if (errEntregas) throw errEntregas;
+      if (!entregas?.length) return [];
+
+      // 2. Agrupa: cesta_id → total de cestas entregues
+      const cestasMap = new Map<string, number>();
+      entregas.forEach(e => {
+        cestasMap.set(e.cesta_id, (cestasMap.get(e.cesta_id) || 0) + (e.quantidade || 1));
+      });
+
+      const cestaIds = [...cestasMap.keys()];
+
+      // 3. Itens de cada cesta com dados do produto
+      const { data: itens, error: errItens } = await supabase
+        .from('cestas_base_itens')
+        .select('cesta_base_id, produto_cadastrado_id, quantidade, produtos_cadastrado(id, produto_nome, unidade_medida)')
+        .in('cesta_base_id', cestaIds);
+
+      if (errItens) throw errItens;
+      if (!itens?.length) return [];
+
+      // 4. Calcula total de unidades entregues por produto
+      //    total = quantidade_do_item_na_cesta × cestas_entregues
+      const map = new Map<string, { nome: string; unidade: string; qtd: number }>();
+
+      itens.forEach((item: any) => {
+        const pid        = item.produto_cadastrado_id;
+        const cestasQtd  = cestasMap.get(item.cesta_base_id) || 0;
+        const totalUnids = (item.quantidade || 1) * cestasQtd;
+        const info       = item.produtos_cadastrado;
+
+        if (!pid || !cestasQtd) return;
+
+        if (!map.has(pid)) {
+          map.set(pid, {
+            nome:    info?.produto_nome   || 'Produto',
+            unidade: info?.unidade_medida || 'un',
+            qtd:     0,
+          });
+        }
+        map.get(pid)!.qtd += totalUnids;
+      });
+
+      return Array.from(map.entries())
+        .map(([id, v]) => ({ id, ...v }))
+        .sort((a, b) => b.qtd - a.qtd)
+        .slice(0, 5);
+    },
+    enabled: enabled && !!adminId,
+    staleTime: 1000 * 60 * 5,
+    refetchOnWindowFocus: false,
   });
 };
 
@@ -315,8 +382,6 @@ export const useFaturamentoMensalDashboard = (adminId: string, enabled: boolean)
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard_faturamento_mensal', adminId, startDate],
     queryFn: async () => {
-      // Gráfico reflete apenas pagamentos recebidos (entregas + atacado),
-      // sem orçamentos PJ para manter consistência com o card de faturamento.
       const [pagamentos, atacado] = await Promise.all([
         supabase.from('pagamentos')
           .select('valor, data_pagamento, entregas!inner(vendedores!inner(administrador_id))')
@@ -377,6 +442,7 @@ export const useDashboard = () => {
   const entregasHoje      = useEntregasHoje(id, wave2Enabled);
   const inadimplencia     = useInadimplenciaFaixas(id, wave2Enabled);
   const topVendedores     = useTopVendedoresDashboard(id, wave2Enabled);
+  const topProdutos       = useTopProdutosDashboard(id, wave2Enabled);
   const estoqueAlerts     = useEstoqueAlertsDashboard(id, wave2Enabled);
   const faturamentoMensal = useFaturamentoMensalDashboard(id, wave2Enabled);
 
@@ -392,27 +458,27 @@ export const useDashboard = () => {
       faturamentoAtual:      c?.faturamento_atual    || 0,
       faturamentoAnterior:   c?.faturamento_anterior || 0,
       valoresEmFalta:        c?.valores_em_falta     || 0,
-      entregasAtual:         c?.entregas_atual       || 0,   // apenas entregas + atacado
+      entregasAtual:         c?.entregas_atual       || 0,
       entregasAnterior:      c?.entregas_anterior    || 0,
       vendedoresAtivos:      c?.vendedores_ativos    || 0,
       percentualFaturamento: calcPercent(c?.faturamento_atual || 0, c?.faturamento_anterior || 0),
       percentualEntregas:    calcPercent(c?.entregas_atual    || 0, c?.entregas_anterior    || 0),
     },
-    // Card isolado de Orçamentos PJ
     breakdown: {
-      fatEntregas:         c?.breakdown?.fat_entregas_atual    || 0,
-      fatAtacado:          c?.breakdown?.fat_atacado_atual     || 0,
-      fatOrcamentos:       c?.breakdown?.fat_orcamentos_atual  || 0,
-      fatOrcamentosAnt:    c?.breakdown?.fat_orcamentos_anterior || 0,
-      qtdOrcamentos:       c?.breakdown?.qtd_orcamentos_atual  || 0,
+      fatEntregas:          c?.breakdown?.fat_entregas_atual      || 0,
+      fatAtacado:           c?.breakdown?.fat_atacado_atual       || 0,
+      fatOrcamentos:        c?.breakdown?.fat_orcamentos_atual    || 0,
+      fatOrcamentosAnt:     c?.breakdown?.fat_orcamentos_anterior || 0,
+      qtdOrcamentos:        c?.breakdown?.qtd_orcamentos_atual    || 0,
       percentualOrcamentos: calcPercent(
-        c?.breakdown?.fat_orcamentos_atual   || 0,
+        c?.breakdown?.fat_orcamentos_atual    || 0,
         c?.breakdown?.fat_orcamentos_anterior || 0,
       ),
     },
     entregasHoje:  entregasHoje.data?.total || 0,
     inadimplencia: inadimplencia.data       || null,
     vendedores:    topVendedores.data       || [],
+    topProdutos:   topProdutos.data         || [],
     estoqueAlerts: estoqueAlerts.data       || [],
     charts: { faturamentoMensal: faturamentoMensal.data || [] },
     isLoading:   core.isLoading,
@@ -420,6 +486,7 @@ export const useDashboard = () => {
     loadingStates: {
       core:          core.isLoading,
       vendedores:    topVendedores.isLoading,
+      topProdutos:   topProdutos.isLoading,
       estoque:       estoqueAlerts.isLoading,
       grafico:       faturamentoMensal.isLoading,
       inadimplencia: inadimplencia.isLoading,
@@ -481,3 +548,4 @@ export const useTotalEntregasPorAdministrador = (administrador_id: string, optio
 };
 
 export type { };
+
