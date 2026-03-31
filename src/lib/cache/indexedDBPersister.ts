@@ -8,10 +8,8 @@ const testIndexedDB = async () => {
     await set('test-key', 'test-value');
     await get('test-key');
     await del('test-key');
-    console.log('✅ IndexedDB disponível');
     return true;
   } catch (error) {
-    console.warn('⚠️ IndexedDB indisponível, usando memória', error);
     return false;
   }
 };

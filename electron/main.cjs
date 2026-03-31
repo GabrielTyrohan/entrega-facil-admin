@@ -18,7 +18,9 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    show: false, // ✅ Evita flash e foco instável na inicialização
+    minWidth: 1024,
+    minHeight: 600,
+    show: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -27,7 +29,7 @@ function createWindow() {
       backgroundThrottling: false,
     },
     icon: path.join(__dirname, '../public/icon.png'),
-    title: 'Entrega Fácil Admin',
+    title: 'Entrega Fácil Gestão',
   });
 
   if (isDev) {
@@ -44,6 +46,7 @@ function createWindow() {
 
   // ✅ Só exibe a janela quando o conteúdo estiver completamente carregado
   mainWindow.once('ready-to-show', () => {
+    mainWindow.maximize();
     mainWindow.show();
     mainWindow.focus();
   });
@@ -62,9 +65,6 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  console.log('isDev:', isDev);
-  console.log('isPackaged:', app.isPackaged);
-  console.log('NODE_ENV:', process.env.NODE_ENV);
   createWindow();
   if (!isDev) {
     autoUpdater.checkForUpdates();
@@ -101,7 +101,7 @@ autoUpdater.on('update-downloaded', (info) => {
     type: 'info',
     title: 'Atualização disponível',
     message: `Versão ${info.version} pronta para instalar`,
-    detail: 'O Entrega Fácil Admin será reiniciado para aplicar a atualização.',
+    detail: 'O Entrega Fácil Gestão será reiniciado para aplicar a atualização.',
     buttons: ['Reiniciar agora', 'Depois'],
     defaultId: 0,
     cancelId: 1,

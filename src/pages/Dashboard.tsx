@@ -479,8 +479,6 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     if (!adminId) return;
 
-    console.log('🔌 [Realtime] Iniciando canal — adminId:', adminId);
-
     const refetch = (keys: string[]) => {
       keys.forEach(key =>
         queryClient.refetchQueries({
@@ -492,47 +490,28 @@ const Dashboard: React.FC = () => {
 
     const channel = supabase
       .channel(`dashboard-realtime-${adminId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'entregas' }, (payload) => {
-        console.log('📦 [Realtime] entregas:', payload.eventType);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'entregas' }, () => {
         refetch(['dashboard_core', 'dashboard_entregas_hoje', 'dashboard_inadimplencia', 'dashboard_top_vendedores']);
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'entregas_cestas_vendedor' }, (payload) => {
-        console.log('📦 [Realtime] entregas_cestas_vendedor:', payload.eventType);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'entregas_cestas_vendedor' }, () => {
         refetch(['dashboard_core', 'dashboard_top_produtos']);
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pagamentos' }, (payload) => {
-        console.log('📦 [Realtime] pagamentos:', payload.eventType);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pagamentos' }, () => {
         refetch(['dashboard_core', 'dashboard_inadimplencia', 'dashboard_faturamento_mensal']);
       })
       // ✅ Pagamentos do atacado também atualizam o gráfico
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'vendas_atacado_pagamentos' }, (payload) => {
-        console.log('📦 [Realtime] vendas_atacado_pagamentos:', payload.eventType);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'vendas_atacado_pagamentos' }, () => {
         refetch(['dashboard_faturamento_mensal']);
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'movimentacoes_estoque' }, (payload) => {
-        console.log('📦 [Realtime] movimentacoes_estoque:', payload.eventType);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'movimentacoes_estoque' }, () => {
         refetch(['dashboard_estoque_alerts']);
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'estoque_vendedor' }, (payload) => {
-        console.log('📦 [Realtime] estoque_vendedor:', payload.eventType);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'estoque_vendedor' }, () => {
         refetch(['dashboard_estoque_alerts']);
       })
-      .subscribe((status, err) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ [Realtime] Canal conectado com sucesso!');
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('❌ [Realtime] Erro no canal:', err);
-        } else if (status === 'TIMED_OUT') {
-          console.error('⏱️ [Realtime] Timeout na conexão');
-        } else if (status === 'CLOSED') {
-          console.warn('🔒 [Realtime] Canal fechado');
-        } else {
-          console.log('ℹ️ [Realtime] Status:', status);
-        }
-      });
+      .subscribe();
 
     return () => {
-      console.log('🗑️ [Realtime] Canal removido');
       supabase.removeChannel(channel);
     };
   }, [adminId, queryClient]);

@@ -1,6 +1,6 @@
-import { QueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
 import { CACHE_KEYS } from '@/lib/constants/queryKeys';
+import { supabase } from '@/lib/supabase';
+import { QueryClient } from '@tanstack/react-query';
 
 /**
  * Realiza o prefetch de dados essenciais para o funcionamento do sistema
@@ -10,7 +10,6 @@ export const prefetchEssentialData = async (
   queryClient: QueryClient,
   adminId: string
 ) => {
-  console.log('🚀 Prefetching dados essenciais...');
 
   // Prefetch em paralelo (não bloqueia a UI)
   await Promise.allSettled([
@@ -46,6 +45,4 @@ export const prefetchEssentialData = async (
       staleTime: 10 * 60 * 1000,
     }),
   ]);
-
-  console.log('✅ Prefetch concluído');
 };
