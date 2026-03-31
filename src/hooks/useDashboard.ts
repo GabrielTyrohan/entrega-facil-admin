@@ -56,36 +56,29 @@ export const useDashboardCore = (adminId: string) => {
         faltanteResult,
         faltanteAtacado,
       ] = await Promise.all([
-        // Entregas mês atual
         supabase.from('entregas').select('valor')
           .in('vendedor_id', vendedorIds)
           .gte('data_entrega', firstDayCurrent),
-        // Entregas mês anterior
         supabase.from('entregas').select('valor')
           .in('vendedor_id', vendedorIds)
           .gte('data_entrega', firstDayPrevious)
           .lte('data_entrega', lastDayPrevious),
-        // Atacado mês atual
         supabase.from('vendas_atacado').select('valor_total')
           .eq('administrador_id', adminId)
           .gte('created_at', firstDayCurrent),
-        // Atacado mês anterior
         supabase.from('vendas_atacado').select('valor_total')
           .eq('administrador_id', adminId)
           .gte('created_at', firstDayPrevious)
           .lte('created_at', lastDayPrevious),
-        // Orçamentos PJ mês atual (card separado — NÃO entra no faturamento geral)
         supabase.from('orcamentos_pj').select('valor_total')
           .eq('administrador_id', adminId)
           .eq('status', 'convertido')
           .gte('data_orcamento', firstDayCurrent),
-        // Orçamentos PJ mês anterior (para % do card PJ)
         supabase.from('orcamentos_pj').select('valor_total')
           .eq('administrador_id', adminId)
           .eq('status', 'convertido')
           .gte('data_orcamento', firstDayPrevious)
           .lte('data_orcamento', lastDayPrevious),
-        // Faltante entregas (retornadas sem pagamento total)
         supabase.from('entregas').select(`
             id, valor,
             pagamentos(valor),
@@ -94,32 +87,27 @@ export const useDashboardCore = (adminId: string) => {
           .eq('vendedores.administrador_id', adminId)
           .not('dataRetorno', 'is', null)
           .lt('dataRetorno', firstDayStr),
-        // Faltante atacado (pendente/parcial/atrasado)
         supabase.from('vendas_atacado')
           .select('valor_total, valor_pago')
           .eq('administrador_id', adminId)
           .in('status_pagamento', ['pendente', 'parcial', 'atrasado']),
       ]);
 
-      // ── Faturamento geral: apenas entregas + atacado ──────────────────────
-      const fat_entregas_atual  = soma(entregasAtual.data  || [], 'valor');
-      const fat_atacado_atual   = soma(atacadoAtual.data   || [], 'valor_total');
+      const fat_entregas_atual    = soma(entregasAtual.data    || [], 'valor');
+      const fat_atacado_atual     = soma(atacadoAtual.data     || [], 'valor_total');
       const fat_entregas_anterior = soma(entregasAnterior.data || [], 'valor');
       const fat_atacado_anterior  = soma(atacadoAnterior.data  || [], 'valor_total');
 
       const faturamento_atual    = fat_entregas_atual  + fat_atacado_atual;
       const faturamento_anterior = fat_entregas_anterior + fat_atacado_anterior;
 
-      // ── Contagem de operações: apenas entregas + atacado ─────────────────
       const entregas_atual    = (entregasAtual.data?.length    || 0) + (atacadoAtual.data?.length    || 0);
       const entregas_anterior = (entregasAnterior.data?.length || 0) + (atacadoAnterior.data?.length || 0);
 
-      // ── Orçamentos PJ — breakdown isolado ────────────────────────────────
-      const fat_orcamentos_atual     = soma(orcamentosAtual.data     || [], 'valor_total');
-      const fat_orcamentos_anterior  = soma(orcamentosAnterior.data  || [], 'valor_total');
-      const qtd_orcamentos_atual     = orcamentosAtual.data?.length  || 0;
+      const fat_orcamentos_atual    = soma(orcamentosAtual.data    || [], 'valor_total');
+      const fat_orcamentos_anterior = soma(orcamentosAnterior.data || [], 'valor_total');
+      const qtd_orcamentos_atual    = orcamentosAtual.data?.length || 0;
 
-      // ── Valores em falta ──────────────────────────────────────────────────
       let valores_em_falta = 0;
       faltanteResult.data?.forEach((e: any) => {
         const pago   = e.pagamentos?.reduce((s: number, p: any) => s + (p.valor || 0), 0) || 0;
@@ -132,13 +120,12 @@ export const useDashboardCore = (adminId: string) => {
       });
 
       return {
-        vendedores_ativos:   vendedores?.length || 0,
+        vendedores_ativos: vendedores?.length || 0,
         faturamento_atual,
         faturamento_anterior,
         entregas_atual,
         entregas_anterior,
         valores_em_falta,
-        // Orçamentos PJ isolados — card próprio no dashboard
         breakdown: {
           fat_entregas_atual,
           fat_atacado_atual,
@@ -291,12 +278,12 @@ export const useEstoqueAlertsDashboard = (adminId: string, enabled: boolean) => 
       return (data || [])
         .filter(p => (p.qtd_estoque || 0) < 20)
         .map(p => ({
-          id:              p.id,
-          produto_nome:    p.produto_nome,
-          qtd_estoque:     p.qtd_estoque     || 0,
-          estoque_minimo:  p.estoque_minimo  || 0,
-          unidade_medida:  p.unidade_medida  || 'un',
-          status_estoque:  (p.qtd_estoque || 0) <= 0 ? 'ZERADO' : 'BAIXO',
+          id:             p.id,
+          produto_nome:   p.produto_nome,
+          qtd_estoque:    p.qtd_estoque    || 0,
+          estoque_minimo: p.estoque_minimo || 0,
+          unidade_medida: p.unidade_medida || 'un',
+          status_estoque: (p.qtd_estoque || 0) <= 0 ? 'ZERADO' : 'BAIXO',
         }))
         .sort((a, b) => a.qtd_estoque - b.qtd_estoque) as EstoqueAtual[];
     },
@@ -306,17 +293,80 @@ export const useEstoqueAlertsDashboard = (adminId: string, enabled: boolean) => 
   });
 };
 
+// ─── ONDA 3: Top Produtos mais vendidos (via cestas) ─────────────────────────
+export const useTopProdutosDashboard = (adminId: string, enabled: boolean) => {
+  const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+    .toISOString().split('T')[0];
+
+  return useQuery({
+    queryKey: ['dashboard_top_produtos', adminId, firstDay],
+    queryFn: async () => {
+      const { data: entregas, error: errEntregas } = await supabase
+        .from('entregas_cestas_vendedor')
+        .select('cesta_id, quantidade')
+        .eq('administrador_id', adminId)
+        .gte('created_at', firstDay);
+
+      if (errEntregas) throw errEntregas;
+      if (!entregas?.length) return [];
+
+      const cestasMap = new Map<string, number>();
+      entregas.forEach(e => {
+        cestasMap.set(e.cesta_id, (cestasMap.get(e.cesta_id) || 0) + (e.quantidade || 1));
+      });
+
+      const cestaIds = [...cestasMap.keys()];
+
+      const { data: itens, error: errItens } = await supabase
+        .from('cestas_base_itens')
+        .select('cesta_base_id, produto_cadastrado_id, quantidade, produtos_cadastrado(id, produto_nome, unidade_medida)')
+        .in('cesta_base_id', cestaIds);
+
+      if (errItens) throw errItens;
+      if (!itens?.length) return [];
+
+      const map = new Map<string, { nome: string; unidade: string; qtd: number }>();
+
+      itens.forEach((item: any) => {
+        const pid        = item.produto_cadastrado_id;
+        const cestasQtd  = cestasMap.get(item.cesta_base_id) || 0;
+        const totalUnids = (item.quantidade || 1) * cestasQtd;
+        const info       = item.produtos_cadastrado;
+
+        if (!pid || !cestasQtd) return;
+
+        if (!map.has(pid)) {
+          map.set(pid, {
+            nome:    info?.produto_nome   || 'Produto',
+            unidade: info?.unidade_medida || 'un',
+            qtd:     0,
+          });
+        }
+        map.get(pid)!.qtd += totalUnids;
+      });
+
+      return Array.from(map.entries())
+        .map(([id, v]) => ({ id, ...v }))
+        .sort((a, b) => b.qtd - a.qtd)
+        .slice(0, 5);
+    },
+    enabled: enabled && !!adminId,
+    staleTime: 1000 * 60 * 5,
+    refetchOnWindowFocus: false,
+  });
+};
+
 // ─── ONDA 4: Gráfico mensal ───────────────────────────────────────────────────
 export const useFaturamentoMensalDashboard = (adminId: string, enabled: boolean) => {
   const now       = new Date();
-  const startDate = new Date(now.getFullYear() - 1, now.getMonth(),     1).toISOString().split('T')[0];
-  const endDate   = new Date(now.getFullYear(),     now.getMonth() + 1, 0).toISOString().split('T')[0];
-
+  const startDate = new Date(
+  Date.UTC(now.getFullYear() - 1, now.getMonth(), 1, 0, 0, 0, 0)
+).toISOString();
+  const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
+  .toISOString();
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard_faturamento_mensal', adminId, startDate],
     queryFn: async () => {
-      // Gráfico reflete apenas pagamentos recebidos (entregas + atacado),
-      // sem orçamentos PJ para manter consistência com o card de faturamento.
       const [pagamentos, atacado] = await Promise.all([
         supabase.from('pagamentos')
           .select('valor, data_pagamento, entregas!inner(vendedores!inner(administrador_id))')
@@ -335,29 +385,31 @@ export const useFaturamentoMensalDashboard = (adminId: string, enabled: boolean)
         ...(atacado.data    || []).map((p: any) => ({ valor: p.valor, data: p.created_at.split('T')[0] })),
       ];
     },
+    // ✅ enabled independente — não bloqueia por wave2
     enabled: enabled && !!adminId,
-    staleTime: 1000 * 60 * 10,
+    // ✅ staleTime: 0 — sempre reexecuta quando Realtime disparar refetch
+    staleTime: 0,
     refetchOnWindowFocus: false,
   });
 
   const chartData = useMemo(() => {
     const months = Array.from({ length: 12 }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
-      return {
-        month: d.toLocaleDateString('pt-BR', { month: 'short' })
-          .replace('.', '').replace(/^\w/, c => c.toUpperCase()),
-        year:     d.getFullYear(),
-        monthNum: d.getMonth(),
-        value:  0,
-        height: 0,
-      };
-    });
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (11 - i), 1));
+  return {
+    month: d.toLocaleDateString('pt-BR', { month: 'short', timeZone: 'UTC' })
+      .replace('.', '').replace(/^\w/, c => c.toUpperCase()),
+    year:     d.getUTCFullYear(),
+    monthNum: d.getUTCMonth(),
+    value:  0,
+    height: 0,
+  };
+});
 
     data?.forEach((item: any) => {
-      const d   = new Date(item.data);
-      const idx = months.findIndex(m => m.monthNum === d.getMonth() && m.year === d.getFullYear());
-      if (idx >= 0) months[idx].value += item.valor || 0;
-    });
+  const d = new Date(item.data + (item.data.includes('T') ? '' : 'T00:00:00Z'));
+  const idx = months.findIndex(m => m.monthNum === d.getUTCMonth() && m.year === d.getUTCFullYear());
+  if (idx >= 0) months[idx].value += item.valor || 0;
+});
 
     const max = Math.max(...months.map(m => m.value), 1);
     return months.map(m => ({ ...m, height: (m.value / max) * 90 || 5 }));
@@ -377,8 +429,10 @@ export const useDashboard = () => {
   const entregasHoje      = useEntregasHoje(id, wave2Enabled);
   const inadimplencia     = useInadimplenciaFaixas(id, wave2Enabled);
   const topVendedores     = useTopVendedoresDashboard(id, wave2Enabled);
+  const topProdutos       = useTopProdutosDashboard(id, wave2Enabled);
   const estoqueAlerts     = useEstoqueAlertsDashboard(id, wave2Enabled);
-  const faturamentoMensal = useFaturamentoMensalDashboard(id, wave2Enabled);
+  // ✅ Gráfico com enabled próprio — só precisa do adminId, não depende do wave2
+  const faturamentoMensal = useFaturamentoMensalDashboard(id, !!id);
 
   const calcPercent = (atual: number, anterior: number) => {
     if (!anterior) return atual > 0 ? 100 : 0;
@@ -392,27 +446,27 @@ export const useDashboard = () => {
       faturamentoAtual:      c?.faturamento_atual    || 0,
       faturamentoAnterior:   c?.faturamento_anterior || 0,
       valoresEmFalta:        c?.valores_em_falta     || 0,
-      entregasAtual:         c?.entregas_atual       || 0,   // apenas entregas + atacado
+      entregasAtual:         c?.entregas_atual       || 0,
       entregasAnterior:      c?.entregas_anterior    || 0,
       vendedoresAtivos:      c?.vendedores_ativos    || 0,
       percentualFaturamento: calcPercent(c?.faturamento_atual || 0, c?.faturamento_anterior || 0),
       percentualEntregas:    calcPercent(c?.entregas_atual    || 0, c?.entregas_anterior    || 0),
     },
-    // Card isolado de Orçamentos PJ
     breakdown: {
-      fatEntregas:         c?.breakdown?.fat_entregas_atual    || 0,
-      fatAtacado:          c?.breakdown?.fat_atacado_atual     || 0,
-      fatOrcamentos:       c?.breakdown?.fat_orcamentos_atual  || 0,
-      fatOrcamentosAnt:    c?.breakdown?.fat_orcamentos_anterior || 0,
-      qtdOrcamentos:       c?.breakdown?.qtd_orcamentos_atual  || 0,
+      fatEntregas:          c?.breakdown?.fat_entregas_atual      || 0,
+      fatAtacado:           c?.breakdown?.fat_atacado_atual       || 0,
+      fatOrcamentos:        c?.breakdown?.fat_orcamentos_atual    || 0,
+      fatOrcamentosAnt:     c?.breakdown?.fat_orcamentos_anterior || 0,
+      qtdOrcamentos:        c?.breakdown?.qtd_orcamentos_atual    || 0,
       percentualOrcamentos: calcPercent(
-        c?.breakdown?.fat_orcamentos_atual   || 0,
+        c?.breakdown?.fat_orcamentos_atual    || 0,
         c?.breakdown?.fat_orcamentos_anterior || 0,
       ),
     },
     entregasHoje:  entregasHoje.data?.total || 0,
     inadimplencia: inadimplencia.data       || null,
     vendedores:    topVendedores.data       || [],
+    topProdutos:   topProdutos.data         || [],
     estoqueAlerts: estoqueAlerts.data       || [],
     charts: { faturamentoMensal: faturamentoMensal.data || [] },
     isLoading:   core.isLoading,
@@ -420,6 +474,7 @@ export const useDashboard = () => {
     loadingStates: {
       core:          core.isLoading,
       vendedores:    topVendedores.isLoading,
+      topProdutos:   topProdutos.isLoading,
       estoque:       estoqueAlerts.isLoading,
       grafico:       faturamentoMensal.isLoading,
       inadimplencia: inadimplencia.isLoading,
@@ -481,3 +536,4 @@ export const useTotalEntregasPorAdministrador = (administrador_id: string, optio
 };
 
 export type { };
+
