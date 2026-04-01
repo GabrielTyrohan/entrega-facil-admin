@@ -10,7 +10,7 @@ import { useMovimentacoesEstoque } from '@/hooks/useMovimentacoesEstoque';
 import { useProdutos } from '@/hooks/useProdutos';
 import { toast } from '@/utils/toast';
 
-const MOVEMENT_TYPES = {
+const MOVEMENT_TYPES: Record<string, string> = {
   entrada_compra: 'Entrada (Compra)',
   entrada_devolucao: 'Entrada (Devolução)',
   entrada_ajuste: 'Entrada (Ajuste)',
@@ -66,10 +66,10 @@ export default function MovimentacoesEstoque() {
     return () => clearTimeout(handler);
   }, [comboboxSearch]);
 
-  // Hooks — todos os produtos (para filtro da página e lookup do selecionado)
+  // Hooks — todos os produtos ativos (para o filtro da página e combobox do modal)
   const { data: todosProdutos } = useProdutos();
 
-  // Produtos filtrados via Supabase ilike (para o combobox do modal)
+  // Produtos filtrados via Supabase ilike (para o combobox do modal quando há busca ativa)
   const { data: produtosBusca } = useProdutos({
     searchTerm: debouncedComboboxSearch || undefined,
   });
@@ -88,11 +88,11 @@ export default function MovimentacoesEstoque() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Normalizar string: minúsculas e sem acentos (mesmo padrão do EditarCestaBase)
+  // Normalizar string: minúsculas e sem acentos
   const normalizeStr = (str: string) =>
     str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
-  // Filter products for combobox (busca complexa: multi-termo, case-insensitive, sem acentos, por nome, código e categoria)
+  // Filtra produtos no combobox (multi-termo, case-insensitive, sem acentos)
   const filteredProducts = useMemo(() => {
     if (!produtos) return [];
     if (!comboboxSearch.trim()) return produtos;
@@ -106,11 +106,11 @@ export default function MovimentacoesEstoque() {
     });
   }, [produtos, comboboxSearch]);
 
-  const { 
-    movimentacoes, 
-    isLoading, 
-    registrarMovimentacao, 
-    isRegistrando 
+  const {
+    movimentacoes,
+    isLoading,
+    registrarMovimentacao,
+    isRegistrando,
   } = useMovimentacoesEstoque(filters.produtoId || undefined);
 
   // Filter Logic
@@ -118,12 +118,10 @@ export default function MovimentacoesEstoque() {
     if (!movimentacoes) return [];
 
     return movimentacoes.filter(mov => {
-      // Filter by Type
       if (filters.tipoMovimentacao && mov.tipo_movimentacao !== filters.tipoMovimentacao) {
         return false;
       }
 
-      // Filter by Date Range
       if (filters.dataInicio) {
         const dataMov = new Date(mov.created_at).setHours(0, 0, 0, 0);
         const dataInicio = new Date(filters.dataInicio).setHours(0, 0, 0, 0);
@@ -161,6 +159,18 @@ export default function MovimentacoesEstoque() {
     setPage(0);
   };
 
+  const resetModal = () => {
+    setAjusteData({
+      produtoId: '',
+      tipo: 'entrada_ajuste',
+      quantidade: '',
+      motivo: '',
+      observacoes: '',
+    });
+    setSelectedProductData(null);
+    setComboboxSearch('');
+  };
+
   const handleSaveAjuste = async () => {
     try {
       if (!ajusteData.produtoId) {
@@ -186,18 +196,10 @@ export default function MovimentacoesEstoque() {
 
       toast.success('Ajuste registrado com sucesso!');
       setIsModalOpen(false);
-      setAjusteData({
-        produtoId: '',
-        tipo: 'entrada_ajuste',
-        quantidade: '',
-        motivo: '',
-        observacoes: '',
-      });
-      setSelectedProductData(null);
-      setComboboxSearch('');
+      resetModal();
     } catch (error) {
       console.error(error);
-      toast.error('Erro ao registrar ajuste');
+      toast.error(error instanceof Error ? error.message : 'Erro ao registrar ajuste');
     }
   };
 
@@ -223,7 +225,7 @@ export default function MovimentacoesEstoque() {
           <Filter className="w-4 h-4" />
           Filtros
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="space-y-1">
             <label className="text-xs font-medium text-gray-500">Produto</label>
@@ -274,9 +276,9 @@ export default function MovimentacoesEstoque() {
                 value={filters.dataFim}
                 onChange={(e) => handleFilterChange('dataFim', e.target.value)}
               />
-              <Button 
-                variant="outline" 
-                size="icon" 
+              <Button
+                variant="outline"
+                size="icon"
                 className="shrink-0"
                 onClick={handleClearFilters}
                 title="Limpar filtros"
@@ -326,20 +328,26 @@ export default function MovimentacoesEstoque() {
                 </tr>
               ) : (
                 paginatedData.map((mov) => {
-                  const produto = todosProdutos?.find((p: any) => p.id === mov.produto_cadastrado_id);
+                  // ✅ Usa o join direto do hook — resolve nome mesmo para produtos inativos
+                  const produto = (mov as any).produtos_cadastrado;
                   const isEntrada = mov.tipo_movimentacao.startsWith('entrada');
-                  
+
                   return (
                     <tr key={mov.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                       <td className="px-4 py-3 whitespace-nowrap">
                         {format(new Date(mov.created_at), 'dd/MM/yyyy HH:mm')}
                       </td>
                       <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
-                        {produto?.produto_nome || 'Produto não encontrado'}
+                        {produto?.produto_nome || (
+                          <span className="text-gray-400 italic">Produto removido</span>
+                        )}
+                        {produto && !produto.ativo && (
+                          <span className="ml-2 text-xs font-normal text-gray-400">(inativo)</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                          isEntrada 
+                          isEntrada
                             ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
                             : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                         }`}>
@@ -352,15 +360,15 @@ export default function MovimentacoesEstoque() {
                         {isEntrada ? '+' : '-'}{mov.quantidade}
                       </td>
                       <td className="px-4 py-3 text-right text-gray-500">
-                        {mov.quantidade_anterior}
+                        {mov.quantidade_anterior ?? '-'}
                       </td>
                       <td className="px-4 py-3 text-right font-medium">
-                        {mov.quantidade_nova}
+                        {mov.quantidade_nova ?? '-'}
                       </td>
                       <td className="px-4 py-3 text-gray-500">
                         {mov.usuario_nome}
                       </td>
-                      <td className="px-4 py-3 text-gray-500 truncate max-w-[150px]" title={mov.motivo}>
+                      <td className="px-4 py-3 text-gray-500 truncate max-w-[150px]" title={mov.motivo ?? ''}>
                         {mov.motivo || '-'}
                       </td>
                     </tr>
@@ -370,7 +378,7 @@ export default function MovimentacoesEstoque() {
             </tbody>
           </table>
         </div>
-        
+
         {!isLoading && (
           <Pagination
             currentPage={page}
@@ -387,22 +395,14 @@ export default function MovimentacoesEstoque() {
         isOpen={isModalOpen}
         onClose={() => {
           setIsModalOpen(false);
-          setAjusteData({
-            produtoId: '',
-            tipo: 'entrada_ajuste',
-            quantidade: '',
-            motivo: '',
-            observacoes: '',
-          });
-          setSelectedProductData(null);
-          setComboboxSearch('');
+          resetModal();
         }}
         title="Registrar Ajuste Manual"
       >
         <div className="space-y-4">
           <div className="space-y-2 relative" ref={comboboxRef}>
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Produto</label>
-            <div 
+            <div
               className="w-full h-10 px-3 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm flex items-center justify-between cursor-pointer focus-within:ring-2 focus-within:ring-blue-500"
               onClick={() => {
                 setComboboxOpen(!comboboxOpen);
@@ -410,8 +410,8 @@ export default function MovimentacoesEstoque() {
               }}
             >
               <span className={selectedProductData ? 'text-gray-900 dark:text-white' : 'text-gray-500'}>
-                {selectedProductData 
-                  ? `${selectedProductData.produto_nome} (Atual: ${selectedProductData.qtd_estoque})` 
+                {selectedProductData
+                  ? `${selectedProductData.produto_nome} (Atual: ${selectedProductData.qtd_estoque})`
                   : 'Selecione ou pesquise um produto...'}
               </span>
               <Search className="w-4 h-4 text-gray-400" />
@@ -450,7 +450,8 @@ export default function MovimentacoesEstoque() {
                         }}
                       >
                         <span className="text-gray-900 dark:text-white">
-                          {prod.produto_nome} <span className="text-gray-500 text-xs ml-1">(Estoque: {prod.qtd_estoque})</span>
+                          {prod.produto_nome}
+                          <span className="text-gray-500 text-xs ml-1">(Estoque: {prod.qtd_estoque})</span>
                         </span>
                         {ajusteData.produtoId === prod.id && (
                           <Check className="w-4 h-4 text-blue-600 dark:text-blue-400" />
@@ -494,7 +495,7 @@ export default function MovimentacoesEstoque() {
                 onChange={(e) => setAjusteData(prev => ({ ...prev, quantidade: e.target.value }))}
               />
             </div>
-            
+
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Motivo</label>
               <select
@@ -522,7 +523,7 @@ export default function MovimentacoesEstoque() {
           </div>
 
           <div className="flex justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setIsModalOpen(false)}>
+            <Button variant="outline" onClick={() => { setIsModalOpen(false); resetModal(); }}>
               Cancelar
             </Button>
             <Button onClick={handleSaveAjuste} disabled={isRegistrando}>

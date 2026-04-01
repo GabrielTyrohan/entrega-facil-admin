@@ -423,14 +423,16 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
         {/* Footer fixo do sidebar */}
         <div className="flex-shrink-0 p-4 border-t border-gray-200 dark:border-gray-700 space-y-2">
           {/* Menu Fixo de Rodapé */}
-          <Link
-            to="/funcionario-config"
-            onClick={() => { if (window.innerWidth < 1024 && onClose) onClose(); }}
-            className={`flex items-center gap-3 w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors ${location.pathname === '/funcionario-config' ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium' : ''}`}
-          >
-            <UserCog className="w-5 h-5" />
-            <span>Meu Perfil</span>
-          </Link>
+          {userType === 'funcionario' && (
+            <Link
+              to="/funcionario-config"
+              onClick={() => { if (window.innerWidth < 1024 && onClose) onClose(); }}
+              className={`flex items-center gap-3 w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors ${location.pathname === '/funcionario-config' ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium' : ''}`}
+            >
+              <UserCog className="w-5 h-5" />
+              <span>Meu Perfil</span>
+            </Link>
+          )}
           <button
             onClick={() => {
               signOut();

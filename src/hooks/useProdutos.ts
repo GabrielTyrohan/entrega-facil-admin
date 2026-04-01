@@ -5,9 +5,7 @@ import { supabase } from '../lib/supabase';
 import { CACHE_KEYS, useSupabaseQuery } from '../lib/supabaseCache';
 import { ProdutoCadastrado } from '../services/produtoService';
 
-
 export type Produto = ProdutoCadastrado;
-
 
 export const useProdutos = (options?: {
   enabled?: boolean;
@@ -52,7 +50,7 @@ export const useProdutos = (options?: {
       categoria: options?.categoria,
       page,
       pageSize,
-      searchTerm: options?.searchTerm
+      searchTerm: options?.searchTerm,
     }],
     {
       enabled: (options?.enabled ?? true) && !!targetId,
@@ -60,7 +58,6 @@ export const useProdutos = (options?: {
     }
   );
 };
-
 
 export const useProduto = (id: string, options?: { enabled?: boolean }) => {
   const { adminId } = useAuth();
@@ -82,7 +79,6 @@ export const useProduto = (id: string, options?: { enabled?: boolean }) => {
   });
 };
 
-
 export const useProdutosPorCategoria = (categoria: string, options?: { enabled?: boolean }) => {
   const { adminId } = useAuth();
   const targetId = adminId;
@@ -103,7 +99,6 @@ export const useProdutosPorCategoria = (categoria: string, options?: { enabled?:
   });
 };
 
-
 export const useCreateProduto = () => {
   const queryClient = useQueryClient();
 
@@ -119,16 +114,15 @@ export const useCreateProduto = () => {
 
       return data as Produto;
     },
-    // ✅ CORRIGIDO — 2 invalidações agrupadas em Promise.all
-    onSuccess: () => {
-      Promise.all([
+    // ✅ async + await garante que ambas as invalidações completam
+    onSuccess: async () => {
+      await Promise.all([
         queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PRODUTOS] }),
         queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CESTAS] }),
       ]);
-    }
+    },
   });
 };
-
 
 export const useUpdateProduto = () => {
   const queryClient = useQueryClient();
@@ -146,16 +140,15 @@ export const useUpdateProduto = () => {
 
       return data as Produto;
     },
-    // ✅ CORRIGIDO — 2 invalidações agrupadas em Promise.all
-    onSuccess: () => {
-      Promise.all([
+    // ✅ async + await garante que ambas as invalidações completam
+    onSuccess: async () => {
+      await Promise.all([
         queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PRODUTOS] }),
         queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CESTAS] }),
       ]);
-    }
+    },
   });
 };
-
 
 export const useDeleteProduto = () => {
   const queryClient = useQueryClient();
@@ -169,16 +162,15 @@ export const useDeleteProduto = () => {
 
       if (error) throw new Error(handleSupabaseError(error));
     },
-    // ✅ CORRIGIDO — 2 invalidações agrupadas em Promise.all
-    onSuccess: () => {
-      Promise.all([
+    // ✅ async + await garante que ambas as invalidações completam
+    onSuccess: async () => {
+      await Promise.all([
         queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PRODUTOS] }),
         queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CESTAS] }),
       ]);
-    }
+    },
   });
 };
-
 
 export const useProdutoCategories = (options?: { enabled?: boolean }) => {
   const { user, adminId } = useAuth();
@@ -199,7 +191,6 @@ export const useProdutoCategories = (options?: { enabled?: boolean }) => {
   });
 };
 
-
 export const useEstatisticasProdutos = (options?: { enabled?: boolean }) => {
   const { adminId } = useAuth();
   const targetId = adminId;
@@ -218,7 +209,6 @@ export const useEstatisticasProdutos = (options?: { enabled?: boolean }) => {
   });
 };
 
-
 export const useInvalidateProdutos = () => {
   const queryClient = useQueryClient();
 
@@ -226,7 +216,6 @@ export const useInvalidateProdutos = () => {
     queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.PRODUTOS] });
   };
 };
-
 
 export const usePrefetchProduto = () => {
   const queryClient = useQueryClient();
