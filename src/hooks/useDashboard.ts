@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
+
 // ─── Utilitário: detecta quando elemento entra na tela ───────────────────────
 export const useIsVisible = () => {
   const ref = useRef<HTMLDivElement>(null);
@@ -22,21 +23,40 @@ export const useIsVisible = () => {
   return { ref, isVisible };
 };
 
+
 // ─── Utilitário: soma campo de array ─────────────────────────────────────────
 const soma = (arr: any[], field: string) =>
   arr?.reduce((s, i) => s + (Number(i[field]) || 0), 0) || 0;
 
+
+// ─── Utilitário: gera início/fim do mês em ISO para timestamp with time zone ──
+// data_entrega é "timestamp with time zone" salvo como UTC meia-noite.
+// Usamos UTC para não cortar registros por fuso horário.
+const mesAtualInicio = () =>
+  new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString();
+
+const mesAnteriorInicio = () =>
+  new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 1, 1)).toISOString();
+
+const mesAnteriorFim = () =>
+  new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 0, 23, 59, 59, 999)).toISOString();
+
+
 // ─── ONDA 1: Core — cards principais ─────────────────────────────────────────
 export const useDashboardCore = (adminId: string) => {
   const enabled = !!adminId;
-  const now = new Date();
-  const firstDayCurrent  = new Date(now.getFullYear(), now.getMonth(),     1).toISOString();
-  const firstDayPrevious = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
-  const lastDayPrevious  = new Date(now.getFullYear(), now.getMonth(),     0).toISOString();
-  const firstDayStr      = new Date(now.getFullYear(), now.getMonth(),     1).toISOString().split('T')[0];
+
+  // Gera as datas uma vez por render (estáveis dentro do mesmo minuto)
+  const now              = new Date();
+  const firstDayCurrent  = mesAtualInicio();
+  const firstDayPrevious = mesAnteriorInicio();
+  const lastDayPrevious  = mesAnteriorFim();
+
+  // Chave de cache baseada em ano+mês (string curta e estável)
+  const cacheKey = `${now.getUTCFullYear()}-${now.getUTCMonth()}`;
 
   return useQuery({
-    queryKey: ['dashboard_core', adminId, firstDayStr],
+    queryKey: ['dashboard_core', adminId, cacheKey],
     queryFn: async () => {
       const { data: vendedores } = await supabase
         .from('vendedores')
@@ -56,37 +76,52 @@ export const useDashboardCore = (adminId: string) => {
         faltanteResult,
         faltanteAtacado,
       ] = await Promise.all([
+        // Entregas do mês atual
         supabase.from('entregas').select('valor')
           .in('vendedor_id', vendedorIds)
           .gte('data_entrega', firstDayCurrent),
+
+        // Entregas do mês anterior
         supabase.from('entregas').select('valor')
           .in('vendedor_id', vendedorIds)
           .gte('data_entrega', firstDayPrevious)
           .lte('data_entrega', lastDayPrevious),
+
+        // Atacado do mês atual
         supabase.from('vendas_atacado').select('valor_total')
           .eq('administrador_id', adminId)
           .gte('created_at', firstDayCurrent),
+
+        // Atacado do mês anterior
         supabase.from('vendas_atacado').select('valor_total')
           .eq('administrador_id', adminId)
           .gte('created_at', firstDayPrevious)
           .lte('created_at', lastDayPrevious),
+
+        // Orçamentos PJ do mês atual convertidos
         supabase.from('orcamentos_pj').select('valor_total')
           .eq('administrador_id', adminId)
           .eq('status', 'convertido')
           .gte('data_orcamento', firstDayCurrent),
+
+        // Orçamentos PJ do mês anterior convertidos
         supabase.from('orcamentos_pj').select('valor_total')
           .eq('administrador_id', adminId)
           .eq('status', 'convertido')
           .gte('data_orcamento', firstDayPrevious)
           .lte('data_orcamento', lastDayPrevious),
+
+        // Inadimplência: entregas com dataRetorno no passado (qualquer data, com débito)
         supabase.from('entregas').select(`
-            id, valor,
-            pagamentos(valor),
-            vendedores!inner(administrador_id)
-          `)
+          id, valor,
+          pagamentos(valor),
+          vendedores!inner(administrador_id)
+        `)
           .eq('vendedores.administrador_id', adminId)
           .not('dataRetorno', 'is', null)
-          .lt('dataRetorno', firstDayStr),
+          .lt('dataRetorno', now.toISOString()),
+
+        // Inadimplência: atacado pendente/parcial/atrasado
         supabase.from('vendas_atacado')
           .select('valor_total, valor_pago')
           .eq('administrador_id', adminId)
@@ -98,7 +133,7 @@ export const useDashboardCore = (adminId: string) => {
       const fat_entregas_anterior = soma(entregasAnterior.data || [], 'valor');
       const fat_atacado_anterior  = soma(atacadoAnterior.data  || [], 'valor_total');
 
-      const faturamento_atual    = fat_entregas_atual  + fat_atacado_atual;
+      const faturamento_atual    = fat_entregas_atual   + fat_atacado_atual;
       const faturamento_anterior = fat_entregas_anterior + fat_atacado_anterior;
 
       const entregas_atual    = (entregasAtual.data?.length    || 0) + (atacadoAtual.data?.length    || 0);
@@ -142,9 +177,13 @@ export const useDashboardCore = (adminId: string) => {
   });
 };
 
+
 // ─── ONDA 2: Entregas de hoje ─────────────────────────────────────────────────
 export const useEntregasHoje = (adminId: string, enabled: boolean) => {
-  const hoje = new Date().toISOString().split('T')[0];
+  // Para "hoje" usamos UTC meia-noite, igual ao padrão de gravação
+  const hoje     = new Date().toISOString().split('T')[0];
+  const inicioDia = `${hoje}T00:00:00.000Z`;
+  const fimDia    = `${hoje}T23:59:59.999Z`;
 
   return useQuery({
     queryKey: ['dashboard_entregas_hoje', adminId, hoje],
@@ -155,12 +194,15 @@ export const useEntregasHoje = (adminId: string, enabled: boolean) => {
       const ids = vendedores?.map(v => v.id) || [];
 
       const [entregas, atacado] = await Promise.all([
+        // Filtra pelo dia inteiro em UTC (cobre qualquer hora gravada no dia)
         supabase.from('entregas').select('id')
-          .in('vendedor_id', ids).eq('data_entrega', hoje),
+          .in('vendedor_id', ids)
+          .gte('data_entrega', inicioDia)
+          .lte('data_entrega', fimDia),
         supabase.from('vendas_atacado').select('id')
           .eq('administrador_id', adminId)
-          .gte('created_at', `${hoje}T00:00:00`)
-          .lte('created_at', `${hoje}T23:59:59`),
+          .gte('created_at', inicioDia)
+          .lte('created_at', fimDia),
       ]);
 
       return { total: (entregas.data?.length || 0) + (atacado.data?.length || 0) };
@@ -170,6 +212,7 @@ export const useEntregasHoje = (adminId: string, enabled: boolean) => {
     refetchOnWindowFocus: true,
   });
 };
+
 
 // ─── ONDA 2: Inadimplência por faixa ─────────────────────────────────────────
 export const useInadimplenciaFaixas = (adminId: string, enabled: boolean) => {
@@ -182,7 +225,7 @@ export const useInadimplenciaFaixas = (adminId: string, enabled: boolean) => {
       const { data, error } = await supabase
         .from('entregas')
         .select(`
-          id, valor, dataRetorno,
+          id, valor, "dataRetorno",
           pagamentos(valor),
           vendedores!inner(administrador_id)
         `)
@@ -217,13 +260,14 @@ export const useInadimplenciaFaixas = (adminId: string, enabled: boolean) => {
   });
 };
 
+
 // ─── ONDA 2: Top Vendedores ───────────────────────────────────────────────────
 export const useTopVendedoresDashboard = (adminId: string, enabled: boolean) => {
-  const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-    .toISOString().split('T')[0];
+  const firstDay = mesAtualInicio();
+  const cacheKey = `${new Date().getUTCFullYear()}-${new Date().getUTCMonth()}`;
 
   return useQuery({
-    queryKey: ['dashboard_top_vendedores', adminId, firstDay],
+    queryKey: ['dashboard_top_vendedores', adminId, cacheKey],
     queryFn: async () => {
       const [entregas, atacado] = await Promise.all([
         supabase.from('entregas')
@@ -263,6 +307,7 @@ export const useTopVendedoresDashboard = (adminId: string, enabled: boolean) => 
   });
 };
 
+
 // ─── ONDA 3: Alertas de estoque ───────────────────────────────────────────────
 export const useEstoqueAlertsDashboard = (adminId: string, enabled: boolean) => {
   return useQuery({
@@ -293,34 +338,39 @@ export const useEstoqueAlertsDashboard = (adminId: string, enabled: boolean) => 
   });
 };
 
-// ─── ONDA 3: Top Produtos mais vendidos (via cestas) ─────────────────────────
+
+// ─── ONDA 3: Top Produtos mais vendidos (via itens_entrega) ──────────────────
 export const useTopProdutosDashboard = (adminId: string, enabled: boolean) => {
-  const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-    .toISOString().split('T')[0];
+  const firstDay = mesAtualInicio();
+  const cacheKey = `${new Date().getUTCFullYear()}-${new Date().getUTCMonth()}`;
 
   return useQuery({
-    queryKey: ['dashboard_top_produtos', adminId, firstDay],
+    queryKey: ['dashboard_top_produtos', adminId, cacheKey],
     queryFn: async () => {
-      const { data: entregas, error: errEntregas } = await supabase
-        .from('entregas_cestas_vendedor')
-        .select('cesta_id, quantidade')
+      const { data: vendedores } = await supabase
+        .from('vendedores')
+        .select('id')
         .eq('administrador_id', adminId)
-        .gte('created_at', firstDay);
+        .eq('ativo', true);
+
+      const vendedorIds = vendedores?.map(v => v.id) || [];
+      if (!vendedorIds.length) return [];
+
+      const { data: entregas, error: errEntregas } = await supabase
+        .from('entregas')
+        .select('id')
+        .in('vendedor_id', vendedorIds)
+        .gte('data_entrega', firstDay);
 
       if (errEntregas) throw errEntregas;
       if (!entregas?.length) return [];
 
-      const cestasMap = new Map<string, number>();
-      entregas.forEach(e => {
-        cestasMap.set(e.cesta_id, (cestasMap.get(e.cesta_id) || 0) + (e.quantidade || 1));
-      });
-
-      const cestaIds = [...cestasMap.keys()];
+      const entregaIds = entregas.map(e => e.id);
 
       const { data: itens, error: errItens } = await supabase
-        .from('cestas_base_itens')
-        .select('cesta_base_id, produto_cadastrado_id, quantidade, produtos_cadastrado(id, produto_nome, unidade_medida)')
-        .in('cesta_base_id', cestaIds);
+        .from('itens_entrega')
+        .select('produto_cadastrado_id, quantidade, produtos_cadastrado(id, produto_nome, unidade_medida)')
+        .in('entrega_id', entregaIds);
 
       if (errItens) throw errItens;
       if (!itens?.length) return [];
@@ -328,12 +378,9 @@ export const useTopProdutosDashboard = (adminId: string, enabled: boolean) => {
       const map = new Map<string, { nome: string; unidade: string; qtd: number }>();
 
       itens.forEach((item: any) => {
-        const pid        = item.produto_cadastrado_id;
-        const cestasQtd  = cestasMap.get(item.cesta_base_id) || 0;
-        const totalUnids = (item.quantidade || 1) * cestasQtd;
-        const info       = item.produtos_cadastrado;
-
-        if (!pid || !cestasQtd) return;
+        const pid  = item.produto_cadastrado_id;
+        const info = item.produtos_cadastrado;
+        if (!pid) return;
 
         if (!map.has(pid)) {
           map.set(pid, {
@@ -342,7 +389,7 @@ export const useTopProdutosDashboard = (adminId: string, enabled: boolean) => {
             qtd:     0,
           });
         }
-        map.get(pid)!.qtd += totalUnids;
+        map.get(pid)!.qtd += Number(item.quantidade) || 1;
       });
 
       return Array.from(map.entries())
@@ -356,14 +403,15 @@ export const useTopProdutosDashboard = (adminId: string, enabled: boolean) => {
   });
 };
 
+
 // ─── ONDA 4: Gráfico mensal ───────────────────────────────────────────────────
 export const useFaturamentoMensalDashboard = (adminId: string, enabled: boolean) => {
-  const now       = new Date();
-  const startDate = new Date(
-  Date.UTC(now.getFullYear() - 1, now.getMonth(), 1, 0, 0, 0, 0)
-).toISOString();
-  const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
-  .toISOString();
+  const now = new Date();
+
+  // Últimos 12 meses completos em UTC
+  const startDate = new Date(Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth(), 1)).toISOString();
+  const endDate   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999)).toISOString();
+
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard_faturamento_mensal', adminId, startDate],
     queryFn: async () => {
@@ -385,31 +433,29 @@ export const useFaturamentoMensalDashboard = (adminId: string, enabled: boolean)
         ...(atacado.data    || []).map((p: any) => ({ valor: p.valor, data: p.created_at.split('T')[0] })),
       ];
     },
-    // ✅ enabled independente — não bloqueia por wave2
     enabled: enabled && !!adminId,
-    // ✅ staleTime: 0 — sempre reexecuta quando Realtime disparar refetch
     staleTime: 0,
     refetchOnWindowFocus: false,
   });
 
   const chartData = useMemo(() => {
     const months = Array.from({ length: 12 }, (_, i) => {
-  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (11 - i), 1));
-  return {
-    month: d.toLocaleDateString('pt-BR', { month: 'short', timeZone: 'UTC' })
-      .replace('.', '').replace(/^\w/, c => c.toUpperCase()),
-    year:     d.getUTCFullYear(),
-    monthNum: d.getUTCMonth(),
-    value:  0,
-    height: 0,
-  };
-});
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (11 - i), 1));
+      return {
+        month: d.toLocaleDateString('pt-BR', { month: 'short', timeZone: 'UTC' })
+          .replace('.', '').replace(/^\w/, c => c.toUpperCase()),
+        year:     d.getUTCFullYear(),
+        monthNum: d.getUTCMonth(),
+        value:    0,
+        height:   0,
+      };
+    });
 
     data?.forEach((item: any) => {
-  const d = new Date(item.data + (item.data.includes('T') ? '' : 'T00:00:00Z'));
-  const idx = months.findIndex(m => m.monthNum === d.getUTCMonth() && m.year === d.getUTCFullYear());
-  if (idx >= 0) months[idx].value += item.valor || 0;
-});
+      const d = new Date(item.data + (item.data.includes('T') ? '' : 'T00:00:00Z'));
+      const idx = months.findIndex(m => m.monthNum === d.getUTCMonth() && m.year === d.getUTCFullYear());
+      if (idx >= 0) months[idx].value += item.valor || 0;
+    });
 
     const max = Math.max(...months.map(m => m.value), 1);
     return months.map(m => ({ ...m, height: (m.value / max) * 90 || 5 }));
@@ -417,6 +463,7 @@ export const useFaturamentoMensalDashboard = (adminId: string, enabled: boolean)
 
   return { data: chartData, isLoading };
 };
+
 
 // ─── Hook principal ───────────────────────────────────────────────────────────
 export const useDashboard = () => {
@@ -431,7 +478,6 @@ export const useDashboard = () => {
   const topVendedores     = useTopVendedoresDashboard(id, wave2Enabled);
   const topProdutos       = useTopProdutosDashboard(id, wave2Enabled);
   const estoqueAlerts     = useEstoqueAlertsDashboard(id, wave2Enabled);
-  // ✅ Gráfico com enabled próprio — só precisa do adminId, não depende do wave2
   const faturamentoMensal = useFaturamentoMensalDashboard(id, !!id);
 
   const calcPercent = (atual: number, anterior: number) => {
@@ -483,8 +529,10 @@ export const useDashboard = () => {
   };
 };
 
+
 // ─── Exports legados ──────────────────────────────────────────────────────────
 export { useDashboardCore as useDashboardSummary };
+
 
 export const useTotalVendasPorVendedor = (vendedorId: string, options?: { enabled?: boolean }) => {
   return useQuery({
@@ -503,6 +551,7 @@ export const useTotalVendasPorVendedor = (vendedorId: string, options?: { enable
     staleTime: 1000 * 60 * 5,
   });
 };
+
 
 export const useTotalEntregasPorAdministrador = (administrador_id: string, options?: { enabled?: boolean }) => {
   return useQuery({
@@ -534,6 +583,7 @@ export const useTotalEntregasPorAdministrador = (administrador_id: string, optio
     staleTime: 1000 * 60 * 15,
   });
 };
+
 
 export type { };
 
