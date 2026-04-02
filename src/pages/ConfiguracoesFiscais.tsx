@@ -20,6 +20,22 @@ interface StatusCert {
   nfe_regime_tributario: number
 }
 
+// Formata data ISO (YYYY-MM-DD) sem converter timezone — evita subtrair 1 dia por BRT (UTC-3)
+function formatarDataLocal(dateStr: string | null | undefined): string | null {
+  if (!dateStr) return null
+  const apenasData = dateStr.split('T')[0]
+  const [ano, mes, dia] = apenasData.split('-')
+  return `${dia}/${mes}/${ano}`
+}
+
+// Verifica vencimento nos próximos 30 dias sem conversão de timezone
+function certVencendoEm30Dias(dateStr: string | null | undefined): boolean {
+  if (!dateStr) return false
+  const [ano, mes, dia] = dateStr.split('T')[0].split('-').map(Number)
+  const dataValidade = new Date(ano, mes - 1, dia, 12, 0, 0)
+  return dataValidade < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+}
+
 export default function ConfiguracoesFiscais() {
   const [status, setStatus] = useState<StatusCert | null>(null)
   const [arquivo, setArquivo] = useState<File | null>(null)
@@ -79,9 +95,7 @@ export default function ConfiguracoesFiscais() {
       setMensagem({
         tipo: 'sucesso',
         texto: `Certificado configurado com sucesso! Válido até: ${
-          result.validade
-            ? new Date(result.validade).toLocaleDateString('pt-BR')
-            : 'N/A'
+          formatarDataLocal(result.validade) ?? 'N/A'
         }`,
       })
 
@@ -97,14 +111,8 @@ export default function ConfiguracoesFiscais() {
     }
   }
 
-
-  const validadeFormatada = status?.nfe_certificado_validade
-    ? new Date(status.nfe_certificado_validade).toLocaleDateString('pt-BR')
-    : null
-
-  const certVencendo = status?.nfe_certificado_validade
-    ? new Date(status.nfe_certificado_validade) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-    : false
+  const validadeFormatada = formatarDataLocal(status?.nfe_certificado_validade)
+  const certVencendo = certVencendoEm30Dias(status?.nfe_certificado_validade)
 
   return (
     <div className="space-y-4">
@@ -121,7 +129,7 @@ export default function ConfiguracoesFiscais() {
       {/* Layout em 2 colunas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-        {/* Coluna esquerda: Status + Info + Homologação automática */}
+        {/* Coluna esquerda: Status + Info */}
         <div className="space-y-4">
 
           {/* Skeleton de loading do status */}
@@ -186,7 +194,11 @@ export default function ConfiguracoesFiscais() {
                       <p>
                         Regime tributário:{' '}
                         <strong className="dark:text-gray-300">
-                          {status.nfe_regime_tributario === 1 ? 'Simples Nacional' : status.nfe_regime_tributario === 2 ? 'Lucro Presumido' : 'Lucro Real'}
+                          {status.nfe_regime_tributario === 1
+                            ? 'Simples Nacional'
+                            : status.nfe_regime_tributario === 2
+                            ? 'Lucro Presumido'
+                            : 'Lucro Real'}
                         </strong>
                       </p>
                     </div>
