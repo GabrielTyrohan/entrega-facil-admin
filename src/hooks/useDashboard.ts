@@ -31,15 +31,21 @@ const soma = (arr: any[], field: string) =>
   arr?.reduce((s, i) => s + (Number(i[field]) || 0), 0) || 0;
 
 
+// ─── Utilitário: gera início do mês atual em ISO (date-only) ─────────────────
+const mesAtualInicio = () =>
+  new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+
+
 // ─── ONDA 1: Core — cards principais ─────────────────────────────────────────
 export const useDashboardCore = (adminId: string) => {
   const enabled = !!adminId;
   const now = new Date();
-  
+
   // ✅ FIX: todos com .split('T')[0] para comparar com campos tipo date
   const firstDayCurrent  = new Date(now.getFullYear(), now.getMonth(),     1).toISOString().split('T')[0];
   const firstDayPrevious = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
   const lastDayPrevious  = new Date(now.getFullYear(), now.getMonth(),     0).toISOString().split('T')[0];
+  const firstDayDateOnly = firstDayCurrent;
 
   // Chave de cache baseada em ano+mês (string curta e estável)
   const cacheKey = `${now.getFullYear()}-${now.getMonth()}`;
@@ -469,16 +475,11 @@ export const useFaturamentoMensalDashboard = (adminId: string, enabled: boolean)
         height:   0,
       };
     });
-<<<<<<< HEAD
-=======
-
->>>>>>> aaae53e8c1a7350caaf423100955ed8357cf6942
 
     data?.forEach((item: any) => {
       const d = new Date(item.data + (item.data.includes('T') ? '' : 'T00:00:00Z'));
       const idx = months.findIndex(m => m.monthNum === d.getUTCMonth() && m.year === d.getUTCFullYear());
       if (idx >= 0) months[idx].value += item.valor || 0;
-    });
     });
 
     const max = Math.max(...months.map(m => m.value), 1);
@@ -616,7 +617,5 @@ export const useTotalEntregasPorAdministrador = (administrador_id: string, optio
     staleTime: 1000 * 60 * 15,
   });
 };
-
-export type { };
 
 export type { };
