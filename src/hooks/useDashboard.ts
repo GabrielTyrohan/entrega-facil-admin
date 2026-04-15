@@ -35,12 +35,6 @@ const soma = (arr: any[], field: string) =>
 const mesAtualInicio = () =>
   new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString();
 
-const mesAnteriorInicio = () =>
-  new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 1, 1)).toISOString();
-
-const mesAnteriorFim = () =>
-  new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 0, 23, 59, 59, 999)).toISOString();
-
 
 // ─── ONDA 1: Core — cards principais ─────────────────────────────────────────
 export const useDashboardCore = (adminId: string) => {
@@ -48,9 +42,10 @@ export const useDashboardCore = (adminId: string) => {
 
   // Gera as datas uma vez por render (estáveis dentro do mesmo minuto)
   const now              = new Date();
-  const firstDayCurrent  = mesAtualInicio();
-  const firstDayPrevious = mesAnteriorInicio();
-  const lastDayPrevious  = mesAnteriorFim();
+  const firstDayCurrent  = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(),     1)).toISOString();
+  const firstDayPrevious = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).toISOString();
+  const lastDayPrevious  = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(),     0, 23, 59, 59, 999)).toISOString();
+  const firstDayDateOnly = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
 
   // Chave de cache baseada em ano+mês (string curta e estável)
   const cacheKey = `${now.getUTCFullYear()}-${now.getUTCMonth()}`;
@@ -111,15 +106,14 @@ export const useDashboardCore = (adminId: string) => {
           .gte('data_orcamento', firstDayPrevious)
           .lte('data_orcamento', lastDayPrevious),
 
-        // Inadimplência: entregas com dataRetorno no passado (qualquer data, com débito)
+        // Inadimplência: entregas com dataRetorno ANTES do mês atual, sem join
         supabase.from('entregas').select(`
           id, valor,
-          pagamentos(valor),
-          vendedores!inner(administrador_id)
+          pagamentos(valor)
         `)
-          .eq('vendedores.administrador_id', adminId)
+          .in('vendedor_id', vendedorIds)
           .not('dataRetorno', 'is', null)
-          .lt('dataRetorno', now.toISOString()),
+          .lt('dataRetorno', firstDayDateOnly),
 
         // Inadimplência: atacado pendente/parcial/atrasado
         supabase.from('vendas_atacado')

@@ -142,6 +142,55 @@ const EntregaModal: React.FC<EntregaModalProps> = ({ entrega, isOpen, onClose })
     }
   };
 
+  type ItemUnificado = {
+    key: string;
+    produto_nome: string;
+    produto_cod: string;
+    categoria: string;
+    quantidade: number;
+    preco_unitario: number;
+    origem: 'cesta' | 'alterado' | 'adicional';
+  };
+
+  const buildItensEntregues = (): ItemUnificado[] => {
+    const map = new Map<string, ItemUnificado>();
+
+    if (Array.isArray(entrega.cesta_itens)) {
+      for (const item of entrega.cesta_itens) {
+        const cod = item.produto.produto_cod ?? item.produto.produto_nome;
+        map.set(cod, {
+          key: `cesta-${cod}`,
+          produto_nome: item.produto.produto_nome,
+          produto_cod: item.produto.produto_cod,
+          categoria: item.produto.categoria,
+          quantidade: item.quantidade,
+          preco_unitario: item.produto.preco_unt,
+          origem: 'cesta',
+        });
+      }
+    }
+
+    if (Array.isArray(entrega.itens_adicionais)) {
+      for (const item of entrega.itens_adicionais) {
+        const cod = item.produto.produto_cod ?? item.produto.produto_nome;
+        const jaExiste = map.has(cod);
+        map.set(cod, {
+          key: `adicional-${item.id}`,
+          produto_nome: item.produto.produto_nome,
+          produto_cod: item.produto.produto_cod,
+          categoria: item.produto.categoria,
+          quantidade: item.quantidade,
+          preco_unitario: item.preco_unitario,
+          origem: jaExiste ? 'alterado' : 'adicional',
+        });
+      }
+    }
+
+    return Array.from(map.values());
+  };
+
+  const itensEntregues = buildItensEntregues();
+
   return (
     <div 
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4"
@@ -316,44 +365,12 @@ const EntregaModal: React.FC<EntregaModalProps> = ({ entrega, isOpen, onClose })
 
           {/* Endereço agora integrado na seção de Informações do Cliente */}
 
-          {/* Itens da Cesta */}
-          {Array.isArray(entrega.cesta_itens) && entrega.cesta_itens.length > 0 && (
+          {/* Itens Entregues Unificados */}
+          {itensEntregues.length > 0 && (
             <div className="mt-6 lg:mt-8">
-              <h4 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-3">
-                Itens da Cesta
-              </h4>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 dark:bg-gray-700">
-                    <tr>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Produto</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Código</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Categoria</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Qtd</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Preço</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    {entrega.cesta_itens.map((item, idx) => (
-                      <tr key={`cesta-item-${idx}`}>
-                        <td className="px-3 py-2 text-gray-900 dark:text-white break-words">{item.produto.produto_nome}</td>
-                        <td className="px-3 py-2 text-gray-900 dark:text-white break-words">{item.produto.produto_cod}</td>
-                        <td className="px-3 py-2 text-gray-900 dark:text-white break-words">{item.produto.categoria}</td>
-                        <td className="px-3 py-2 text-right text-gray-900 dark:text-white">{item.quantidade}</td>
-                        <td className="px-3 py-2 text-right text-gray-900 dark:text-white">{formatCurrency(item.produto.preco_unt)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Itens Adicionais da Entrega */}
-          {Array.isArray(entrega.itens_adicionais) && entrega.itens_adicionais.length > 0 && (
-            <div className="mt-6 lg:mt-8">
-              <h4 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-3">
-                Itens Adicionais (alterações do vendedor)
+              <h4 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-3 flex items-center">
+                <Package className="w-4 h-4 sm:w-5 sm:h-5 mr-2 flex-shrink-0" />
+                Itens Entregues
               </h4>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -364,18 +381,24 @@ const EntregaModal: React.FC<EntregaModalProps> = ({ entrega, isOpen, onClose })
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Categoria</th>
                       <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Qtd</th>
                       <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Unitário</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Subtotal</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    {entrega.itens_adicionais.map((item) => (
-                      <tr key={item.id}>
-                        <td className="px-3 py-2 text-gray-900 dark:text-white break-words">{item.produto.produto_nome}</td>
-                        <td className="px-3 py-2 text-gray-900 dark:text-white break-words">{item.produto.produto_cod}</td>
-                        <td className="px-3 py-2 text-gray-900 dark:text-white break-words">{item.produto.categoria}</td>
+                    {itensEntregues.map((item) => (
+                      <tr key={item.key}>
+                        <td className="px-3 py-2 text-gray-900 dark:text-white break-words">
+                          {item.produto_nome}
+                          {item.origem === 'alterado' && (
+                            <span className="ml-2 text-xs text-amber-600 dark:text-amber-400 font-medium">(alterado)</span>
+                          )}
+                          {item.origem === 'adicional' && (
+                            <span className="ml-2 text-xs text-blue-600 dark:text-blue-400 font-medium">(adicional)</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-gray-900 dark:text-white">{item.produto_cod}</td>
+                        <td className="px-3 py-2 text-gray-900 dark:text-white">{item.categoria}</td>
                         <td className="px-3 py-2 text-right text-gray-900 dark:text-white">{item.quantidade}</td>
                         <td className="px-3 py-2 text-right text-gray-900 dark:text-white">{formatCurrency(item.preco_unitario)}</td>
-                        <td className="px-3 py-2 text-right text-gray-900 dark:text-white">{formatCurrency(item.subtotal)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -383,35 +406,6 @@ const EntregaModal: React.FC<EntregaModalProps> = ({ entrega, isOpen, onClose })
               </div>
             </div>
           )}
-
-          {/* Totais */}
-          <div className="mt-6 lg:mt-8">
-            <h4 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-3">
-              Totais da Entrega
-            </h4>
-            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 sm:p-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Valor da Cesta</p>
-                  <p className="text-sm sm:text-base text-gray-900 dark:text-white font-medium">
-                    {formatCurrency(entrega.valor_cesta ?? entrega.valor)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Itens Adicionais</p>
-                  <p className="text-sm sm:text-base text-gray-900 dark:text-white font-medium">
-                    {formatCurrency(entrega.valor_adicionais ?? 0)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Valor Total</p>
-                  <p className="text-sm sm:text-base text-gray-900 dark:text-white font-medium">
-                    {formatCurrency(entrega.valor_total ?? (entrega.valor + (entrega.valor_adicionais ?? 0)))}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
 
           {/* Informações de Pagamento */}
           {entrega.pagamento && (
