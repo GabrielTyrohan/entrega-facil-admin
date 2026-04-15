@@ -4,13 +4,29 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
 const TABLE_QUERY_MAP: Record<string, string[]> = {
-  entregas:                 ['dashboard_stats', 'dashboard_entregas_hoje', 'dashboard_grafico'],
-  entregas_cestas_vendedor: ['dashboard_stats', 'dashboard_top_produtos', 'dashboard_grafico'],
-  pagamentos:               ['dashboard_stats', 'dashboard_inadimplencia'],
-  movimentacoes_estoque:    ['dashboard_estoque'],
-  estoque_vendedor:         ['dashboard_estoque'],
-  vendedores:               ['dashboard_stats'],
+  entregas: [
+    'dashboard_core',
+    'dashboard_entregas_hoje',
+    'dashboard_faturamento_mensal',
+    'dashboard_top_vendedores',
+    'dashboard_top_produtos',
+    'dashboard_inadimplencia',
+  ],
+  entregas_cestas_vendedor: [
+    'dashboard_core',
+    'dashboard_top_produtos',
+    'dashboard_faturamento_mensal',
+  ],
+  pagamentos: [
+    'dashboard_core',
+    'dashboard_inadimplencia',
+    'dashboard_faturamento_mensal',
+  ],
+  movimentacoes_estoque:    ['dashboard_estoque_alerts'],
+  estoque_vendedor:         ['dashboard_estoque_alerts'],
+  vendedores:               ['dashboard_core', 'dashboard_top_vendedores'],
   cestas_base_itens:        ['dashboard_top_produtos'],
+  clientes:                 ['dashboard_core'],
 };
 
 export const useRealtimeInvalidator = () => {
@@ -65,6 +81,15 @@ export const useRealtimeInvalidator = () => {
         { event: '*', schema: 'public', table: 'estoque_vendedor' },
         () => {
           TABLE_QUERY_MAP['estoque_vendedor'].forEach(key => {
+            queryClient.invalidateQueries({ queryKey: [key] });
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'clientes' },
+        () => {
+          TABLE_QUERY_MAP['clientes'].forEach(key => {
             queryClient.invalidateQueries({ queryKey: [key] });
           });
         }
