@@ -10,6 +10,7 @@ export const useIsVisible = () => {
   const ref = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
 
+
   useEffect(() => {
     if (!ref.current) return;
     const observer = new IntersectionObserver(
@@ -20,6 +21,7 @@ export const useIsVisible = () => {
     return () => observer.disconnect();
   }, []);
 
+
   return { ref, isVisible };
 };
 
@@ -29,26 +31,18 @@ const soma = (arr: any[], field: string) =>
   arr?.reduce((s, i) => s + (Number(i[field]) || 0), 0) || 0;
 
 
-// ─── Utilitário: gera início/fim do mês em ISO para timestamp with time zone ──
-// data_entrega é "timestamp with time zone" salvo como UTC meia-noite.
-// Usamos UTC para não cortar registros por fuso horário.
-const mesAtualInicio = () =>
-  new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString();
-
-
 // ─── ONDA 1: Core — cards principais ─────────────────────────────────────────
 export const useDashboardCore = (adminId: string) => {
   const enabled = !!adminId;
-
-  // Gera as datas uma vez por render (estáveis dentro do mesmo minuto)
-  const now              = new Date();
-  const firstDayCurrent  = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(),     1)).toISOString();
-  const firstDayPrevious = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).toISOString();
-  const lastDayPrevious  = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(),     0, 23, 59, 59, 999)).toISOString();
-  const firstDayDateOnly = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
+  const now = new Date();
+  
+  // ✅ FIX: todos com .split('T')[0] para comparar com campos tipo date
+  const firstDayCurrent  = new Date(now.getFullYear(), now.getMonth(),     1).toISOString().split('T')[0];
+  const firstDayPrevious = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
+  const lastDayPrevious  = new Date(now.getFullYear(), now.getMonth(),     0).toISOString().split('T')[0];
 
   // Chave de cache baseada em ano+mês (string curta e estável)
-  const cacheKey = `${now.getUTCFullYear()}-${now.getUTCMonth()}`;
+  const cacheKey = `${now.getFullYear()}-${now.getMonth()}`;
 
   return useQuery({
     queryKey: ['dashboard_core', adminId, cacheKey],
@@ -59,7 +53,9 @@ export const useDashboardCore = (adminId: string) => {
         .eq('administrador_id', adminId)
         .eq('ativo', true);
 
+
       const vendedorIds = vendedores?.map(v => v.id) || [];
+
 
       const [
         entregasAtual,
@@ -122,20 +118,24 @@ export const useDashboardCore = (adminId: string) => {
           .in('status_pagamento', ['pendente', 'parcial', 'atrasado']),
       ]);
 
+
       const fat_entregas_atual    = soma(entregasAtual.data    || [], 'valor');
       const fat_atacado_atual     = soma(atacadoAtual.data     || [], 'valor_total');
       const fat_entregas_anterior = soma(entregasAnterior.data || [], 'valor');
       const fat_atacado_anterior  = soma(atacadoAnterior.data  || [], 'valor_total');
 
-      const faturamento_atual    = fat_entregas_atual   + fat_atacado_atual;
+      const faturamento_atual    = fat_entregas_atual  + fat_atacado_atual;
       const faturamento_anterior = fat_entregas_anterior + fat_atacado_anterior;
+
 
       const entregas_atual    = (entregasAtual.data?.length    || 0) + (atacadoAtual.data?.length    || 0);
       const entregas_anterior = (entregasAnterior.data?.length || 0) + (atacadoAnterior.data?.length || 0);
 
+
       const fat_orcamentos_atual    = soma(orcamentosAtual.data    || [], 'valor_total');
       const fat_orcamentos_anterior = soma(orcamentosAnterior.data || [], 'valor_total');
       const qtd_orcamentos_atual    = orcamentosAtual.data?.length || 0;
+
 
       let valores_em_falta = 0;
       faltanteResult.data?.forEach((e: any) => {
@@ -147,6 +147,7 @@ export const useDashboardCore = (adminId: string) => {
         const debito = (Number(v.valor_total) || 0) - (Number(v.valor_pago) || 0);
         if (debito > 0.01) valores_em_falta += debito;
       });
+
 
       return {
         vendedores_ativos: vendedores?.length || 0,
@@ -179,6 +180,7 @@ export const useEntregasHoje = (adminId: string, enabled: boolean) => {
   const inicioDia = `${hoje}T00:00:00.000Z`;
   const fimDia    = `${hoje}T23:59:59.999Z`;
 
+
   return useQuery({
     queryKey: ['dashboard_entregas_hoje', adminId, hoje],
     queryFn: async () => {
@@ -186,6 +188,7 @@ export const useEntregasHoje = (adminId: string, enabled: boolean) => {
         .from('vendedores').select('id')
         .eq('administrador_id', adminId).eq('ativo', true);
       const ids = vendedores?.map(v => v.id) || [];
+
 
       const [entregas, atacado] = await Promise.all([
         // Filtra pelo dia inteiro em UTC (cobre qualquer hora gravada no dia)
@@ -198,6 +201,7 @@ export const useEntregasHoje = (adminId: string, enabled: boolean) => {
           .gte('created_at', inicioDia)
           .lte('created_at', fimDia),
       ]);
+
 
       return { total: (entregas.data?.length || 0) + (atacado.data?.length || 0) };
     },
@@ -213,6 +217,7 @@ export const useInadimplenciaFaixas = (adminId: string, enabled: boolean) => {
   const now  = new Date();
   const hoje = now.toISOString().split('T')[0];
 
+
   return useQuery({
     queryKey: ['dashboard_inadimplencia', adminId, hoje],
     queryFn: async () => {
@@ -226,25 +231,31 @@ export const useInadimplenciaFaixas = (adminId: string, enabled: boolean) => {
         .eq('vendedores.administrador_id', adminId)
         .not('dataRetorno', 'is', null);
 
+
       if (error) throw error;
+
 
       const faixas = { ate30: 0, de30a60: 0, de60a90: 0, acima90: 0 };
       const totais = { ate30: 0, de30a60: 0, de60a90: 0, acima90: 0 };
+
 
       data?.forEach((e: any) => {
         const pago   = e.pagamentos?.reduce((s: number, p: any) => s + (p.valor || 0), 0) || 0;
         const debito = (e.valor || 0) - pago;
         if (debito <= 0.01) return;
 
+
         const diasAtraso = Math.floor(
           (now.getTime() - new Date(e.dataRetorno).getTime()) / 86400000
         );
+
 
         if      (diasAtraso <= 30) { faixas.ate30++;   totais.ate30   += debito; }
         else if (diasAtraso <= 60) { faixas.de30a60++; totais.de30a60 += debito; }
         else if (diasAtraso <= 90) { faixas.de60a90++; totais.de60a90 += debito; }
         else                       { faixas.acima90++; totais.acima90 += debito; }
       });
+
 
       return { faixas, totais };
     },
@@ -260,6 +271,7 @@ export const useTopVendedoresDashboard = (adminId: string, enabled: boolean) => 
   const firstDay = mesAtualInicio();
   const cacheKey = `${new Date().getUTCFullYear()}-${new Date().getUTCMonth()}`;
 
+
   return useQuery({
     queryKey: ['dashboard_top_vendedores', adminId, cacheKey],
     queryFn: async () => {
@@ -274,7 +286,9 @@ export const useTopVendedoresDashboard = (adminId: string, enabled: boolean) => 
           .gte('created_at', firstDay),
       ]);
 
+
       const map = new Map<string, { nome: string; entregas: number; total: number }>();
+
 
       const addToMap = (id: string, nome: string, valor: number) => {
         if (!map.has(id)) map.set(id, { nome, entregas: 0, total: 0 });
@@ -283,12 +297,14 @@ export const useTopVendedoresDashboard = (adminId: string, enabled: boolean) => 
         v.total += valor;
       };
 
+
       entregas.data?.forEach((e: any) => {
         if (e.vendedores?.id) addToMap(e.vendedores.id, e.vendedores.nome, e.valor || 0);
       });
       atacado.data?.forEach((v: any) => {
         if (v.vendedores?.id) addToMap(v.vendedores.id, v.vendedores.nome, Number(v.valor_total) || 0);
       });
+
 
       return Array.from(map.entries())
         .map(([id, v]) => ({ id, ...v }))
@@ -312,7 +328,9 @@ export const useEstoqueAlertsDashboard = (adminId: string, enabled: boolean) => 
         .select('id, produto_nome, qtd_estoque, estoque_minimo, unidade_medida')
         .eq('administrador_id', adminId);
 
+
       if (error) throw error;
+
 
       return (data || [])
         .filter(p => (p.qtd_estoque || 0) < 20)
@@ -338,9 +356,11 @@ export const useTopProdutosDashboard = (adminId: string, enabled: boolean) => {
   const firstDay = mesAtualInicio();
   const cacheKey = `${new Date().getUTCFullYear()}-${new Date().getUTCMonth()}`;
 
+
   return useQuery({
     queryKey: ['dashboard_top_produtos', adminId, cacheKey],
     queryFn: async () => {
+      // 1. Busca todas as entregas do mês dos vendedores do admin
       const { data: vendedores } = await supabase
         .from('vendedores')
         .select('id')
@@ -349,7 +369,6 @@ export const useTopProdutosDashboard = (adminId: string, enabled: boolean) => {
 
       const vendedorIds = vendedores?.map(v => v.id) || [];
       if (!vendedorIds.length) return [];
-
       const { data: entregas, error: errEntregas } = await supabase
         .from('entregas')
         .select('id')
@@ -358,9 +377,10 @@ export const useTopProdutosDashboard = (adminId: string, enabled: boolean) => {
 
       if (errEntregas) throw errEntregas;
       if (!entregas?.length) return [];
-
       const entregaIds = entregas.map(e => e.id);
 
+
+      // 2. Busca os itens dessas entregas com os dados do produto
       const { data: itens, error: errItens } = await supabase
         .from('itens_entrega')
         .select('produto_cadastrado_id, quantidade, produtos_cadastrado(id, produto_nome, unidade_medida)')
@@ -369,8 +389,9 @@ export const useTopProdutosDashboard = (adminId: string, enabled: boolean) => {
       if (errItens) throw errItens;
       if (!itens?.length) return [];
 
-      const map = new Map<string, { nome: string; unidade: string; qtd: number }>();
 
+      // 3. Agrega quantidade total por produto
+      const map = new Map<string, { nome: string; unidade: string; qtd: number }>();
       itens.forEach((item: any) => {
         const pid  = item.produto_cadastrado_id;
         const info = item.produtos_cadastrado;
@@ -386,6 +407,7 @@ export const useTopProdutosDashboard = (adminId: string, enabled: boolean) => {
         map.get(pid)!.qtd += Number(item.quantidade) || 1;
       });
 
+
       return Array.from(map.entries())
         .map(([id, v]) => ({ id, ...v }))
         .sort((a, b) => b.qtd - a.qtd)
@@ -400,11 +422,12 @@ export const useTopProdutosDashboard = (adminId: string, enabled: boolean) => {
 
 // ─── ONDA 4: Gráfico mensal ───────────────────────────────────────────────────
 export const useFaturamentoMensalDashboard = (adminId: string, enabled: boolean) => {
-  const now = new Date();
-
-  // Últimos 12 meses completos em UTC
-  const startDate = new Date(Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth(), 1)).toISOString();
-  const endDate   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999)).toISOString();
+  const now       = new Date();
+  const startDate = new Date(
+    Date.UTC(now.getFullYear() - 1, now.getMonth(), 1, 0, 0, 0, 0)
+  ).toISOString();
+  const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
+    .toISOString();
 
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard_faturamento_mensal', adminId, startDate],
@@ -422,6 +445,7 @@ export const useFaturamentoMensalDashboard = (adminId: string, enabled: boolean)
           .lte('created_at', endDate),
       ]);
 
+
       return [
         ...(pagamentos.data || []).map((p: any) => ({ valor: p.valor, data: p.data_pagamento })),
         ...(atacado.data    || []).map((p: any) => ({ valor: p.valor, data: p.created_at.split('T')[0] })),
@@ -431,6 +455,7 @@ export const useFaturamentoMensalDashboard = (adminId: string, enabled: boolean)
     staleTime: 0,
     refetchOnWindowFocus: false,
   });
+
 
   const chartData = useMemo(() => {
     const months = Array.from({ length: 12 }, (_, i) => {
@@ -444,16 +469,22 @@ export const useFaturamentoMensalDashboard = (adminId: string, enabled: boolean)
         height:   0,
       };
     });
+<<<<<<< HEAD
+=======
+
+>>>>>>> aaae53e8c1a7350caaf423100955ed8357cf6942
 
     data?.forEach((item: any) => {
       const d = new Date(item.data + (item.data.includes('T') ? '' : 'T00:00:00Z'));
       const idx = months.findIndex(m => m.monthNum === d.getUTCMonth() && m.year === d.getUTCFullYear());
       if (idx >= 0) months[idx].value += item.valor || 0;
     });
+    });
 
     const max = Math.max(...months.map(m => m.value), 1);
     return months.map(m => ({ ...m, height: (m.value / max) * 90 || 5 }));
   }, [data]);
+
 
   return { data: chartData, isLoading };
 };
@@ -464,8 +495,10 @@ export const useDashboard = () => {
   const { adminId } = useAuth();
   const id = adminId || '';
 
+
   const core         = useDashboardCore(id);
   const wave2Enabled = !core.isLoading;
+
 
   const entregasHoje      = useEntregasHoje(id, wave2Enabled);
   const inadimplencia     = useInadimplenciaFaixas(id, wave2Enabled);
@@ -474,12 +507,15 @@ export const useDashboard = () => {
   const estoqueAlerts     = useEstoqueAlertsDashboard(id, wave2Enabled);
   const faturamentoMensal = useFaturamentoMensalDashboard(id, !!id);
 
+
   const calcPercent = (atual: number, anterior: number) => {
     if (!anterior) return atual > 0 ? 100 : 0;
     return Math.round(((atual - anterior) / anterior) * 100);
   };
 
+
   const c = core.data;
+
 
   return {
     stats: {
@@ -560,8 +596,10 @@ export const useTotalEntregasPorAdministrador = (administrador_id: string, optio
           .eq('administrador_id', administrador_id),
       ]);
 
+
       if (entregasResult.error) throw entregasResult.error;
       if (vendasResult.error)   throw vendasResult.error;
+
 
       const map: Record<string, number> = {};
       entregasResult.data?.forEach((e: any) => {
@@ -571,6 +609,7 @@ export const useTotalEntregasPorAdministrador = (administrador_id: string, optio
         if (v.vendedor_id) map[v.vendedor_id] = (map[v.vendedor_id] || 0) + 1;
       });
 
+
       return map;
     },
     enabled: options?.enabled && !!administrador_id,
@@ -578,6 +617,6 @@ export const useTotalEntregasPorAdministrador = (administrador_id: string, optio
   });
 };
 
-
 export type { };
 
+export type { };
