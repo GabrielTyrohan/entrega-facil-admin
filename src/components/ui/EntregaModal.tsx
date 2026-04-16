@@ -1,5 +1,5 @@
+import { Calendar, CreditCard, DollarSign, FileText, Mail, MapPin, Package, Phone, User, X } from 'lucide-react';
 import React, { useEffect } from 'react';
-import { X, Package, User, MapPin, Calendar, DollarSign, Phone, Mail, FileText, CreditCard } from 'lucide-react';
 import { EntregaComDetalhes } from '../../services/entregaService';
 
 interface EntregaModalProps {
@@ -153,41 +153,45 @@ const EntregaModal: React.FC<EntregaModalProps> = ({ entrega, isOpen, onClose })
   };
 
   const buildItensEntregues = (): ItemUnificado[] => {
-    const map = new Map<string, ItemUnificado>();
+  const map = new Map<string, ItemUnificado>();
 
-    if (Array.isArray(entrega.cesta_itens)) {
-      for (const item of entrega.cesta_itens) {
-        const cod = item.produto.produto_cod ?? item.produto.produto_nome;
-        map.set(cod, {
-          key: `cesta-${cod}`,
-          produto_nome: item.produto.produto_nome,
-          produto_cod: item.produto.produto_cod,
-          categoria: item.produto.categoria,
-          quantidade: item.quantidade,
-          preco_unitario: item.produto.preco_unt,
-          origem: 'cesta',
-        });
-      }
+  if (Array.isArray(entrega.cesta_itens)) {
+    for (const item of entrega.cesta_itens) {
+      // Usa APENAS produto_cod como chave — nunca nome
+      const cod = item.produto.produto_cod;
+      if (!cod) continue; // ignora item sem código
+      map.set(cod, {
+        key: `cesta-${cod}`,
+        produto_nome: item.produto.produto_nome,
+        produto_cod: item.produto.produto_cod,
+        categoria: item.produto.categoria,
+        quantidade: item.quantidade,
+        preco_unitario: item.produto.preco_unt,
+        origem: 'cesta',
+      });
     }
+  }
 
-    if (Array.isArray(entrega.itens_adicionais)) {
-      for (const item of entrega.itens_adicionais) {
-        const cod = item.produto.produto_cod ?? item.produto.produto_nome;
-        const jaExiste = map.has(cod);
-        map.set(cod, {
-          key: `adicional-${item.id}`,
-          produto_nome: item.produto.produto_nome,
-          produto_cod: item.produto.produto_cod,
-          categoria: item.produto.categoria,
-          quantidade: item.quantidade,
-          preco_unitario: item.preco_unitario,
-          origem: jaExiste ? 'alterado' : 'adicional',
-        });
-      }
+  if (Array.isArray(entrega.itens_adicionais)) {
+    for (const item of entrega.itens_adicionais) {
+      const cod = item.produto.produto_cod;
+      // Só considera "alterado" se tiver código E já existir na cesta
+      const jaExiste = cod ? map.has(cod) : false;
+      const key = cod ?? `adicional-${item.id}`;
+      map.set(key, {
+        key: `adicional-${item.id}`,
+        produto_nome: item.produto.produto_nome,
+        produto_cod: item.produto.produto_cod,
+        categoria: item.produto.categoria,
+        quantidade: item.quantidade,
+        preco_unitario: item.preco_unitario,
+        origem: jaExiste ? 'alterado' : 'adicional',
+      });
     }
+  }
 
-    return Array.from(map.values());
-  };
+  return Array.from(map.values());
+};
 
   const itensEntregues = buildItensEntregues();
 
