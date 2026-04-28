@@ -39,7 +39,8 @@ const NovoVendedor: React.FC = () => {
     percentualMinimo: 50, // 50% como padrão
     contrato: '',
     ativo: true,
-    status: true
+    status: true,
+    diaFechamento: 1,
   });
 
   const [dadosBancarios, setDadosBancarios] = useState<DadosBancarios>({
@@ -156,7 +157,8 @@ const NovoVendedor: React.FC = () => {
       p_tipo_vinculo: formData.tipoVinculo || null,
       p_percentual_minimo: formData.percentualMinimo || 0,
       p_tipo_cobranca: 'pago_admin',
-      p_valor_assinatura: 100
+      p_valor_assinatura: 100,
+      p_dia_fechamento: formData.diaFechamento,
     });
 
     if (error) {
@@ -188,8 +190,7 @@ const NovoVendedor: React.FC = () => {
 
     // Mostrar senha ao admin com destaque
     toast.success(
-      `✅ Vendedor criado com sucesso!\n\n🔐 SENHA DE ACESSO: ${formData.senha}\n\n⚠️ Anote esta senha! Ela não poderá ser recuperada.`,
-      { duration: 15000 } // 15 segundos
+      `✅ Vendedor criado com sucesso!\n\n🔐 SENHA DE ACESSO: ${formData.senha}\n\n⚠️ Anote esta senha! Ela não poderá ser recuperada.`
     );
     
     // Aguarda 2 segundos antes de navegar para dar tempo de copiar a senha
@@ -393,6 +394,25 @@ const NovoVendedor: React.FC = () => {
               />
             </div>
             
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Dia de Fechamento
+              </label>
+              <select
+                name="diaFechamento"
+                value={formData.diaFechamento}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                {Array.from({ length: 28 }, (_, i) => i + 1).map(dia => (
+                  <option key={dia} value={dia}>Dia {dia}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Dia do mês em que fecha o período de cobrança
+              </p>
+            </div>
+
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Observações do Contrato

@@ -59,6 +59,7 @@ export interface Vendedor {
   contrato_arquivo_url?: string | null
   status?: boolean
   dados_bancarios?: any
+  dia_fechamento?: number | null
 }
 
 export interface Cliente {
