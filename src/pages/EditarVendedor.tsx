@@ -30,7 +30,8 @@ const EditarVendedor: React.FC = () => {
     percentualMinimo: 0,
     contrato: '',
     ativo: true,
-    status: true
+    status: true,
+    diaFechamento: 1,
   });
 
   const [dadosBancarios, setDadosBancarios] = useState<DadosBancarios>({
@@ -94,7 +95,8 @@ const EditarVendedor: React.FC = () => {
           percentualMinimo: vendedor.percentual_minimo || 0,
           contrato: '', // Pode ser adicionado ao banco se necessário
           ativo: vendedor.ativo ?? false,
-          status: vendedor.ativo ?? false // Usando ativo como status
+          status: vendedor.ativo ?? false, // Usando ativo como status
+          diaFechamento: vendedor.dia_fechamento ?? 1,
         });
         
         // Carregar dados bancários se existirem
@@ -228,7 +230,8 @@ const EditarVendedor: React.FC = () => {
           },
           body: JSON.stringify({
             vendedor_id: id,
-            ...formData
+            ...formData,
+            dia_fechamento: formData.diaFechamento, // snake_case exigido pela coluna do banco
           })
         }
       );
@@ -424,6 +427,23 @@ const EditarVendedor: React.FC = () => {
                 required
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Dia de Fechamento *
+              </label>
+              <select
+                name="diaFechamento"
+                value={formData.diaFechamento}
+                onChange={handleInputChange}
+                required
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+              >
+                {Array.from({ length: 28 }, (_, i) => i + 1).map(dia => (
+                  <option key={dia} value={dia}>Dia {dia}</option>
+                ))}
+              </select>
             </div>
           </div>
           
