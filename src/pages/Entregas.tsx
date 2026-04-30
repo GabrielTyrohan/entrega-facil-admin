@@ -20,6 +20,7 @@ import {
     useVendedoresByAdmin,
     type Vendedor
 } from '../hooks/useVendedores';
+import { usePeriodoVendedor } from '../hooks/usePeriodoVendedor';
 import { EntregaComDetalhes, EntregaService } from '../services/entregaService';
 
 const Entregas: React.FC = () => {
@@ -34,6 +35,8 @@ const Entregas: React.FC = () => {
   const [entregaParaExcluir, setEntregaParaExcluir] = useState<Entrega | null>(null);
   const entregaService = useMemo(() => new EntregaService(adminId || ''), [adminId]);
 
+  const periodo = usePeriodoVendedor(selectedVendedor || null);
+
   // React Query hooks para dados
   const { 
     data: entregasData = [], 
@@ -45,7 +48,10 @@ const Entregas: React.FC = () => {
     enabled: !!adminId,
     page: currentPage,
     pageSize: itemsPerPage,
-    search: searchTerm || undefined
+    search: searchTerm || undefined,
+    vendedor_id: selectedVendedor || undefined,
+    data_inicio: periodo.inicioStr || undefined,
+    data_fim: periodo.fimStr || undefined,
   });
   const { data: vendedoresData = [] } = useVendedoresByAdmin(adminId || '');
   const deleteEntregaMutation = useDeleteEntrega();
@@ -362,18 +368,25 @@ const Entregas: React.FC = () => {
             />
           </div>
           
-          <select
-            value={selectedVendedor}
-            onChange={(e) => setSelectedVendedor(e.target.value)}
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="">Todos os vendedores</option>
-            {vendedores.map(vendedor => (
-              <option key={vendedor.id} value={vendedor.id}>
-                {vendedor.nome}
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-col space-y-2">
+            <select
+              value={selectedVendedor}
+              onChange={(e) => setSelectedVendedor(e.target.value)}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="">Todos os vendedores</option>
+              {vendedores.map(vendedor => (
+                <option key={vendedor.id} value={vendedor.id}>
+                  {vendedor.nome}
+                </option>
+              ))}
+            </select>
+            {selectedVendedor && periodo.exibicao && (
+              <span className="text-xs text-gray-500 dark:text-gray-400 pl-1">
+                📅 Período: {periodo.exibicao}
+              </span>
+            )}
+          </div>
         </div>
         
         {/* Informações de paginação */}

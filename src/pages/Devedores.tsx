@@ -8,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCreatePagamento } from '../hooks/usePagamentos';
 import { supabase } from '../lib/supabase';
 import { toast } from '@/utils/toast';
+import { usePeriodoVendedor } from '../hooks/usePeriodoVendedor';
 
 interface DevedorData {
   cliente_id: string;
@@ -52,6 +53,8 @@ const Devedores: React.FC = () => {
   const [clienteSelecionado, setClienteSelecionado] = useState<ClienteDetalhes | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  const periodo = usePeriodoVendedor(selectedVendedor || null);
 
   // Estados para modal de pagamento
   const [pagamentoModalOpen, setPagamentoModalOpen] = useState(false);
@@ -170,7 +173,7 @@ const Devedores: React.FC = () => {
       const firstDayOfCurrentMonthString = firstDayOfCurrentMonth.toISOString().split('T')[0];
 
       // Buscar entregas do cliente que estão em atraso
-      const { data: entregasCliente, error } = await supabase
+      let query = supabase
         .from('entregas')
         .select(`
           id,
@@ -183,8 +186,17 @@ const Devedores: React.FC = () => {
           )
         `)
         .eq('cliente_id', devedor.cliente_id)
-        .not('dataRetorno', 'is', null)
-        .lt('dataRetorno', firstDayOfCurrentMonthString);
+        .not('dataRetorno', 'is', null);
+
+      if (selectedVendedor && periodo.inicioStr && periodo.fimStr) {
+        query = query
+          .gte('dataRetorno', periodo.inicioStr)
+          .lte('dataRetorno', periodo.fimStr);
+      } else {
+        query = query.lt('dataRetorno', firstDayOfCurrentMonthString);
+      }
+
+      const { data: entregasCliente, error } = await query;
 
       if (error) throw error;
 
@@ -243,7 +255,7 @@ const Devedores: React.FC = () => {
 
   // Buscar devedores usando abordagem corrigida
   const { data: devedores, isLoading } = useQuery({
-    queryKey: ['devedores', adminId],
+    queryKey: ['devedores', adminId, selectedVendedor, periodo.inicioStr, periodo.fimStr],
     queryFn: async () => {
       if (!adminId) return [];
 
@@ -265,7 +277,7 @@ const Devedores: React.FC = () => {
       if (vendedorIds.length === 0) return [];
 
       // Buscar todas as entregas com data de retorno anterior ao mês atual
-      const { data: entregasData, error: entregasError } = await supabase
+      let query = supabase
         .from('entregas')
         .select(`
           id,
@@ -291,9 +303,20 @@ const Devedores: React.FC = () => {
             nome
           )
         `)
-        .in('vendedor_id', vendedorIds)
-        .not('dataRetorno', 'is', null)
-        .lt('dataRetorno', firstDayOfCurrentMonthString);
+        .not('dataRetorno', 'is', null);
+
+      if (selectedVendedor && periodo.inicioStr && periodo.fimStr) {
+        query = query
+          .eq('vendedor_id', selectedVendedor)
+          .gte('dataRetorno', periodo.inicioStr)
+          .lte('dataRetorno', periodo.fimStr);
+      } else {
+        query = query
+          .in('vendedor_id', vendedorIds)
+          .lt('dataRetorno', firstDayOfCurrentMonthString);
+      }
+
+      const { data: entregasData, error: entregasError } = await query;
 
       if (entregasError) throw entregasError;
 
@@ -664,19 +687,25 @@ const Devedores: React.FC = () => {
             />
           </div>
 
-          {/* Filtro por vendedor */}
-          <select
-            value={selectedVendedor}
-            onChange={(e) => setSelectedVendedor(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-          >
-            <option value="">Todos os vendedores</option>
-            {(vendedoresData as Record<string, unknown>[]).map((vendedor) => (
-              <option key={String(vendedor.id)} value={String(vendedor.id)}>
-                {String(vendedor.nome)}
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-col space-y-2">
+            <select
+              value={selectedVendedor}
+              onChange={(e) => setSelectedVendedor(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+            >
+              <option value="">Todos os vendedores</option>
+              {(vendedoresData as Record<string, unknown>[]).map((vendedor) => (
+                <option key={String(vendedor.id)} value={String(vendedor.id)}>
+                  {String(vendedor.nome)}
+                </option>
+              ))}
+            </select>
+            {selectedVendedor && periodo.exibicao && (
+              <span className="text-xs text-gray-500 dark:text-gray-400 pl-1">
+                📅 Período: {periodo.exibicao}
+              </span>
+            )}
+          </div>
 
           {/* Ordenação */}
           <select

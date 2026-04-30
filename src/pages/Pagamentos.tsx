@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import type { Vendedor } from '../lib/supabase';
 import { PagamentoComDetalhes, PagamentoService } from '../services/pagamentoService';
 import { VendedorService } from '../services/vendedorService';
+import { usePeriodoVendedor } from '../hooks/usePeriodoVendedor';
 
 const Pagamentos: React.FC = () => {
   const { adminId } = useAuth();
@@ -17,16 +18,18 @@ const Pagamentos: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const periodo = usePeriodoVendedor(selectedVendedor || null);
+
   // Estados para paginação (0-based)
   const [currentPage, setCurrentPage] = useState(0);
   const itemsPerPage = PAGINATION.FRONTEND_PAGE_SIZE;
 
-  // Carregar dados iniciais
+  // Carregar dados iniciais e recarregar em mudanças de período
   useEffect(() => {
     if (adminId) {
       loadData();
     }
-  }, [adminId]);
+  }, [adminId, selectedVendedor, periodo.inicioStr, periodo.fimStr]);
 
   const loadData = async () => {
     if (!adminId) return;
@@ -40,12 +43,16 @@ const Pagamentos: React.FC = () => {
       
       // Carregar pagamentos e vendedores em paralelo
       const [pagamentosData, vendedoresData] = await Promise.all([
-        pagamentoService.getPagamentosByAdmin(),
-        VendedorService.getVendedoresByAdmin(adminId)
+        pagamentoService.searchPagamentos({
+          vendedorId: selectedVendedor || undefined,
+          dataInicio: periodo.inicioStr || undefined,
+          dataFim: periodo.fimStr || undefined,
+        }),
+        vendedores.length === 0 ? VendedorService.getVendedoresByAdmin(adminId) : Promise.resolve(vendedores)
       ]);
       
       setPagamentos(pagamentosData);
-      setVendedores(vendedoresData);
+      if (vendedores.length === 0) setVendedores(vendedoresData);
     } catch {
       setError('Erro ao carregar dados. Tente novamente.');
     } finally {
@@ -241,18 +248,25 @@ const Pagamentos: React.FC = () => {
             />
           </div>
           
-          <select
-            value={selectedVendedor}
-            onChange={(e) => setSelectedVendedor(e.target.value)}
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="">Todos os vendedores</option>
-            {vendedores.map(vendedor => (
-              <option key={vendedor.id} value={vendedor.id}>
-                {vendedor.nome}
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-col space-y-2">
+            <select
+              value={selectedVendedor}
+              onChange={(e) => setSelectedVendedor(e.target.value)}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="">Todos os vendedores</option>
+              {vendedores.map(vendedor => (
+                <option key={vendedor.id} value={vendedor.id}>
+                  {vendedor.nome}
+                </option>
+              ))}
+            </select>
+            {selectedVendedor && periodo.exibicao && (
+              <span className="text-xs text-gray-500 dark:text-gray-400 pl-1">
+                📅 Período: {periodo.exibicao}
+              </span>
+            )}
+          </div>
         </div>
         
 

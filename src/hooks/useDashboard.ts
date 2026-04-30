@@ -59,93 +59,46 @@ export const useDashboardCore = (adminId: string) => {
         .eq('administrador_id', adminId)
         .eq('ativo', true);
 
-
       const vendedorIds = vendedores?.map(v => v.id) || [];
 
+      // Usa a RPC que respeita o período de cada vendedor
+      const [coreResult, orcamentosAtual, orcamentosAnterior, faltanteResult, faltanteAtacado] =
+        await Promise.all([
+          supabase.rpc('get_dashboard_core_por_periodo', { p_admin_id: adminId }),
 
-      const [
-        entregasAtual,
-        entregasAnterior,
-        atacadoAtual,
-        atacadoAnterior,
-        orcamentosAtual,
-        orcamentosAnterior,
-        faltanteResult,
-        faltanteAtacado,
-      ] = await Promise.all([
-        // Entregas do mês atual
-        supabase.from('entregas').select('valor')
-          .in('vendedor_id', vendedorIds)
-          .gte('data_entrega', firstDayCurrent),
+          // Orçamentos PJ mantém mês calendário (não tem vendedor_id específico)
+          supabase.from('orcamentos_pj').select('valor_total')
+            .eq('administrador_id', adminId)
+            .eq('status', 'convertido')
+            .gte('data_orcamento', firstDayCurrent),
 
-        // Entregas do mês anterior
-        supabase.from('entregas').select('valor')
-          .in('vendedor_id', vendedorIds)
-          .gte('data_entrega', firstDayPrevious)
-          .lte('data_entrega', lastDayPrevious),
+          supabase.from('orcamentos_pj').select('valor_total')
+            .eq('administrador_id', adminId)
+            .eq('status', 'convertido')
+            .gte('data_orcamento', firstDayPrevious)
+            .lte('data_orcamento', lastDayPrevious),
 
-        // Atacado do mês atual
-        supabase.from('vendas_atacado').select('valor_total')
-          .eq('administrador_id', adminId)
-          .gte('created_at', firstDayCurrent),
+          // Inadimplência: mantém a lógica atual (não depende de período corrente)
+          supabase.from('entregas').select('id, valor, pagamentos(valor)')
+            .in('vendedor_id', vendedorIds)
+            .not('dataRetorno', 'is', null)
+            .lt('dataRetorno', firstDayDateOnly),
 
-        // Atacado do mês anterior
-        supabase.from('vendas_atacado').select('valor_total')
-          .eq('administrador_id', adminId)
-          .gte('created_at', firstDayPrevious)
-          .lte('created_at', lastDayPrevious),
+          supabase.from('vendas_atacado')
+            .select('valor_total, valor_pago')
+            .eq('administrador_id', adminId)
+            .in('status_pagamento', ['pendente', 'parcial', 'atrasado']),
+        ]);
 
-        // Orçamentos PJ do mês atual convertidos
-        supabase.from('orcamentos_pj').select('valor_total')
-          .eq('administrador_id', adminId)
-          .eq('status', 'convertido')
-          .gte('data_orcamento', firstDayCurrent),
-
-        // Orçamentos PJ do mês anterior convertidos
-        supabase.from('orcamentos_pj').select('valor_total')
-          .eq('administrador_id', adminId)
-          .eq('status', 'convertido')
-          .gte('data_orcamento', firstDayPrevious)
-          .lte('data_orcamento', lastDayPrevious),
-
-        // Inadimplência: entregas com dataRetorno ANTES do mês atual, sem join
-        supabase.from('entregas').select(`
-          id, valor,
-          pagamentos(valor)
-        `)
-          .in('vendedor_id', vendedorIds)
-          .not('dataRetorno', 'is', null)
-          .lt('dataRetorno', firstDayDateOnly),
-
-        // Inadimplência: atacado pendente/parcial/atrasado
-        supabase.from('vendas_atacado')
-          .select('valor_total, valor_pago')
-          .eq('administrador_id', adminId)
-          .in('status_pagamento', ['pendente', 'parcial', 'atrasado']),
-      ]);
-
-
-      const fat_entregas_atual    = soma(entregasAtual.data    || [], 'valor');
-      const fat_atacado_atual     = soma(atacadoAtual.data     || [], 'valor_total');
-      const fat_entregas_anterior = soma(entregasAnterior.data || [], 'valor');
-      const fat_atacado_anterior  = soma(atacadoAnterior.data  || [], 'valor_total');
-
-      const faturamento_atual    = fat_entregas_atual  + fat_atacado_atual;
-      const faturamento_anterior = fat_entregas_anterior + fat_atacado_anterior;
-
-
-      const entregas_atual    = (entregasAtual.data?.length    || 0) + (atacadoAtual.data?.length    || 0);
-      const entregas_anterior = (entregasAnterior.data?.length || 0) + (atacadoAnterior.data?.length || 0);
-
+      const core: any = Array.isArray(coreResult.data) ? coreResult.data[0] : coreResult.data;
 
       const fat_orcamentos_atual    = soma(orcamentosAtual.data    || [], 'valor_total');
       const fat_orcamentos_anterior = soma(orcamentosAnterior.data || [], 'valor_total');
       const qtd_orcamentos_atual    = orcamentosAtual.data?.length || 0;
 
-
       let valores_em_falta = 0;
       faltanteResult.data?.forEach((e: any) => {
-        const pago   = e.pagamentos?.reduce((s: number, p: any) => s + (p.valor || 0), 0) || 0;
+        const pago = e.pagamentos?.reduce((s: number, p: any) => s + (p.valor || 0), 0) || 0;
         const debito = (e.valor || 0) - pago;
         if (debito > 0.01) valores_em_falta += debito;
       });
@@ -154,17 +107,18 @@ export const useDashboardCore = (adminId: string) => {
         if (debito > 0.01) valores_em_falta += debito;
       });
 
-
       return {
-        vendedores_ativos: vendedores?.length || 0,
-        faturamento_atual,
-        faturamento_anterior,
-        entregas_atual,
-        entregas_anterior,
+        vendedores_ativos:   vendedorIds.length,
+        faturamento_atual:   (core?.faturamento_atual   || 0) + fat_orcamentos_atual,
+        faturamento_anterior:(core?.faturamento_anterior || 0) + fat_orcamentos_anterior,
+        entregas_atual:      core?.entregas_atual        || 0,
+        entregas_anterior:   core?.entregas_anterior     || 0,
         valores_em_falta,
+        periodo_inicio:      core?.periodo_inicio        || null,
+        periodo_fim:         core?.periodo_fim           || null,
         breakdown: {
-          fat_entregas_atual,
-          fat_atacado_atual,
+          fat_entregas_atual:   core?.faturamento_atual   || 0,
+          fat_atacado_atual:    0, // já incluso no core
           fat_orcamentos_atual,
           fat_orcamentos_anterior,
           qtd_orcamentos_atual,
@@ -274,48 +228,22 @@ export const useInadimplenciaFaixas = (adminId: string, enabled: boolean) => {
 
 // ─── ONDA 2: Top Vendedores ───────────────────────────────────────────────────
 export const useTopVendedoresDashboard = (adminId: string, enabled: boolean) => {
-  const firstDay = mesAtualInicio();
   const cacheKey = `${new Date().getUTCFullYear()}-${new Date().getUTCMonth()}`;
 
 
   return useQuery({
     queryKey: ['dashboard_top_vendedores', adminId, cacheKey],
     queryFn: async () => {
-      const [entregas, atacado] = await Promise.all([
-        supabase.from('entregas')
-          .select('vendedor_id, valor, vendedores!inner(id, nome)')
-          .eq('vendedores.administrador_id', adminId)
-          .gte('data_entrega', firstDay),
-        supabase.from('vendas_atacado')
-          .select('vendedor_id, valor_total, vendedores!inner(id, nome)')
-          .eq('administrador_id', adminId)
-          .gte('created_at', firstDay),
-      ]);
+      const { data, error } = await supabase
+        .rpc('get_top_vendedores_por_periodo', { p_admin_id: adminId });
 
-
-      const map = new Map<string, { nome: string; entregas: number; total: number }>();
-
-
-      const addToMap = (id: string, nome: string, valor: number) => {
-        if (!map.has(id)) map.set(id, { nome, entregas: 0, total: 0 });
-        const v = map.get(id)!;
-        v.entregas++;
-        v.total += valor;
-      };
-
-
-      entregas.data?.forEach((e: any) => {
-        if (e.vendedores?.id) addToMap(e.vendedores.id, e.vendedores.nome, e.valor || 0);
-      });
-      atacado.data?.forEach((v: any) => {
-        if (v.vendedores?.id) addToMap(v.vendedores.id, v.vendedores.nome, Number(v.valor_total) || 0);
-      });
-
-
-      return Array.from(map.entries())
-        .map(([id, v]) => ({ id, ...v }))
-        .sort((a, b) => b.total - a.total)
-        .slice(0, 5);
+      if (error) throw error;
+      return (data || []).map((v: any) => ({
+        id:       v.vendedor_id,
+        nome:     v.nome,
+        total:    Number(v.faturamento)    || 0,
+        entregas: Number(v.total_entregas) || 0,
+      }));
     },
     enabled: enabled && !!adminId,
     staleTime: 1000 * 60 * 5,
@@ -528,6 +456,8 @@ export const useDashboard = () => {
       vendedoresAtivos:      c?.vendedores_ativos    || 0,
       percentualFaturamento: calcPercent(c?.faturamento_atual || 0, c?.faturamento_anterior || 0),
       percentualEntregas:    calcPercent(c?.entregas_atual    || 0, c?.entregas_anterior    || 0),
+      periodoInicio:         c?.periodo_inicio       || null,
+      periodoFim:            c?.periodo_fim          || null,
     },
     breakdown: {
       fatEntregas:          c?.breakdown?.fat_entregas_atual      || 0,

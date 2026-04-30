@@ -607,7 +607,15 @@ const Dashboard: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0">
         <div className="text-center sm:text-left">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
-          <p className="text-gray-600 dark:text-gray-400 text-sm sm:text-base">Visão geral do sistema</p>
+          <p className="text-gray-600 dark:text-gray-400 text-sm sm:text-base flex flex-col sm:flex-row sm:items-center gap-2 mt-1">
+            Visão geral do sistema
+            {stats?.periodoInicio && stats?.periodoFim && (
+              <span className="bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 text-xs px-2.5 py-0.5 rounded-full inline-flex items-center">
+                <Calendar className="w-3.5 h-3.5 mr-1.5" />
+                {new Date(stats.periodoInicio + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} a {new Date(stats.periodoFim + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+              </span>
+            )}
+          </p>
         </div>
         <div className="text-center sm:text-right">
           {someLoading && (
