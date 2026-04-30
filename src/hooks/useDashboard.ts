@@ -4,6 +4,23 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
+function calcPeriodoInicio(diaFechamento: number, hoje: Date): string {
+  const dia = diaFechamento;
+  const diaAtual = hoje.getDate();
+  let ano = hoje.getFullYear();
+  let mes = hoje.getMonth(); // 0-indexed
+
+  if (diaAtual >= dia) {
+    // Período atual começou no dia D deste mês
+    return new Date(ano, mes, dia).toISOString().split('T')[0];
+  } else {
+    // Período atual começou no dia D do mês anterior
+    const mesAnterior = mes - 1 < 0 ? 11 : mes - 1;
+    const anoAnterior = mes - 1 < 0 ? ano - 1 : ano;
+    return new Date(anoAnterior, mesAnterior, dia).toISOString().split('T')[0];
+  }
+}
+
 
 // ─── Utilitário: detecta quando elemento entra na tela ───────────────────────
 export const useIsVisible = () => {
@@ -31,9 +48,7 @@ const soma = (arr: any[], field: string) =>
   arr?.reduce((s, i) => s + (Number(i[field]) || 0), 0) || 0;
 
 
-// ─── Utilitário: gera início do mês atual em ISO (date-only) ─────────────────
-const mesAtualInicio = () =>
-  new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+
 
 
 // ─── ONDA 1: Core — cards principais ─────────────────────────────────────────
@@ -45,7 +60,6 @@ export const useDashboardCore = (adminId: string) => {
   const firstDayCurrent  = new Date(now.getFullYear(), now.getMonth(),     1).toISOString().split('T')[0];
   const firstDayPrevious = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
   const lastDayPrevious  = new Date(now.getFullYear(), now.getMonth(),     0).toISOString().split('T')[0];
-  const firstDayDateOnly = firstDayCurrent;
 
   // Chave de cache baseada em ano+mês (string curta e estável)
   const cacheKey = `${now.getFullYear()}-${now.getMonth()}`;
@@ -60,6 +74,20 @@ export const useDashboardCore = (adminId: string) => {
         .eq('ativo', true);
 
       const vendedorIds = vendedores?.map(v => v.id) || [];
+
+      // Busca dia_fechamento diretamente da tabela (admin já tem acesso)
+      const { data: vendedoresFechamento } = await supabase
+        .from('vendedores')
+        .select('id, dia_fechamento')
+        .eq('administrador_id', adminId)
+        .eq('ativo', true);
+
+      const periodoMap = new Map<string, string>(
+        (vendedoresFechamento || []).map((v: any) => [
+          v.id,
+          calcPeriodoInicio(v.dia_fechamento ?? 1, now),
+        ])
+      );
 
       // Usa a RPC que respeita o período de cada vendedor
       const [coreResult, orcamentosAtual, orcamentosAnterior, faltanteResult, faltanteAtacado] =
@@ -79,10 +107,9 @@ export const useDashboardCore = (adminId: string) => {
             .lte('data_orcamento', lastDayPrevious),
 
           // Inadimplência: mantém a lógica atual (não depende de período corrente)
-          supabase.from('entregas').select('id, valor, pagamentos(valor)')
+          supabase.from('entregas').select('id, valor, vendedor_id, "dataRetorno", pagamentos(valor)')
             .in('vendedor_id', vendedorIds)
-            .not('dataRetorno', 'is', null)
-            .lt('dataRetorno', firstDayDateOnly),
+            .not('dataRetorno', 'is', null),
 
           supabase.from('vendas_atacado')
             .select('valor_total, valor_pago')
@@ -98,6 +125,9 @@ export const useDashboardCore = (adminId: string) => {
 
       let valores_em_falta = 0;
       faltanteResult.data?.forEach((e: any) => {
+        const corte = periodoMap.get(e.vendedor_id) ?? firstDayCurrent;
+        if (e.dataRetorno >= corte) return;
+
         const pago = e.pagamentos?.reduce((s: number, p: any) => s + (p.valor || 0), 0) || 0;
         const debito = (e.valor || 0) - pago;
         if (debito > 0.01) valores_em_falta += debito;
@@ -181,10 +211,28 @@ export const useInadimplenciaFaixas = (adminId: string, enabled: boolean) => {
   return useQuery({
     queryKey: ['dashboard_inadimplencia', adminId, hoje],
     queryFn: async () => {
+
+
+      const { data: vendedoresFechamento } = await supabase
+        .from('vendedores')
+        .select('id, dia_fechamento')
+        .eq('administrador_id', adminId)
+        .eq('ativo', true);
+
+      const firstDayCurrent = new Date(now.getFullYear(), now.getMonth(), 1)
+        .toISOString().split('T')[0];
+
+      const periodoMap = new Map<string, string>(
+        (vendedoresFechamento || []).map((v: any) => [
+          v.id,
+          calcPeriodoInicio(v.dia_fechamento ?? 1, now),
+        ])
+      );
+
       const { data, error } = await supabase
         .from('entregas')
         .select(`
-          id, valor, "dataRetorno",
+          id, valor, vendedor_id, "dataRetorno",
           pagamentos(valor),
           vendedores!inner(administrador_id)
         `)
@@ -200,6 +248,9 @@ export const useInadimplenciaFaixas = (adminId: string, enabled: boolean) => {
 
 
       data?.forEach((e: any) => {
+        const corte = periodoMap.get(e.vendedor_id) ?? firstDayCurrent;
+        if (e.dataRetorno >= corte) return;
+
         const pago   = e.pagamentos?.reduce((s: number, p: any) => s + (p.valor || 0), 0) || 0;
         const debito = (e.valor || 0) - pago;
         if (debito <= 0.01) return;
@@ -287,65 +338,23 @@ export const useEstoqueAlertsDashboard = (adminId: string, enabled: boolean) => 
 
 // ─── ONDA 3: Top Produtos mais vendidos (via itens_entrega) ──────────────────
 export const useTopProdutosDashboard = (adminId: string, enabled: boolean) => {
-  const firstDay = mesAtualInicio();
   const cacheKey = `${new Date().getUTCFullYear()}-${new Date().getUTCMonth()}`;
-
 
   return useQuery({
     queryKey: ['dashboard_top_produtos', adminId, cacheKey],
     queryFn: async () => {
-      // 1. Busca todas as entregas do mês dos vendedores do admin
-      const { data: vendedores } = await supabase
-        .from('vendedores')
-        .select('id')
-        .eq('administrador_id', adminId)
-        .eq('ativo', true);
+      // Filtra por período correto via v_periodos_ativos (dia_fechamento)
+      const { data, error } = await supabase
+        .rpc('get_top_produtos_por_periodo', { p_admin_id: adminId });
 
-      const vendedorIds = vendedores?.map(v => v.id) || [];
-      if (!vendedorIds.length) return [];
-      const { data: entregas, error: errEntregas } = await supabase
-        .from('entregas')
-        .select('id')
-        .in('vendedor_id', vendedorIds)
-        .gte('data_entrega', firstDay);
+      if (error) throw error;
 
-      if (errEntregas) throw errEntregas;
-      if (!entregas?.length) return [];
-      const entregaIds = entregas.map(e => e.id);
-
-
-      // 2. Busca os itens dessas entregas com os dados do produto
-      const { data: itens, error: errItens } = await supabase
-        .from('itens_entrega')
-        .select('produto_cadastrado_id, quantidade, produtos_cadastrado(id, produto_nome, unidade_medida)')
-        .in('entrega_id', entregaIds);
-
-      if (errItens) throw errItens;
-      if (!itens?.length) return [];
-
-
-      // 3. Agrega quantidade total por produto
-      const map = new Map<string, { nome: string; unidade: string; qtd: number }>();
-      itens.forEach((item: any) => {
-        const pid  = item.produto_cadastrado_id;
-        const info = item.produtos_cadastrado;
-        if (!pid) return;
-
-        if (!map.has(pid)) {
-          map.set(pid, {
-            nome:    info?.produto_nome   || 'Produto',
-            unidade: info?.unidade_medida || 'un',
-            qtd:     0,
-          });
-        }
-        map.get(pid)!.qtd += Number(item.quantidade) || 1;
-      });
-
-
-      return Array.from(map.entries())
-        .map(([id, v]) => ({ id, ...v }))
-        .sort((a, b) => b.qtd - a.qtd)
-        .slice(0, 5);
+      return (data || []).map((v: any) => ({
+        id:      v.produto_id,
+        nome:    v.nome,
+        unidade: v.unidade,
+        qtd:     Number(v.qtd) || 0,
+      }));
     },
     enabled: enabled && !!adminId,
     staleTime: 1000 * 60 * 5,
@@ -366,23 +375,51 @@ export const useFaturamentoMensalDashboard = (adminId: string, enabled: boolean)
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard_faturamento_mensal', adminId, startDate],
     queryFn: async () => {
+      // PASSO 1: busca IDs das entregas dos vendedores deste admin
+      const { data: vendedores } = await supabase
+        .from('vendedores')
+        .select('id')
+        .eq('administrador_id', adminId)
+        .eq('ativo', true);
+
+      const vendedorIds = (vendedores || []).map((v: any) => v.id);
+      if (vendedorIds.length === 0) return [];
+
+      const { data: entregasData } = await supabase
+        .from('entregas')
+        .select('id')
+        .in('vendedor_id', vendedorIds);
+
+      const entregaIds = (entregasData || []).map((e: any) => e.id);
+
+      // PASSO 2: filtro direto sem join aninhado + atacado em paralelo
       const [pagamentos, atacado] = await Promise.all([
-        supabase.from('pagamentos')
-          .select('valor, data_pagamento, entregas!inner(vendedores!inner(administrador_id))')
-          .eq('entregas.vendedores.administrador_id', adminId)
-          .gte('data_pagamento', startDate)
-          .lte('data_pagamento', endDate),
-        supabase.from('vendas_atacado_pagamentos')
+        entregaIds.length > 0
+          ? supabase
+              .from('pagamentos')
+              .select('valor, data_pagamento')
+              .in('entrega_id', entregaIds)
+              .gte('data_pagamento', startDate)
+              .lte('data_pagamento', endDate)
+          : { data: [] },
+
+        supabase
+          .from('vendas_atacado_pagamentos')
           .select('valor, created_at, vendas_atacado!inner(administrador_id)')
           .eq('vendas_atacado.administrador_id', adminId)
           .gte('created_at', startDate)
           .lte('created_at', endDate),
       ]);
 
-
       return [
-        ...(pagamentos.data || []).map((p: any) => ({ valor: p.valor, data: p.data_pagamento })),
-        ...(atacado.data    || []).map((p: any) => ({ valor: p.valor, data: p.created_at.split('T')[0] })),
+        ...(pagamentos.data || []).map((p: any) => ({
+          valor: p.valor,
+          data: p.data_pagamento,
+        })),
+        ...(atacado.data || []).map((p: any) => ({
+          valor: p.valor,
+          data: p.created_at.split('T')[0],
+        })),
       ];
     },
     enabled: enabled && !!adminId,

@@ -196,19 +196,103 @@ const InadimplenciaCard: React.FC<{
 // ─── FaturamentoMensalChart ───────────────────────────────────────────────────
 interface MonthData { month: string; value: number; height: number; }
 
+let globalChartAnimated = false;
+
 const FaturamentoMensalChart: React.FC<{ data: MonthData[]; isLoading: boolean }> = ({ data, isLoading }) => {
-  const { ref, isVisible } = useIsVisible();
-  const [hoveredColumn, setHoveredColumn] = useState<number | null>(null);
-  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  const { ref: visibilityRef, isVisible } = useIsVisible();
+  
+  const [hoveredPoint, setHoveredPoint] = useState<number | null>(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  
+  const pathRef = useRef<SVGPathElement>(null);
+  const [pathLength, setPathLength] = useState(0);
+  const [isFirstMount] = useState(!globalChartAnimated);
+  const [animatedProgress, setAnimatedProgress] = useState(isFirstMount ? 0 : 1);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      const { width, height } = entries[0].contentRect;
+      if (width > 0 && height > 0) setDimensions({ width, height });
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [isVisible]);
+
+  useEffect(() => {
+    if (pathRef.current) {
+      setPathLength(pathRef.current.getTotalLength());
+    }
+  }, [dimensions, data]);
+
+  useEffect(() => {
+    if (isFirstMount && isVisible && pathLength > 0 && dimensions.width > 0 && animatedProgress === 0) {
+      const timer = setTimeout(() => {
+        setAnimatedProgress(1);
+        globalChartAnimated = true;
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isFirstMount, isVisible, pathLength, dimensions.width, animatedProgress]);
+
+  const padding = { top: 20, right: 16, bottom: 32, left: 52 };
+  const graphWidth = dimensions.width - padding.left - padding.right;
+  const graphHeight = dimensions.height - padding.top - padding.bottom;
+
+  const maxValue = Math.max(...data.map(d => d.value), 1);
+  const niceMax = maxValue > 1000 ? Math.ceil(maxValue / 1000) * 1000 : Math.ceil(maxValue / 100) * 100;
+  
+  const formatYAxis = (val: number) => {
+    if (val === 0) return 'R$0';
+    if (val >= 1000000) return `R$${(val / 1000000).toFixed(1).replace('.0', '').replace('.', ',')}M`;
+    if (val >= 1000) return `R$${(val / 1000).toFixed(1).replace('.0', '').replace('.', ',')}k`;
+    return `R$${val}`;
+  };
+
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(pct => niceMax * pct);
+
+  const points = data.map((d, i) => {
+    const x = padding.left + (i / Math.max(data.length - 1, 1)) * graphWidth;
+    const y = padding.top + graphHeight - ((d.value / niceMax) * graphHeight);
+    return { x, y, value: d.value, month: d.month };
+  });
+
+  const createSmoothPath = (pts: typeof points) => {
+    if (pts.length === 0) return '';
+    if (pts.length === 1) return `M ${pts[0].x},${pts[0].y}`;
+    let path = `M ${pts[0].x},${pts[0].y}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = i === 0 ? pts[0] : pts[i - 1];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = i + 2 < pts.length ? pts[i + 2] : p2;
+
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+      path += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`;
+    }
+    return path;
+  };
+
+  const linePath = createSmoothPath(points);
+  const areaPath = points.length > 0 
+    ? `${linePath} L ${points[points.length - 1].x},${padding.top + graphHeight} L ${points[0].x},${padding.top + graphHeight} Z`
+    : '';
 
   return (
-    <div ref={ref} className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 relative h-80 flex flex-col">
+    <div ref={visibilityRef} className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 relative h-80 flex flex-col">
       <div className="flex items-center gap-2 mb-4 flex-shrink-0">
         <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
           Faturamento Mensal
         </h3>
         <Tooltip text="Total recebido por mês nos últimos 12 meses, somando pagamentos de entregas e vendas atacado." />
       </div>
+
       {isLoading || !isVisible ? (
         <div className="flex-1 flex items-end justify-between space-x-1 sm:space-x-2">
           {[...Array(12)].map((_, i) => (
@@ -217,49 +301,126 @@ const FaturamentoMensalChart: React.FC<{ data: MonthData[]; isLoading: boolean }
           ))}
         </div>
       ) : (
-        <>
-          {hoveredColumn !== null && (
+        <div ref={containerRef} className="flex-1 relative min-h-0 w-full select-none">
+          {hoveredPoint !== null && points[hoveredPoint] && (
             <div
-              className="absolute z-10 bg-gray-900 dark:bg-gray-700 text-white px-2 sm:px-3 py-1 sm:py-2 rounded-lg shadow-lg text-xs sm:text-sm font-medium pointer-events-none transform -translate-x-1/2 transition-all duration-150"
-              style={{ left: `${tooltipPosition.x}%`, top: `${tooltipPosition.y}px` }}
+              className="absolute z-10 bg-gray-900 dark:bg-gray-700 text-white px-2 sm:px-3 py-1 sm:py-2 rounded-lg shadow-lg text-xs sm:text-sm font-medium pointer-events-none transform -translate-x-1/2 -translate-y-full transition-all duration-150"
+              style={{ left: tooltipPos.x, top: tooltipPos.y - 12 }}
             >
               <div className="text-center">
-                <div className="font-semibold">{data[hoveredColumn]?.month}</div>
+                <div className="font-semibold">{points[hoveredPoint].month}</div>
                 <div className="text-green-400">
                   {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
-                    .format(data[hoveredColumn]?.value || 0)}
+                    .format(points[hoveredPoint].value)}
                 </div>
               </div>
               <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900 dark:border-t-gray-700" />
             </div>
           )}
-          <div className="flex-1 flex items-end justify-between space-x-1 sm:space-x-2 relative min-h-0">
-            {data.map((item, index) => (
-              <div
-                key={index}
-                className="flex-1 min-w-[20px] bg-blue-500 rounded-t-sm opacity-80 hover:opacity-100 transition-all duration-200 cursor-pointer hover:bg-blue-600 animate-grow-up"
-                style={{ height: `${item.height}%`, animationDelay: `${index * 100}ms` }}
-                onMouseEnter={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const containerRect = e.currentTarget.parentElement?.getBoundingClientRect();
-                  if (containerRect) {
-                    setTooltipPosition({
-                      x: ((rect.left + rect.width / 2 - containerRect.left) / containerRect.width) * 100,
-                      y: containerRect.height - rect.height - 10,
-                    });
-                  }
-                  setHoveredColumn(index);
+
+          {dimensions.width > 0 && dimensions.height > 0 && (
+            <svg width={dimensions.width} height={dimensions.height} className="absolute inset-0 overflow-visible">
+              <defs>
+                <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="rgba(59,130,246,0.18)" />
+                  <stop offset="100%" stopColor="rgba(59,130,246,0)" />
+                </linearGradient>
+              </defs>
+
+              {/* Gridlines e Eixo Y */}
+              {yTicks.map((val, i) => {
+                const y = padding.top + graphHeight - ((val / niceMax) * graphHeight);
+                return (
+                  <g key={`y-${i}`}>
+                    <line 
+                      x1={padding.left} y1={y} 
+                      x2={dimensions.width - padding.right} y2={y} 
+                      className="stroke-[#e5e7eb] dark:stroke-[#374151]" 
+                    />
+                    <text 
+                      x={padding.left - 8} y={y + 4} 
+                      className="text-xs fill-current text-gray-400" 
+                      textAnchor="end"
+                    >
+                      {formatYAxis(val)}
+                    </text>
+                  </g>
+                );
+              })}
+
+              {/* Eixo X (Meses) */}
+              {points.map((p, i) => (
+                <text 
+                  key={`x-${i}`}
+                  x={p.x} y={dimensions.height - 10} 
+                  className="text-xs fill-current text-gray-400 dark:text-gray-500" 
+                  textAnchor="middle"
+                >
+                  {p.month}
+                </text>
+              ))}
+
+              {/* Área com Gradiente */}
+              <path
+                d={areaPath}
+                fill="url(#areaGradient)"
+                style={{
+                  opacity: animatedProgress,
+                  transition: 'opacity 1200ms ease-in-out'
                 }}
-                onMouseLeave={() => setHoveredColumn(null)}
               />
-            ))}
-          </div>
-          <div className="flex justify-between mt-2 text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
-            {data.map((item, index) => (
-              <span key={index} className="flex-shrink-0">{item.month}</span>
-            ))}
-          </div>
-        </>
+
+              {/* Linha do Gráfico */}
+              <path
+                ref={pathRef}
+                d={linePath}
+                fill="none"
+                className="stroke-[#3b82f6]"
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{
+                  strokeDasharray: pathLength,
+                  strokeDashoffset: pathLength - (pathLength * animatedProgress),
+                  transition: 'stroke-dashoffset 1200ms ease-in-out'
+                }}
+              />
+
+              {/* Pontos Visíveis */}
+              {points.map((p, i) => (
+                <circle
+                  key={`point-${i}`}
+                  cx={p.x} cy={p.y}
+                  r={hoveredPoint === i ? 6 : 4}
+                  fill="white"
+                  className="stroke-[#3b82f6]"
+                  strokeWidth={2}
+                  style={{
+                    transformOrigin: `${p.x}px ${p.y}px`,
+                    transform: `scale(${animatedProgress === 1 ? 1 : 0})`,
+                    transition: `transform 300ms ease-out ${i * 80}ms, r 150ms ease`
+                  }}
+                />
+              ))}
+
+              {/* Áreas de Hover Invisíveis */}
+              {points.map((p, i) => (
+                <rect
+                  key={`hover-${i}`}
+                  x={p.x - 20} y={padding.top}
+                  width={40} height={graphHeight}
+                  fill="transparent"
+                  className="cursor-pointer"
+                  onMouseEnter={() => {
+                    setHoveredPoint(i);
+                    setTooltipPos({ x: p.x, y: p.y });
+                  }}
+                  onMouseLeave={() => setHoveredPoint(null)}
+                />
+              ))}
+            </svg>
+          )}
+        </div>
       )}
     </div>
   );
@@ -278,9 +439,9 @@ const TopVendedoresCard: React.FC<{
     <div ref={ref} className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 h-80 overflow-hidden flex flex-col">
       <div className="flex items-center gap-2 mb-4 flex-shrink-0">
         <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-          Top Vendedores — Mês Atual
+          Top Vendedores — Período Atual
         </h3>
-        <Tooltip text="Os 5 vendedores com maior valor total em entregas e vendas atacado no mês corrente." />
+        <Tooltip text="Os 5 vendedores com maior valor total no período atual (baseado no dia de fechamento)." />
       </div>
       {isLoading || !isVisible ? (
         <div className="space-y-4">
@@ -343,9 +504,9 @@ const TopProdutosCard: React.FC<{ data: TopProdutoItem[]; isLoading: boolean }> 
       <div className="flex items-center gap-2 mb-4 flex-shrink-0">
         <Package className="w-5 h-5 text-orange-500 flex-shrink-0" />
         <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-          Top Produtos — Mês Atual
+          Top Produtos — Período Atual
         </h3>
-        <Tooltip text="Os 5 produtos mais entregues via cestas no mês corrente." />
+        <Tooltip text="Os 5 produtos mais entregues via cestas no período atual de cada vendedor." />
       </div>
       {isLoading || !isVisible ? (
         <div className="space-y-4">
