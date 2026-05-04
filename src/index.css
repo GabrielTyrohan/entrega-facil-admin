@@ -37,6 +37,9 @@
     --chart-4: 43 58% 58%;
     --chart-5: 27 70% 58%;
 
+    --skeleton-base:  #e5e7eb;   /* gray-200 */
+    --skeleton-shine: #f3f4f6;   /* gray-100 */
+
     --radius: 0.5rem;
   }
   .dark {
@@ -63,7 +66,22 @@
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%
+    --chart-5: 340 75% 55%;
+
+    --skeleton-base:  #374151;   /* gray-700 */
+    --skeleton-shine: #4b5563;   /* gray-600 */
+  }
+
+  [data-theme="dark"] {
+    --skeleton-base:  #374151;
+    --skeleton-shine: #4b5563;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not(.light):not([data-theme="light"]) {
+      --skeleton-base:  #374151;
+      --skeleton-shine: #4b5563;
+    }
   }
 }
 
@@ -104,6 +122,11 @@
   .animate-grow-up {
     animation: growUp 0.3s ease-out forwards;
     transform-origin: bottom;
+  }
+
+  @keyframes shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position:  200% 0; }
   }
 
 }

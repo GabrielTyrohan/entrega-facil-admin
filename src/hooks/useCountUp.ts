@@ -1,50 +1,63 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface UseCountUpOptions {
-  end: number;
-  duration?: number;
-  decimals?: number;
-  start?: number;
+  target: number;       // valor final
+  duration?: number;    // duração em ms (padrão 1200)
+  enabled?: boolean;    // se false, retorna target direto sem animar
 }
 
-export const useCountUp = ({
-  end,
-  duration = 2000,
-  decimals = 2,
-  start = 0,
-}: UseCountUpOptions) => {
-  const [count, setCount] = useState(start);
-  const frameRate = 1000 / 60; // 60 FPS
-  const totalFrames = Math.round(duration / frameRate);
+export function useCountUp({ target, duration = 1200, enabled = true }: UseCountUpOptions): number {
+  const [current, setCurrent] = useState(enabled ? 0 : target);
+  const rafRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
-    let frame = 0;
-    // Se end for 0 ou undefined, não anima ou anima para 0
-    const finalEnd = end || 0;
-    
-    if (start === finalEnd) {
-        setCount(finalEnd);
-        return;
+    // Se animação desabilitada ou target ainda não chegou, retorna direto
+    if (!enabled || target === 0) {
+      setCurrent(target);
+      return;
     }
 
-    const counter = setInterval(() => {
-      frame++;
-      const progress = frame / totalFrames;
+    // Easing easeOutQuart — acelerado no início, suave no final
+    const easeOutQuart = (t: number) => 1 - Math.pow(1 - t, 4);
 
-      // Easing suave (desacelera no final)
-      const easedProgress = 1 - Math.pow(1 - progress, 3);
-      const newValue = start + (finalEnd - start) * easedProgress;
+    const animate = (timestamp: number) => {
+      if (startTimeRef.current === null) startTimeRef.current = timestamp;
+      const elapsed = timestamp - startTimeRef.current;
+      const progress = Math.min(elapsed / duration, 1);
+      const easedProgress = easeOutQuart(progress);
 
-      setCount(newValue);
+      setCurrent(Math.round(target * easedProgress));
 
-      if (frame >= totalFrames) {
-        clearInterval(counter);
-        setCount(finalEnd); // Garante valor exato
+      if (progress < 1) {
+        rafRef.current = requestAnimationFrame(animate);
+      } else {
+        setCurrent(target); // garante valor exato no final
       }
-    }, frameRate);
+    };
 
-    return () => clearInterval(counter);
-  }, [end, duration, start, decimals, totalFrames]);
+    startTimeRef.current = null;
+    rafRef.current = requestAnimationFrame(animate);
 
-  return count.toFixed(decimals);
-};
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
+  }, [target, duration, enabled]);
+
+  return current;
+}
+
+// Controla se a animação já foi exibida nesta sessão de login.
+// Usa uma variável de módulo (não localStorage) para persistir apenas
+// enquanto a aba estiver aberta. Ao fechar/relogar, reseta automaticamente.
+let _animationPlayedThisSession = false;
+
+export function useDashboardAnimationFlag() {
+  const shouldAnimate = !_animationPlayedThisSession;
+
+  function markAsPlayed() {
+    _animationPlayedThisSession = true;
+  }
+
+  return { shouldAnimate, markAsPlayed };
+}

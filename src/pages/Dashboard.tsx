@@ -1,6 +1,6 @@
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useAuth } from '@/contexts/AuthContext';
-import { useCountUp } from '@/hooks/useCountUp';
+import { useCountUp, useDashboardAnimationFlag } from '@/hooks/useCountUp';
 import { useDashboard, useIsVisible } from '@/hooks/useDashboard';
 import { supabase } from '@/lib/supabase';
 import { EstoqueAtual } from '@/types/estoque';
@@ -251,6 +251,17 @@ const FaturamentoMensalChart: React.FC<{ data: MonthData[]; isLoading: boolean }
     return `R$${val}`;
   };
 
+  const formatShortMonth = (label: string) => {
+    const parts = label.split(/[-–]/);
+    if (parts.length === 2) {
+      const monthNum = parseInt(parts[1].split('/')[1], 10);
+      if (!isNaN(monthNum) && monthNum >= 1 && monthNum <= 12) {
+        return ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'][monthNum - 1];
+      }
+    }
+    return label;
+  };
+
   const yTicks = [0, 0.25, 0.5, 0.75, 1].map(pct => niceMax * pct);
 
   const points = data.map((d, i) => {
@@ -288,18 +299,21 @@ const FaturamentoMensalChart: React.FC<{ data: MonthData[]; isLoading: boolean }
     <div ref={visibilityRef} className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 relative h-80 flex flex-col">
       <div className="flex items-center gap-2 mb-4 flex-shrink-0">
         <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-          Faturamento Mensal
+          Receita Mensal
         </h3>
         <Tooltip text="Total recebido por mês nos últimos 12 meses, somando pagamentos de entregas e vendas atacado." />
       </div>
 
       {isLoading || !isVisible ? (
-        <div className="flex-1 flex items-end justify-between space-x-1 sm:space-x-2">
-          {[...Array(12)].map((_, i) => (
-            <Skeleton key={i} className="flex-1 min-w-[20px] rounded-t-sm"
-              style={{ height: `${[30, 50, 40, 70, 50, 80, 60, 90, 70, 50, 60, 40][i]}%` }} />
-          ))}
-        </div>
+        <div
+          className="flex-1 rounded-lg"
+          style={{
+            minHeight: 0,
+            background: 'linear-gradient(90deg, var(--skeleton-base, #e5e7eb) 25%, var(--skeleton-shine, #f3f4f6) 50%, var(--skeleton-base, #e5e7eb) 75%)',
+            backgroundSize: '200% 100%',
+            animation: 'shimmer 1.5s ease-in-out infinite',
+          }}
+        />
       ) : (
         <div ref={containerRef} className="flex-1 relative min-h-0 w-full select-none">
           {hoveredPoint !== null && points[hoveredPoint] && (
@@ -356,7 +370,7 @@ const FaturamentoMensalChart: React.FC<{ data: MonthData[]; isLoading: boolean }
                   className="text-xs fill-current text-gray-400 dark:text-gray-500" 
                   textAnchor="middle"
                 >
-                  {p.month}
+                  {formatShortMonth(p.month)}
                 </text>
               ))}
 
@@ -687,9 +701,36 @@ const Dashboard: React.FC = () => {
     topProdutos, estoqueAlerts, charts, isLoading, someLoading, loadingStates,
   } = useDashboard();
 
-  const faturamentoAnimado = useCountUp({ end: stats?.faturamentoAtual  || 0, duration: 800, decimals: 2 });
-  const faltanteAnimado    = useCountUp({ end: stats?.valoresEmFalta    || 0, duration: 800, decimals: 2 });
-  const orcamentosAnimado  = useCountUp({ end: breakdown?.fatOrcamentos || 0, duration: 800, decimals: 2 });
+  const { shouldAnimate, markAsPlayed } = useDashboardAnimationFlag();
+
+  useEffect(() => {
+    if (shouldAnimate && !isLoading) {
+      const temDados =
+        stats?.faturamentoAtual !== undefined &&
+        stats?.valoresEmFalta !== undefined &&
+        breakdown?.fatOrcamentos !== undefined;
+
+      if (temDados) markAsPlayed();
+    }
+  }, [stats, breakdown, isLoading, shouldAnimate, markAsPlayed]);
+
+  const faturamentoAnimado = useCountUp({
+    target: stats?.faturamentoAtual || 0,
+    duration: 1200,
+    enabled: shouldAnimate,
+  });
+
+  const faltanteAnimado = useCountUp({
+    target: stats?.valoresEmFalta || 0,
+    duration: 1400,
+    enabled: shouldAnimate,
+  });
+
+  const orcamentosAnimado = useCountUp({
+    target: breakdown?.fatOrcamentos || 0,
+    duration: 1000,
+    enabled: shouldAnimate,
+  });
 
   const fmt = (v: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -707,7 +748,7 @@ const Dashboard: React.FC = () => {
 
   const statsRow1 = [
     {
-      title: 'Faturamento do Mês',
+      title: 'Faturamento Atual',
       tooltip: 'Total faturado no mês somando entregas e vendas atacado.',
       value: fmt(Number(faturamentoAnimado)),
       change: `${stats?.percentualFaturamento >= 0 ? '+' : ''}${stats?.percentualFaturamento}%`,

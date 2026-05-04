@@ -363,94 +363,35 @@ export const useTopProdutosDashboard = (adminId: string, enabled: boolean) => {
 };
 
 
-// ─── ONDA 4: Gráfico mensal ───────────────────────────────────────────────────
+// ─── ONDA 4: Gráfico mensal (por períodos de fechamento) ──────────────────────
 export const useFaturamentoMensalDashboard = (adminId: string, enabled: boolean) => {
-  const now       = new Date();
-  const startDate = new Date(
-    Date.UTC(now.getFullYear() - 1, now.getMonth(), 1, 0, 0, 0, 0)
-  ).toISOString();
-  const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
-    .toISOString();
-
   const { data, isLoading } = useQuery({
-    queryKey: ['dashboard_faturamento_mensal', adminId, startDate],
+    queryKey: ['dashboard_faturamento_mensal', adminId],
     queryFn: async () => {
-      // PASSO 1: busca IDs das entregas dos vendedores deste admin
-      const { data: vendedores } = await supabase
-        .from('vendedores')
-        .select('id')
-        .eq('administrador_id', adminId)
-        .eq('ativo', true);
+      const { data, error } = await supabase
+        .rpc('get_faturamento_12_periodos_por_admin', {
+          p_admin_id: adminId,
+        });
 
-      const vendedorIds = (vendedores || []).map((v: any) => v.id);
-      if (vendedorIds.length === 0) return [];
-
-      const { data: entregasData } = await supabase
-        .from('entregas')
-        .select('id')
-        .in('vendedor_id', vendedorIds);
-
-      const entregaIds = (entregasData || []).map((e: any) => e.id);
-
-      // PASSO 2: filtro direto sem join aninhado + atacado em paralelo
-      const [pagamentos, atacado] = await Promise.all([
-        entregaIds.length > 0
-          ? supabase
-              .from('pagamentos')
-              .select('valor, data_pagamento')
-              .in('entrega_id', entregaIds)
-              .gte('data_pagamento', startDate)
-              .lte('data_pagamento', endDate)
-          : { data: [] },
-
-        supabase
-          .from('vendas_atacado_pagamentos')
-          .select('valor, created_at, vendas_atacado!inner(administrador_id)')
-          .eq('vendas_atacado.administrador_id', adminId)
-          .gte('created_at', startDate)
-          .lte('created_at', endDate),
-      ]);
-
-      return [
-        ...(pagamentos.data || []).map((p: any) => ({
-          valor: p.valor,
-          data: p.data_pagamento,
-        })),
-        ...(atacado.data || []).map((p: any) => ({
-          valor: p.valor,
-          data: p.created_at.split('T')[0],
-        })),
-      ];
+      if (error) throw error;
+      return data ?? [];
     },
     enabled: enabled && !!adminId,
     staleTime: 0,
     refetchOnWindowFocus: false,
   });
 
-
   const chartData = useMemo(() => {
-    const months = Array.from({ length: 12 }, (_, i) => {
-      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (11 - i), 1));
-      return {
-        month: d.toLocaleDateString('pt-BR', { month: 'short', timeZone: 'UTC' })
-          .replace('.', '').replace(/^\w/, c => c.toUpperCase()),
-        year:     d.getUTCFullYear(),
-        monthNum: d.getUTCMonth(),
-        value:    0,
-        height:   0,
-      };
-    });
+    if (!data || data.length === 0) return [];
 
-    data?.forEach((item: any) => {
-      const d = new Date(item.data + (item.data.includes('T') ? '' : 'T00:00:00Z'));
-      const idx = months.findIndex(m => m.monthNum === d.getUTCMonth() && m.year === d.getUTCFullYear());
-      if (idx >= 0) months[idx].value += item.valor || 0;
-    });
+    const maxValor = Math.max(...data.map((d: any) => Number(d.valor) || 0), 1);
 
-    const max = Math.max(...months.map(m => m.value), 1);
-    return months.map(m => ({ ...m, height: (m.value / max) * 90 || 5 }));
+    return data.map((d: any) => ({
+      month:  d.label,
+      value:  Number(d.valor) || 0,
+      height: Math.max(Math.round((Number(d.valor) / maxValor) * 100), 2),
+    }));
   }, [data]);
-
 
   return { data: chartData, isLoading };
 };
