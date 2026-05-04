@@ -35,7 +35,7 @@ const NovoVendedor: React.FC = () => {
     senha: gerarSenhaAleatoria(), // Gera senha automática de 6 dígitos
     endereco: '',
     dataInicio: obterDataAtual(), // Data atual como padrão
-    tipoVinculo: 'CLT',
+    tipoVinculo: 'representado',  // 'representado' | 'autonomo'
     percentualMinimo: 50, // 50% como padrão
     contrato: '',
     ativo: true,
@@ -362,7 +362,7 @@ const NovoVendedor: React.FC = () => {
             
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Tipo de Vínculo
+                Vínculo de Cobrança
               </label>
               <select
                 name="tipoVinculo"
@@ -370,11 +370,12 @@ const NovoVendedor: React.FC = () => {
                 onChange={handleInputChange}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                <option value="CLT">CLT</option>
-                <option value="PJ">Pessoa Jurídica</option>
-                <option value="Freelancer">Freelancer</option>
-                <option value="Terceirizado">Terceirizado</option>
+                <option value="representado">Representado (Admin paga)</option>
+                <option value="autonomo">Autônomo (paga por conta própria)</option>
               </select>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Representado: o custo entra na fatura do admin. Autônomo: o vendedor paga sua assinatura.
+              </p>
             </div>
             
             <div>

@@ -18,8 +18,12 @@ export interface Vendedor {
   created_at: string;
   updated_at: string;
   data_inicio?: string | null;
-  tipo_vinculo?: string | null;
+  /** 'representado' | 'autonomo' | null — null é tratado como 'representado' */
+  tipo_vinculo?: 'representado' | 'autonomo' | string | null;
+  /** 'pago' | 'pendente' | null — null = representado (admin paga) */
+  status_pagamento_vendedor?: 'pago' | 'pendente' | string | null;
   percentual_minimo?: number | null;
+  dia_fechamento?: number | null;
   admin_id?: string;
   comissao_percentual?: number;
 }

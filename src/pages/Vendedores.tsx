@@ -7,7 +7,7 @@ import {
 import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/Skeleton";
 import VendedorModal from '@/components/ui/VendedorModal';
-import { Edit, Eye, MoreHorizontal, Plus, Search, Trash2 } from 'lucide-react';
+import { CheckCircle, Clock, Edit, Eye, MoreHorizontal, Plus, Search, Trash2 } from 'lucide-react';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -82,6 +82,40 @@ const Vendedores: React.FC = () => {
     return percentual ? `${percentual}%` : 'N/A';
   };
 
+  // Badge de tipo de vínculo
+  const VinculoBadge = ({ tipo }: { tipo?: string | null }) => {
+    const isAutonomo = tipo === 'autonomo';
+    return (
+      <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${
+        isAutonomo
+          ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+          : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+      }`}>
+        {isAutonomo ? 'Autônomo' : 'Representado'}
+      </span>
+    );
+  };
+
+  // Ícone de status de pagamento
+  const PagamentoIcon = ({ status }: { status?: string | null }) => {
+    if (status === 'pago') {
+      return (
+        <span title="Pagamento em dia">
+          <CheckCircle className="w-4 h-4 text-green-500" />
+        </span>
+      );
+    }
+    if (status === 'pendente') {
+      return (
+        <span title="Aguardando pagamento" className="cursor-help">
+          <Clock className="w-4 h-4 text-orange-500" />
+        </span>
+      );
+    }
+    // null = representado, admin paga — sem ícone
+    return null;
+  };
+
   // Formatação de telefone
   const formatPhone = (phone?: string | null) => {
     if (!phone) return 'N/A';
@@ -123,7 +157,7 @@ const Vendedores: React.FC = () => {
             <table className="w-full min-w-[900px]">
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
-                  {[...Array(7)].map((_, i) => (
+                  {[...Array(9)].map((_, i) => (
                     <th key={i} className="px-6 py-3 text-left">
                       <Skeleton className="h-4 w-24" />
                     </th>
@@ -149,7 +183,13 @@ const Vendedores: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 hidden md:table-cell">
-                      <Skeleton className="h-6 w-16 rounded-full" />
+                      <Skeleton className="h-6 w-20 rounded-full" />
+                    </td>
+                    <td className="px-6 py-4 hidden md:table-cell">
+                      <Skeleton className="h-5 w-14 rounded-full" />
+                    </td>
+                    <td className="px-6 py-4 hidden md:table-cell">
+                      <Skeleton className="h-5 w-5 rounded-full" />
                     </td>
                     <td className="px-6 py-4 hidden lg:table-cell">
                       <Skeleton className="h-5 w-10 rounded-full" />
@@ -257,6 +297,12 @@ const Vendedores: React.FC = () => {
                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden md:table-cell">
                   Status
                 </th>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden md:table-cell">
+                  Vínculo
+                </th>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden lg:table-cell">
+                  Pgto.
+                </th>
                 <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden lg:table-cell">
                   Entregas
                 </th>
@@ -274,7 +320,7 @@ const Vendedores: React.FC = () => {
             <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
               {currentVendedores.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 sm:px-6 py-8 sm:py-12 text-center">
+                  <td colSpan={9} className="px-3 sm:px-6 py-8 sm:py-12 text-center">
                     <div className="text-sm sm:text-base text-gray-500 dark:text-gray-400">
                       {searchTerm ? 'Nenhum vendedor encontrado com os critérios de busca.' : 'Nenhum vendedor cadastrado ainda.'}
                     </div>
@@ -307,14 +353,18 @@ const Vendedores: React.FC = () => {
                             <div className="text-xs text-gray-600 dark:text-gray-400">
                               {formatPhone(vendedor.telefone)}
                             </div>
-                            <div className="md:hidden">
-                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                vendedor.ativo 
-                                  ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-                                  : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
-                              }`}>
-                                {vendedor.ativo ? 'Ativo' : 'Inativo'}
-                              </span>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <div className="md:hidden">
+                                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                  vendedor.ativo 
+                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+                                    : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
+                                }`}>
+                                  {vendedor.ativo ? 'Ativo' : 'Inativo'}
+                                </span>
+                              </div>
+                              <VinculoBadge tipo={vendedor.tipo_vinculo} />
+                              <PagamentoIcon status={vendedor.status_pagamento_vendedor} />
                             </div>
                           </div>
                         </div>
@@ -332,6 +382,14 @@ const Vendedores: React.FC = () => {
                       }`}>
                         {vendedor.ativo ? 'Ativo' : 'Inativo'}
                       </span>
+                    </td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden md:table-cell">
+                      <VinculoBadge tipo={vendedor.tipo_vinculo} />
+                    </td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden lg:table-cell">
+                      <div className="flex items-center">
+                        <PagamentoIcon status={vendedor.status_pagamento_vendedor} />
+                      </div>
                     </td>
                     <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden lg:table-cell">
                        {isLoadingEntregas ? (

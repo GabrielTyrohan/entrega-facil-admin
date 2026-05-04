@@ -413,6 +413,7 @@ export const useDashboard = () => {
   const topProdutos       = useTopProdutosDashboard(id, wave2Enabled);
   const estoqueAlerts     = useEstoqueAlertsDashboard(id, wave2Enabled);
   const faturamentoMensal = useFaturamentoMensalDashboard(id, !!id);
+  const vendedoresTipo    = useVendedoresPorTipo(id, wave2Enabled);
 
 
   const calcPercent = (atual: number, anterior: number) => {
@@ -454,18 +455,56 @@ export const useDashboard = () => {
     topProdutos:   topProdutos.data         || [],
     estoqueAlerts: estoqueAlerts.data       || [],
     charts: { faturamentoMensal: faturamentoMensal.data || [] },
+    vendedoresPorTipo: vendedoresTipo.data  || null,
     isLoading:   core.isLoading,
     someLoading: core.isLoading || entregasHoje.isLoading,
     loadingStates: {
-      core:          core.isLoading,
-      vendedores:    topVendedores.isLoading,
-      topProdutos:   topProdutos.isLoading,
-      estoque:       estoqueAlerts.isLoading,
-      grafico:       faturamentoMensal.isLoading,
-      inadimplencia: inadimplencia.isLoading,
-      entregasHoje:  entregasHoje.isLoading,
+      core:              core.isLoading,
+      vendedores:        topVendedores.isLoading,
+      topProdutos:       topProdutos.isLoading,
+      estoque:           estoqueAlerts.isLoading,
+      grafico:           faturamentoMensal.isLoading,
+      inadimplencia:     inadimplencia.isLoading,
+      entregasHoje:      entregasHoje.isLoading,
+      vendedoresTipo:    vendedoresTipo.isLoading,
     },
   };
+};
+
+
+// ─── ONDA 2: Resumo de vendedores por tipo de vínculo ─────────────────────────
+export const useVendedoresPorTipo = (adminId: string, enabled: boolean) => {
+  return useQuery({
+    queryKey: ['dashboard_vendedores_tipo', adminId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('vendedores')
+        .select('tipo_vinculo, status_pagamento_vendedor')
+        .eq('administrador_id', adminId)
+        .eq('ativo', true);
+
+      if (error) throw error;
+
+      let representados = 0;
+      let autonomos = 0;
+      let autonomosPendentes = 0;
+
+      (data || []).forEach((v: any) => {
+        if (v.tipo_vinculo === 'autonomo') {
+          autonomos++;
+          if (v.status_pagamento_vendedor === 'pendente') autonomosPendentes++;
+        } else {
+          // null ou 'representado' → representado
+          representados++;
+        }
+      });
+
+      return { representados, autonomos, autonomosPendentes };
+    },
+    enabled: enabled && !!adminId,
+    staleTime: 1000 * 60 * 5,
+    refetchOnWindowFocus: false,
+  });
 };
 
 

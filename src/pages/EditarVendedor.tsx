@@ -26,7 +26,7 @@ const EditarVendedor: React.FC = () => {
     telefone: '',
     endereco: '',
     dataInicio: '',
-    tipoVinculo: 'CLT',
+    tipoVinculo: 'representado', // 'representado' | 'autonomo'
     percentualMinimo: 0,
     contrato: '',
     ativo: true,
@@ -91,7 +91,7 @@ const EditarVendedor: React.FC = () => {
           telefone: formatTelefone(vendedor.telefone || ''), // Aplicar máscara ao carregar
           endereco: vendedor.endereco || '',
           dataInicio: vendedor.created_at ? new Date(vendedor.created_at).toISOString().split('T')[0] : '',
-          tipoVinculo: 'CLT', // Valor padrão, pode ser adicionado ao banco se necessário
+          tipoVinculo: (vendedor.tipo_vinculo === 'autonomo' ? 'autonomo' : 'representado'),
           percentualMinimo: vendedor.percentual_minimo || 0,
           contrato: '', // Pode ser adicionado ao banco se necessário
           ativo: vendedor.ativo ?? false,
@@ -230,8 +230,15 @@ const EditarVendedor: React.FC = () => {
           },
           body: JSON.stringify({
             vendedor_id: id,
-            ...formData,
+            nome: formData.nome,
+            email: formData.email,
+            telefone: formData.telefone,
+            endereco: formData.endereco,
+            ativo: formData.ativo,
+            percentualMinimo: formData.percentualMinimo,
+            diaFechamento: formData.diaFechamento,
             dia_fechamento: formData.diaFechamento, // snake_case exigido pela coluna do banco
+            tipo_vinculo: formData.tipoVinculo,    // 'representado' | 'autonomo'
           })
         }
       );
@@ -397,7 +404,7 @@ const EditarVendedor: React.FC = () => {
             
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Tipo de Vínculo *
+                Vínculo de Cobrança *
               </label>
               <select
                 name="tipoVinculo"
@@ -406,9 +413,8 @@ const EditarVendedor: React.FC = () => {
                 required
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
               >
-                <option value="CLT">CLT</option>
-                <option value="PJ">Pessoa Jurídica</option>
-                <option value="Freelancer">Freelancer</option>
+                <option value="representado">Representado (Admin paga)</option>
+                <option value="autonomo">Autônomo (paga por conta própria)</option>
               </select>
             </div>
             

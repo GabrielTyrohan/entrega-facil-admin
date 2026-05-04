@@ -643,6 +643,76 @@ const EstoqueAlertsCard: React.FC<{ data: EstoqueAtual[]; isLoading: boolean }> 
   );
 };
 
+// ─── VendedoresPorTipoCard ────────────────────────────────────────────────────
+const VendedoresPorTipoCard: React.FC<{
+  data: { representados: number; autonomos: number; autonomosPendentes: number } | null;
+  isLoading: boolean;
+}> = ({ data, isLoading }) => (
+  <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+    <div className="flex items-center gap-2 mb-4">
+      <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
+        <Users className="w-4 h-4 text-white" />
+      </div>
+      <h3 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">
+        Resumo de Vendedores
+      </h3>
+      <Tooltip text="Distribuição dos vendedores ativos por tipo de vínculo de cobrança." />
+    </div>
+
+    {isLoading ? (
+      <div className="grid grid-cols-3 gap-3">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="flex flex-col items-center gap-1">
+            <Skeleton className="h-7 w-12" />
+            <Skeleton className="h-3 w-20" />
+          </div>
+        ))}
+      </div>
+    ) : (
+      <div className="grid grid-cols-3 gap-3">
+        {/* Representados */}
+        <div className="flex flex-col items-center text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+          <span className="text-xl sm:text-2xl font-bold text-blue-700 dark:text-blue-300">
+            {data?.representados ?? 0}
+          </span>
+          <span className="text-xs text-blue-600 dark:text-blue-400 font-medium mt-0.5">Representados</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 hidden sm:block">Fatura do admin</span>
+        </div>
+
+        {/* Autônomos */}
+        <div className="flex flex-col items-center text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+          <span className="text-xl sm:text-2xl font-bold text-green-700 dark:text-green-300">
+            {data?.autonomos ?? 0}
+          </span>
+          <span className="text-xs text-green-600 dark:text-green-400 font-medium mt-0.5">Autônomos</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 hidden sm:block">Pgto. independente</span>
+        </div>
+
+        {/* Autônomos Pendentes */}
+        <div className={`flex flex-col items-center text-center p-3 rounded-lg ${
+          (data?.autonomosPendentes ?? 0) > 0
+            ? 'bg-orange-50 dark:bg-orange-900/20'
+            : 'bg-gray-50 dark:bg-gray-700/30'
+        }`}>
+          <span className={`text-xl sm:text-2xl font-bold ${
+            (data?.autonomosPendentes ?? 0) > 0
+              ? 'text-orange-600 dark:text-orange-400'
+              : 'text-gray-400 dark:text-gray-500'
+          }`}>
+            {data?.autonomosPendentes ?? 0}
+          </span>
+          <span className={`text-xs font-medium mt-0.5 ${
+            (data?.autonomosPendentes ?? 0) > 0
+              ? 'text-orange-500 dark:text-orange-400'
+              : 'text-gray-400 dark:text-gray-500'
+          }`}>Pendentes</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 hidden sm:block">Aguard. pagamento</span>
+        </div>
+      </div>
+    )}
+  </div>
+);
+
 // ─── Dashboard Principal ──────────────────────────────────────────────────────
 const Dashboard: React.FC = () => {
   const { userType, permissions, adminId } = useAuth();
@@ -699,6 +769,7 @@ const Dashboard: React.FC = () => {
   const {
     stats, breakdown, entregasHoje, inadimplencia, vendedores,
     topProdutos, estoqueAlerts, charts, isLoading, someLoading, loadingStates,
+    vendedoresPorTipo,
   } = useDashboard();
 
   const { shouldAnimate, markAsPlayed } = useDashboardAnimationFlag();
@@ -842,6 +913,11 @@ const Dashboard: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {statsRow2.map((stat, index) => <StatCard key={index} {...stat} />)}
           </div>
+          {/* Card de resumo de vendedores por tipo de vínculo */}
+          <VendedoresPorTipoCard
+            data={vendedoresPorTipo}
+            isLoading={loadingStates.vendedoresTipo}
+          />
         </div>
       )}
 
