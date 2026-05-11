@@ -1,8 +1,8 @@
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -12,15 +12,15 @@ import { useNavigate } from 'react-router-dom';
 import EntregaModal from '../components/ui/EntregaModal';
 import { useAuth } from '../contexts/AuthContext';
 import {
-    useDeleteEntrega,
-    useEntregas,
-    type Entrega
+  useDeleteEntrega,
+  useEntregas,
+  type Entrega
 } from '../hooks/useEntregas';
-import {
-    useVendedoresByAdmin,
-    type Vendedor
-} from '../hooks/useVendedores';
 import { usePeriodoVendedor } from '../hooks/usePeriodoVendedor';
+import {
+  useVendedoresByAdmin,
+  type Vendedor
+} from '../hooks/useVendedores';
 import { EntregaComDetalhes, EntregaService } from '../services/entregaService';
 
 const Entregas: React.FC = () => {
@@ -95,19 +95,18 @@ const Entregas: React.FC = () => {
   React.useEffect(() => {
     const handleResize = () => {
       const newItemsPerPage = calculateItemsPerPage();
-      setItemsPerPage(newItemsPerPage);
-      
-      // Ajustar página atual se necessário
-      const maxPage = Math.ceil(entregas.length / newItemsPerPage);
-      if (currentPage > maxPage && maxPage > 0) {
-        setCurrentPage(maxPage);
-      }
+      setItemsPerPage(prev => {
+        if (prev !== newItemsPerPage) {
+          setCurrentPage(0);
+        }
+        return newItemsPerPage;
+      });
     };
 
-    handleResize(); // Calcular inicial
+    handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [entregas.length, currentPage]);
+  }, []); // array de dependências vazio — executa apenas na montagem e no resize real
 
   // Dados já filtrados e paginados pelo hook
   const currentEntregas = entregas;
@@ -447,9 +446,6 @@ const Entregas: React.FC = () => {
                         <div className="ml-3">
                           <div className="text-sm font-medium text-gray-900 dark:text-white">
                             {([entrega.cliente?.nome, (entrega.cliente as any)?.sobrenome].filter(Boolean) as string[]).join(' ') || 'N/A'}
-                          </div>
-                          <div className="text-sm text-gray-500 dark:text-gray-400">
-                            ID: {entrega.id.slice(0, 8)}...
                           </div>
                         </div>
                       </div>

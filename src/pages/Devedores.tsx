@@ -44,6 +44,20 @@ interface ClienteDetalhes {
   }>;
 }
 
+function calcPeriodoInicio(diaFechamento: number, hoje: Date): string {
+  const diaAtual = hoje.getDate();
+  let ano = hoje.getFullYear();
+  let mes = hoje.getMonth();
+
+  if (diaAtual >= diaFechamento) {
+    return new Date(ano, mes, diaFechamento).toISOString().split('T')[0];
+  } else {
+    const mesAnterior = mes - 1 < 0 ? 11 : mes - 1;
+    const anoAnterior = mes - 1 < 0 ? ano - 1 : ano;
+    return new Date(anoAnterior, mesAnterior, diaFechamento).toISOString().split('T')[0];
+  }
+}
+
 const Devedores: React.FC = () => {
   const { user, adminId } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
@@ -167,10 +181,9 @@ const Devedores: React.FC = () => {
     if (!user?.id) return;
 
     try {
-      // Calcular o primeiro dia do mês atual (mesmo filtro da lista principal)
+      // Calcular o período de corte (mesmo critério da lista principal)
       const currentDate = new Date();
-      const firstDayOfCurrentMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-      const firstDayOfCurrentMonthString = firstDayOfCurrentMonth.toISOString().split('T')[0];
+      const corteInicio = calcPeriodoInicio(1, currentDate);
 
       // Buscar entregas do cliente que estão em atraso
       let query = supabase
@@ -193,7 +206,7 @@ const Devedores: React.FC = () => {
           .gte('dataRetorno', periodo.inicioStr)
           .lte('dataRetorno', periodo.fimStr);
       } else {
-        query = query.lt('dataRetorno', firstDayOfCurrentMonthString);
+        query = query.lt('dataRetorno', corteInicio);
       }
 
       const { data: entregasCliente, error } = await query;
@@ -253,30 +266,34 @@ const Devedores: React.FC = () => {
     }
   };
 
-  // Buscar devedores usando abordagem corrigida
+  // Buscar devedores usando abordagem corrigida com dia_fechamento
   const { data: devedores, isLoading } = useQuery({
     queryKey: ['devedores', adminId, selectedVendedor, periodo.inicioStr, periodo.fimStr],
     queryFn: async () => {
-      if (!adminId) return [];
+      if (!adminId) return { entregas: [], periodoMap: {} };
 
-      // Calcular o primeiro dia do mês atual
-      const currentDate = new Date();
-      const firstDayOfCurrentMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-      const firstDayOfCurrentMonthString = firstDayOfCurrentMonth.toISOString().split('T')[0];
-
-      // 1. Buscar IDs dos vendedores vinculados ao administrador
+      // 1. Buscar IDs + dia_fechamento dos vendedores vinculados ao administrador
       const { data: vendedoresIdsData, error: vendedoresIdsError } = await supabase
         .from('vendedores')
-        .select('id')
+        .select('id, dia_fechamento')
         .eq('administrador_id', adminId);
 
       if (vendedoresIdsError) throw vendedoresIdsError;
-      
-      const vendedorIds = vendedoresIdsData?.map(v => v.id) || [];
-      
-      if (vendedorIds.length === 0) return [];
 
-      // Buscar todas as entregas com data de retorno anterior ao mês atual
+      const vendedorIds = (vendedoresIdsData || []).map(v => v.id);
+
+      if (vendedorIds.length === 0) return { entregas: [], periodoMap: {} };
+
+      // Montar mapa de período por vendedor (igual ao Dashboard)
+      const now = new Date();
+      const periodoMap = new Map<string, string>(
+        (vendedoresIdsData || []).map((v: any) => [
+          v.id,
+          calcPeriodoInicio(v.dia_fechamento ?? 1, now),
+        ])
+      );
+
+      // Buscar todas as entregas com data de retorno preenchida
       let query = supabase
         .from('entregas')
         .select(`
@@ -312,17 +329,23 @@ const Devedores: React.FC = () => {
           .lte('dataRetorno', periodo.fimStr);
       } else {
         query = query
-          .in('vendedor_id', vendedorIds)
-          .lt('dataRetorno', firstDayOfCurrentMonthString);
+          .in('vendedor_id', vendedorIds);
       }
 
       const { data: entregasData, error: entregasError } = await query;
 
       if (entregasError) throw entregasError;
 
+      // Filtrar entregas ainda dentro do período corrente usando periodoMap
+      const entregasFiltradas = (entregasData || []).filter((entrega: any) => {
+        const corte = periodoMap.get(entrega.vendedor_id);
+        if (corte && entrega.dataRetorno >= corte) return false;
+        return true;
+      });
+
       // Buscar valores pagos para cada entrega
       const entregasComPagamentos = await Promise.all(
-        (entregasData || []).map(async (entrega) => {
+        entregasFiltradas.map(async (entrega) => {
           // Buscar pagamentos diretamente da tabela
           const { data: pagamentos } = await supabase
             .from('pagamentos')
@@ -339,7 +362,10 @@ const Devedores: React.FC = () => {
         })
       );
 
-      return entregasComPagamentos;
+      return {
+        entregas: entregasComPagamentos,
+        periodoMap: Object.fromEntries(periodoMap),
+      };
     },
     enabled: !!adminId,
   });
@@ -365,6 +391,10 @@ const Devedores: React.FC = () => {
 
   // Processar dados dos devedores - agrupar por cliente e vendedor
   const devedoresProcessados: DevedorData[] = (() => {
+    // Extrair dados do retorno da query (novo formato)
+    const entregasData: Record<string, unknown>[] = (devedores as any)?.entregas || [];
+    const periodoMapObj: Record<string, string> = (devedores as any)?.periodoMap || {};
+
     const gruposClienteVendedor = new Map<string, {
       cliente_id: string;
       cliente_nome: string;
@@ -377,12 +407,19 @@ const Devedores: React.FC = () => {
     }>();
 
     // Agrupar entregas por cliente.id + vendedor.id
-    ((devedores as Record<string, unknown>[]) || []).forEach((item) => {
+    entregasData.forEach((item) => {
       const entrega = item.entregas as Record<string, unknown>;
+      const dataRetorno = entrega.dataRetorno as string;
+      const vendedorId = entrega.vendedor_id as string;
+
+      // ✅ Ignorar entregas ainda dentro do período corrente
+      const corte = periodoMapObj[vendedorId];
+      if (corte && dataRetorno >= corte) return;
+
       const valorEntrega = (entrega.valor as number) || 0;
       const valorTotalPago = (item.valor_total_pago as number) || 0;
       const valorDevendo = valorEntrega - valorTotalPago;
-      
+
       // Só processar entregas que têm valor devido > 0
       if (valorDevendo > 0) {
         const chave = `${(entrega.clientes as Record<string, unknown>)?.id || ''}_${(entrega.vendedores as Record<string, unknown>)?.id || ''}`;
@@ -399,7 +436,7 @@ const Devedores: React.FC = () => {
             entregas: []
           });
         }
-        
+
         gruposClienteVendedor.get(chave)!.entregas.push(item);
       }
     });
@@ -416,7 +453,7 @@ const Devedores: React.FC = () => {
         const valorEntrega = (entrega.valor as number) || 0;
         const valorTotalPago = (item.valor_total_pago as number) || 0;
         const valorDevendo = valorEntrega - valorTotalPago;
-        
+
         // Somar ao total devido (já filtrado para > 0)
         totalDevido += valorDevendo;
         totalEntregasDevendo += 1;
@@ -425,7 +462,7 @@ const Devedores: React.FC = () => {
         const dataRetorno = new Date(entrega.dataRetorno as string);
         const hoje = new Date();
         const diasAtraso = Math.floor((hoje.getTime() - dataRetorno.getTime()) / (1000 * 60 * 60 * 24));
-        
+
         if (diasAtraso > maiorDiasAtraso) {
           maiorDiasAtraso = diasAtraso;
         }

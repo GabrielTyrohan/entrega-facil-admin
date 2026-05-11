@@ -184,6 +184,21 @@ export class EntregaService {
 
   async getEntregasByAdmin(): Promise<EntregaComDetalhes[]> {
     try {
+      // Etapa 1: buscar IDs de vendedores que pertencem ao admin
+      const { data: vendedores, error: vendedorError } = await supabase
+        .from('vendedores')
+        .select('id')
+        .eq('administrador_id', this.adminId);
+
+      if (vendedorError) {
+        console.error('Erro ao buscar vendedores:', vendedorError);
+        throw vendedorError;
+      }
+
+      if (!vendedores?.length) return [];
+      const vendedorIds = vendedores.map(v => v.id);
+
+      // Etapa 2: buscar entregas filtrando pela coluna local
       const { data, error } = await supabase
         .from('entregas')
         .select(`
@@ -209,8 +224,8 @@ export class EntregaService {
             endereco,
             numero,
             "Bairro",
-          "Cidade",
-          "Estado",
+            "Cidade",
+            "Estado",
             cep
           ),
           vendedores!entregas_vendedor_id_fkey (
@@ -222,7 +237,7 @@ export class EntregaService {
             preco
           )
         `)
-        .eq('vendedores.administrador_id', this.adminId)
+        .in('vendedor_id', vendedorIds)
         .order('data_entrega', { ascending: false });
 
       if (error) {
@@ -438,6 +453,28 @@ export class EntregaService {
     dataFim?: string;
     clienteNome?: string;
   }): Promise<EntregaComDetalhes[]> {
+    // Etapa 1: resolver vendedorIds do admin
+    let vendedorIds: string[] = [];
+
+    if (filters.vendedorId) {
+      const { data: v } = await supabase
+        .from('vendedores')
+        .select('id')
+        .eq('id', filters.vendedorId)
+        .eq('administrador_id', this.adminId)
+        .single();
+      if (!v) return [];
+      vendedorIds = [filters.vendedorId];
+    } else {
+      const { data: vendedores } = await supabase
+        .from('vendedores')
+        .select('id')
+        .eq('administrador_id', this.adminId);
+      if (!vendedores?.length) return [];
+      vendedorIds = vendedores.map(v => v.id);
+    }
+
+    // Etapa 2: montar query com filtros diretos na coluna local
     let query = supabase
       .from('entregas')
       .select(`
@@ -476,11 +513,7 @@ export class EntregaService {
           preco
         )
       `)
-      .eq('vendedores.administrador_id', this.adminId);
-
-    if (filters.vendedorId) {
-      query = query.eq('vendedor_id', filters.vendedorId);
-    }
+      .in('vendedor_id', vendedorIds);
 
     if (filters.statusPagamento) {
       query = query.eq('status_pagamento', filters.statusPagamento);

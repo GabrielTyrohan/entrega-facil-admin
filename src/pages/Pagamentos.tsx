@@ -4,10 +4,10 @@ import { PAGINATION } from '@/lib/constants/pagination';
 import { Calendar, CreditCard, DollarSign, Search, User } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { usePeriodoVendedor } from '../hooks/usePeriodoVendedor';
 import type { Vendedor } from '../lib/supabase';
 import { PagamentoComDetalhes, PagamentoService } from '../services/pagamentoService';
 import { VendedorService } from '../services/vendedorService';
-import { usePeriodoVendedor } from '../hooks/usePeriodoVendedor';
 
 const Pagamentos: React.FC = () => {
   const { adminId } = useAuth();
@@ -65,17 +65,39 @@ const Pagamentos: React.FC = () => {
     // Filtrar pagamentos baseado nos critérios de busca
     const filtered = pagamentos.filter(pagamento => {
       const q = searchTerm.trim().toLowerCase();
+
+      // Monta nome completo "nome sobrenome"
+      const fullName = [
+        pagamento.cliente_nome || '',
+        pagamento.cliente_sobrenome || ''
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      // Divide a query em palavras individuais
+      const terms = q.split(/\s+/).filter(Boolean);
+
+      // Match por nome completo:
+      // - a query está contida no nome completo
+      // - OU todas as palavras da query aparecem em algum lugar do nome completo
+      const matchesClienteNome =
+        q === '' ||
+        fullName.includes(q) ||
+        (terms.length > 0 && terms.every(t => fullName.includes(t)));
+
       const matchesSearch =
         q === '' ||
-        pagamento.cliente_nome?.toLowerCase().includes(q) ||
+        matchesClienteNome ||
         pagamento.forma_pagamento?.toLowerCase().includes(q) ||
         pagamento.vendedor_nome?.toLowerCase().includes(q) ||
         pagamento.produto_nome?.toLowerCase().includes(q) ||
         String(pagamento.entrega_id || '').toLowerCase().includes(q) ||
         (pagamento.cliente_telefone || '').includes(searchTerm.trim());
-      
-      const matchesVendedor = selectedVendedor === '' || pagamento.vendedor_id === selectedVendedor;
-      
+
+      const matchesVendedor =
+        selectedVendedor === '' || pagamento.vendedor_id === selectedVendedor;
+
       return matchesSearch && matchesVendedor;
     });
 
@@ -241,7 +263,7 @@ const Pagamentos: React.FC = () => {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Buscar pagamentos..."
+              placeholder="Buscar por cliente, vendedor, produto..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 pr-4 py-2 w-full border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -318,10 +340,9 @@ const Pagamentos: React.FC = () => {
                         </div>
                         <div className="ml-3">
                           <div className="text-sm font-medium text-gray-900 dark:text-white">
-                            {pagamento.cliente_nome || 'N/A'}
-                          </div>
-                          <div className="text-sm text-gray-500 dark:text-gray-400">
-                            ID: {pagamento.id.slice(0, 8)}...
+                            {[pagamento.cliente_nome, pagamento.cliente_sobrenome]
+    .filter(Boolean)
+    .join(' ') || 'N/A'}
                           </div>
                         </div>
                       </div>
@@ -345,7 +366,7 @@ const Pagamentos: React.FC = () => {
                       <div className="flex items-center">
                         <User className="w-4 h-4 text-gray-400 mr-2" />
                         <div className="text-sm text-gray-900 dark:text-white">
-                          {getVendedorNome(pagamento.vendedor_id)}
+                          {pagamento.vendedor_nome || getVendedorNome(pagamento.vendedor_id) || 'N/A'}
                         </div>
                       </div>
                     </td>

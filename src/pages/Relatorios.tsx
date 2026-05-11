@@ -489,15 +489,15 @@ const Relatorios: React.FC = () => {
 
   // Valores animados para métricas financeiras (igual ao Dashboard)
   const totalVendasAnimado = useCountUp({
-    end: metricas.totalVendas,
+    target: metricas.totalVendas,
     duration: 800,
-    decimals: 2
+    enabled: !isLoading,
   });
 
   const totalPagamentosAnimado = useCountUp({
-    end: metricas.totalPagamentos,
+    target: metricas.totalPagamentos,
     duration: 800,
-    decimals: 2
+    enabled: !isLoading,
   });
 
   // EARLY RETURNS APÓS TODOS OS HOOKS E USEMEMO
@@ -1034,7 +1034,7 @@ const Relatorios: React.FC = () => {
               <div className="min-w-0 flex-1 animate-fade-in-up">
                 <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 truncate">Total de Vendas</p>
                 <p className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white break-words">
-                  {formatCurrency(Number(totalVendasAnimado))}
+                  {formatCurrency(totalVendasAnimado ?? 0)}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Valor das entregas</p>
               </div>
@@ -1049,7 +1049,7 @@ const Relatorios: React.FC = () => {
               <div className="min-w-0 flex-1 animate-fade-in-up">
                 <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 truncate">Total de Pagamentos</p>
                 <p className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white break-words">
-                  {formatCurrency(Number(totalPagamentosAnimado))}
+                  {formatCurrency(totalPagamentosAnimado ?? 0)}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Valores recebidos</p>
               </div>
