@@ -330,7 +330,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
 
       <aside className={`
         w-64 h-screen bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700
-        flex flex-col flex-shrink-0
+        flex flex-col flex-shrink-0 overflow-hidden
         fixed lg:relative inset-y-0 left-0 z-50 lg:z-0
         transition-transform duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
@@ -366,7 +366,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
         </div>
       
         {/* Menu com scroll independente */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-2">
+        <nav className="sidebar-scroll flex-1 overflow-y-auto px-3 py-4 space-y-2">
           {groupOrder.map((group) => {
             const items = groupedItems[group];
             if (!items?.length) return null;

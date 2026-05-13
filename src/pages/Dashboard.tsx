@@ -196,21 +196,17 @@ const InadimplenciaCard: React.FC<{
 // ─── FaturamentoMensalChart ───────────────────────────────────────────────────
 interface MonthData { month: string; value: number; height: number; }
 
-let globalChartAnimated = false;
-
 const FaturamentoMensalChart: React.FC<{ data: MonthData[]; isLoading: boolean }> = ({ data, isLoading }) => {
-  const { ref: visibilityRef, isVisible } = useIsVisible();
-  
   const [hoveredPoint, setHoveredPoint] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
-  
   const pathRef = useRef<SVGPathElement>(null);
   const [pathLength, setPathLength] = useState(0);
-  const [isFirstMount] = useState(!globalChartAnimated);
-  const [animatedProgress, setAnimatedProgress] = useState(isFirstMount ? 0 : 1);
+  const hasAnimated = useRef(false);
+  const [animatedProgress, setAnimatedProgress] = useState(0);
 
+  // ResizeObserver: inicia na montagem, sem dependências
   useEffect(() => {
     if (!containerRef.current) return;
     const observer = new ResizeObserver((entries) => {
@@ -219,23 +215,23 @@ const FaturamentoMensalChart: React.FC<{ data: MonthData[]; isLoading: boolean }
     });
     observer.observe(containerRef.current);
     return () => observer.disconnect();
-  }, [isVisible]);
+  }, []);
 
+  // Calcula pathLength quando o SVG é desenhado
   useEffect(() => {
     if (pathRef.current) {
       setPathLength(pathRef.current.getTotalLength());
     }
   }, [dimensions, data]);
 
+  // Dispara animação uma única vez quando tiver dimensões e pathLength
   useEffect(() => {
-    if (isFirstMount && isVisible && pathLength > 0 && dimensions.width > 0 && animatedProgress === 0) {
-      const timer = setTimeout(() => {
-        setAnimatedProgress(1);
-        globalChartAnimated = true;
-      }, 50);
+    if (!hasAnimated.current && pathLength > 0 && dimensions.width > 0) {
+      hasAnimated.current = true;
+      const timer = setTimeout(() => setAnimatedProgress(1), 50);
       return () => clearTimeout(timer);
     }
-  }, [isFirstMount, isVisible, pathLength, dimensions.width, animatedProgress]);
+  }, [pathLength, dimensions.width]);
 
   const padding = { top: 20, right: 16, bottom: 32, left: 52 };
   const graphWidth = dimensions.width - padding.left - padding.right;
@@ -243,7 +239,7 @@ const FaturamentoMensalChart: React.FC<{ data: MonthData[]; isLoading: boolean }
 
   const maxValue = Math.max(...data.map(d => d.value), 1);
   const niceMax = maxValue > 1000 ? Math.ceil(maxValue / 1000) * 1000 : Math.ceil(maxValue / 100) * 100;
-  
+
   const formatYAxis = (val: number) => {
     if (val === 0) return 'R$0';
     if (val >= 1000000) return `R$${(val / 1000000).toFixed(1).replace('.0', '').replace('.', ',')}M`;
@@ -279,24 +275,22 @@ const FaturamentoMensalChart: React.FC<{ data: MonthData[]; isLoading: boolean }
       const p1 = pts[i];
       const p2 = pts[i + 1];
       const p3 = i + 2 < pts.length ? pts[i + 2] : p2;
-
       const cp1x = p1.x + (p2.x - p0.x) / 6;
       const cp1y = p1.y + (p2.y - p0.y) / 6;
       const cp2x = p2.x - (p3.x - p1.x) / 6;
       const cp2y = p2.y - (p3.y - p1.y) / 6;
-
       path += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`;
     }
     return path;
   };
 
   const linePath = createSmoothPath(points);
-  const areaPath = points.length > 0 
+  const areaPath = points.length > 0
     ? `${linePath} L ${points[points.length - 1].x},${padding.top + graphHeight} L ${points[0].x},${padding.top + graphHeight} Z`
     : '';
 
   return (
-    <div ref={visibilityRef} className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 relative h-80 flex flex-col">
+    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 relative h-80 flex flex-col">
       <div className="flex items-center gap-2 mb-4 flex-shrink-0">
         <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
           Receita Mensal
@@ -304,7 +298,7 @@ const FaturamentoMensalChart: React.FC<{ data: MonthData[]; isLoading: boolean }
         <Tooltip text="Total recebido por mês nos últimos 12 meses, somando pagamentos de entregas e vendas atacado." />
       </div>
 
-      {isLoading || !isVisible ? (
+      {isLoading ? (
         <div
           className="flex-1 rounded-lg"
           style={{
@@ -341,19 +335,18 @@ const FaturamentoMensalChart: React.FC<{ data: MonthData[]; isLoading: boolean }
                 </linearGradient>
               </defs>
 
-              {/* Gridlines e Eixo Y */}
               {yTicks.map((val, i) => {
                 const y = padding.top + graphHeight - ((val / niceMax) * graphHeight);
                 return (
                   <g key={`y-${i}`}>
-                    <line 
-                      x1={padding.left} y1={y} 
-                      x2={dimensions.width - padding.right} y2={y} 
-                      className="stroke-[#e5e7eb] dark:stroke-[#374151]" 
+                    <line
+                      x1={padding.left} y1={y}
+                      x2={dimensions.width - padding.right} y2={y}
+                      className="stroke-[#e5e7eb] dark:stroke-[#374151]"
                     />
-                    <text 
-                      x={padding.left - 8} y={y + 4} 
-                      className="text-xs fill-current text-gray-400" 
+                    <text
+                      x={padding.left - 8} y={y + 4}
+                      className="text-xs fill-current text-gray-400"
                       textAnchor="end"
                     >
                       {formatYAxis(val)}
@@ -362,19 +355,17 @@ const FaturamentoMensalChart: React.FC<{ data: MonthData[]; isLoading: boolean }
                 );
               })}
 
-              {/* Eixo X (Meses) */}
               {points.map((p, i) => (
-                <text 
+                <text
                   key={`x-${i}`}
-                  x={p.x} y={dimensions.height - 10} 
-                  className="text-xs fill-current text-gray-400 dark:text-gray-500" 
+                  x={p.x} y={dimensions.height - 10}
+                  className="text-xs fill-current text-gray-400 dark:text-gray-500"
                   textAnchor="middle"
                 >
                   {formatShortMonth(p.month)}
                 </text>
               ))}
 
-              {/* Área com Gradiente */}
               <path
                 d={areaPath}
                 fill="url(#areaGradient)"
@@ -384,7 +375,6 @@ const FaturamentoMensalChart: React.FC<{ data: MonthData[]; isLoading: boolean }
                 }}
               />
 
-              {/* Linha do Gráfico */}
               <path
                 ref={pathRef}
                 d={linePath}
@@ -400,7 +390,6 @@ const FaturamentoMensalChart: React.FC<{ data: MonthData[]; isLoading: boolean }
                 }}
               />
 
-              {/* Pontos Visíveis */}
               {points.map((p, i) => (
                 <circle
                   key={`point-${i}`}
@@ -417,7 +406,6 @@ const FaturamentoMensalChart: React.FC<{ data: MonthData[]; isLoading: boolean }
                 />
               ))}
 
-              {/* Áreas de Hover Invisíveis */}
               {points.map((p, i) => (
                 <rect
                   key={`hover-${i}`}

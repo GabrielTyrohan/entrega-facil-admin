@@ -30,9 +30,17 @@ export const useIsVisible = () => {
 
   useEffect(() => {
     if (!ref.current) return;
+
+    // Verifica imediatamente se já está visível
+    const rect = ref.current.getBoundingClientRect();
+    if (rect.top < window.innerHeight && rect.bottom > 0) {
+      setIsVisible(true);
+      return;
+    }
+
     const observer = new IntersectionObserver(
       ([entry]) => { if (entry.isIntersecting) setIsVisible(true); },
-      { threshold: 0.1 }
+      { threshold: 0.1, rootMargin: '200px' }
     );
     observer.observe(ref.current);
     return () => observer.disconnect();
@@ -82,13 +90,6 @@ export const useDashboardCore = (adminId: string) => {
         .eq('administrador_id', adminId)
         .eq('ativo', true);
 
-      const periodoMap = new Map<string, string>(
-        (vendedoresFechamento || []).map((v: any) => [
-          v.id,
-          calcPeriodoInicio(v.dia_fechamento ?? 1, now),
-        ])
-      );
-
       // Usa a RPC que respeita o período de cada vendedor
       const [coreResult, orcamentosAtual, orcamentosAnterior, faltanteResult, faltanteAtacado] =
         await Promise.all([
@@ -123,10 +124,14 @@ export const useDashboardCore = (adminId: string) => {
       const fat_orcamentos_anterior = soma(orcamentosAnterior.data || [], 'valor_total');
       const qtd_orcamentos_atual    = orcamentosAtual.data?.length || 0;
 
+      const menorDiaFechamento = Math.min(
+        ...(vendedoresFechamento || []).map((v: any) => v.dia_fechamento ?? 1)
+      );
+      const corteGlobal = calcPeriodoInicio(menorDiaFechamento, now);
+
       let valores_em_falta = 0;
       faltanteResult.data?.forEach((e: any) => {
-        const corte = periodoMap.get(e.vendedor_id) ?? firstDayCurrent;
-        if (e.dataRetorno >= corte) return;
+        if (e.dataRetorno >= corteGlobal) return;
 
         const pago = e.pagamentos?.reduce((s: number, p: any) => s + (p.valor || 0), 0) || 0;
         const debito = (e.valor || 0) - pago;
@@ -212,61 +217,46 @@ export const useInadimplenciaFaixas = (adminId: string, enabled: boolean) => {
     queryKey: ['dashboard_inadimplencia', adminId, hoje],
     queryFn: async () => {
 
-
       const { data: vendedoresFechamento } = await supabase
         .from('vendedores')
         .select('id, dia_fechamento')
         .eq('administrador_id', adminId)
         .eq('ativo', true);
 
-      const firstDayCurrent = new Date(now.getFullYear(), now.getMonth(), 1)
-        .toISOString().split('T')[0];
+      const vendedorIds = (vendedoresFechamento || []).map((v: any) => v.id);
 
-      const periodoMap = new Map<string, string>(
-        (vendedoresFechamento || []).map((v: any) => [
-          v.id,
-          calcPeriodoInicio(v.dia_fechamento ?? 1, now),
-        ])
+      const menorDiaFechamento = Math.min(
+        ...(vendedoresFechamento || []).map((v: any) => v.dia_fechamento ?? 1)
       );
+      const corteGlobal = calcPeriodoInicio(menorDiaFechamento, now);
 
       const { data, error } = await supabase
         .from('entregas')
-        .select(`
-          id, valor, vendedor_id, "dataRetorno",
-          pagamentos(valor),
-          vendedores!inner(administrador_id)
-        `)
-        .eq('vendedores.administrador_id', adminId)
+        .select('id, valor, vendedor_id, "dataRetorno", pagamentos(valor)')
+        .in('vendedor_id', vendedorIds)
         .not('dataRetorno', 'is', null);
 
-
       if (error) throw error;
-
 
       const faixas = { ate30: 0, de30a60: 0, de60a90: 0, acima90: 0 };
       const totais = { ate30: 0, de30a60: 0, de60a90: 0, acima90: 0 };
 
-
       data?.forEach((e: any) => {
-        const corte = periodoMap.get(e.vendedor_id) ?? firstDayCurrent;
-        if (e.dataRetorno >= corte) return;
+        if (e.dataRetorno >= corteGlobal) return;
 
         const pago   = e.pagamentos?.reduce((s: number, p: any) => s + (p.valor || 0), 0) || 0;
         const debito = (e.valor || 0) - pago;
         if (debito <= 0.01) return;
 
-
         const diasAtraso = Math.floor(
           (now.getTime() - new Date(e.dataRetorno).getTime()) / 86400000
         );
-
 
         if      (diasAtraso <= 30) { faixas.ate30++;   totais.ate30   += debito; }
         else if (diasAtraso <= 60) { faixas.de30a60++; totais.de30a60 += debito; }
         else if (diasAtraso <= 90) { faixas.de60a90++; totais.de60a90 += debito; }
         else                       { faixas.acima90++; totais.acima90 += debito; }
       });
-
 
       return { faixas, totais };
     },

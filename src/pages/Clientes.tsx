@@ -438,7 +438,7 @@ const Clientes: React.FC = () => {
 
       {/* Paginação */}
       {totalPagesFiltered > 1 && (
-        <div className="mt-4 flex justify-center">
+        <div className="mt-4 w-full flex justify-center">
           <Pagination
             currentPage={currentPage}
             totalPages={totalPagesFiltered}

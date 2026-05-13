@@ -32,7 +32,7 @@ const MainLayout: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
         <Header onMenuClick={() => setSidebarOpen(true)} /> 
 
         {/* Área de conteúdo com scroll */} 
-        <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900"> 
+        <main className="main-scroll flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900"> 
           <div className="px-4 sm:px-6 lg:px-8 py-6"> 
             {children || <Outlet />} 
           </div> 
