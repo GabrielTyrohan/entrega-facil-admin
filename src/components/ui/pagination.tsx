@@ -27,7 +27,7 @@ export const Pagination = ({
   if (totalPages <= 1) return null; // Não mostrar se só tem 1 página
 
   return (
-    <div className="flex items-center justify-between mt-6 px-4 py-3 
+    <div className="w-full flex items-center justify-between mt-6 px-4 py-3 
                     bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
       {/* Info de registros */}
       <div className="text-sm text-gray-700 dark:text-gray-300">
