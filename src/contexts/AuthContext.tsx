@@ -135,6 +135,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       if (funcionarioRaw && funcionarioRaw.ativo === true) {
+        const { data: adminDoFunc } = await supabase
+          .from('administradores')
+          .select('status_pagamento')
+          .eq('id', funcionarioRaw.administrador_id)
+          .maybeSingle();
+
+        if (
+          adminDoFunc &&
+          (adminDoFunc.status_pagamento === 'inativo' ||
+            adminDoFunc.status_pagamento === 'cancelado')
+        ) {
+          throw new Error('PAGAMENTO_INATIVO_FUNCIONARIO');
+        }
+
         return { ...funcionarioRaw, type: 'funcionario' } as FuncionarioProfile & { type: 'funcionario' };
       }
 

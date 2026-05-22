@@ -39,6 +39,8 @@ const LoginPage = () => {
         setError('Seu acesso foi desativado. Entre em contato com o administrador.');
       } else if (errorMsg === 'PAGAMENTO_INATIVO') {
         setError('Conta bloqueada por falta de pagamento. Regularize sua assinatura.');
+      } else if (errorMsg === 'PAGAMENTO_INATIVO_FUNCIONARIO') {
+        setError('Sistema indisponível. Entre em contato com o administrador.');
       } else {
         setError('Erro de autorização. Faça login novamente.');
       }
@@ -109,6 +111,12 @@ const LoginPage = () => {
 
       if (error?.message === 'PAGAMENTO_INATIVO') {
         setError('Conta bloqueada por falta de pagamento. Regularize sua assinatura.');
+        setIsLoading(false);
+        return;
+      }
+
+      if (error?.message === 'PAGAMENTO_INATIVO_FUNCIONARIO') {
+        setError('Sistema indisponível. Entre em contato com o administrador.');
         setIsLoading(false);
         return;
       }
