@@ -6,6 +6,16 @@ const isDev = process.env.NODE_ENV === 'development';
 
 export default defineConfig({
   plugins: [react()],
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./src/tests/setup.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      exclude: ['node_modules', 'src/tests'],
+    },
+  },
   base: isDev ? '/' : './',  // ← '/' em dev, './' só no build
   build: {
     outDir: 'dist',
