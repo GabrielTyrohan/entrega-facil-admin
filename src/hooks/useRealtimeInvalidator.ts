@@ -22,7 +22,7 @@ const TABLE_QUERY_MAP: Record<string, string[]> = {
     'dashboard_inadimplencia',
     'dashboard_faturamento_mensal',
   ],
-  movimentacoes_estoque:    ['dashboard_estoque_alerts'],
+  movimentacoes_estoque:    ['dashboard_estoque_alerts', 'view_estoque_atual_modal'],
   estoque_vendedor:         ['dashboard_estoque_alerts'],
   vendedores:               ['dashboard_core', 'dashboard_top_vendedores'],
   cestas_base_itens:        ['dashboard_top_produtos'],

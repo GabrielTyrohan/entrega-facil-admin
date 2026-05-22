@@ -65,6 +65,8 @@ const CestasVendedor: React.FC = () => {
       return data || [];
     },
     enabled: produtoIdsModal.length > 0,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
   // ── Map produto_id → qtd_estoque ──
@@ -444,7 +446,8 @@ const CestasVendedor: React.FC = () => {
                               Editar
                             </DropdownMenuItem>
                           )}
-                          <DropdownMenuItem onClick={() => {
+                          <DropdownMenuItem onClick={async () => {
+                            await queryClient.invalidateQueries({ queryKey: ['view_estoque_atual_modal'] });
                             setQtdEntrega(1);
                             setObsEntrega('');
                             setModalEntrega({
