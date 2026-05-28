@@ -76,6 +76,38 @@ const CestasVendedor: React.FC = () => {
     return map;
   }, [estoqueAtualModal]);
 
+  // ── IDs dos produtos da cesta selecionada (modal Emitir) ──
+  const produtoIdsEmitir = useMemo(() => {
+    if (!selectedCesta?.itens?.length) return [];
+    return selectedCesta.itens
+      .map((item: any) => item.produto?.id)
+      .filter(Boolean);
+  }, [selectedCesta]);
+
+  // ── Estoque atualizado para modal de Emitir Cestas ──
+  const { data: estoqueAtualEmitir = [] } = useQuery<{ id: string; qtd_estoque: number }[]>({
+    queryKey: ['view_estoque_atual_emitir', produtoIdsEmitir],
+    queryFn: async () => {
+      if (!produtoIdsEmitir.length) return [];
+      const { data, error } = await supabase
+        .from('view_estoque_atual')
+        .select('id, qtd_estoque')
+        .in('id', produtoIdsEmitir);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: showModal && produtoIdsEmitir.length > 0,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+  });
+
+  // ── Map produto_id → qtd_estoque (modal Emitir) ──
+  const estoqueMapEmitir = useMemo(() => {
+    const map: Record<string, number> = {};
+    estoqueAtualEmitir.forEach(e => { map[e.id] = e.qtd_estoque; });
+    return map;
+  }, [estoqueAtualEmitir]);
+
   // ── Máximo de cestas que o estoque permite montar ──
   const maxCestasModal = useMemo(() => {
     if (!detalhesCesta?.itens?.length) return 0;
@@ -116,8 +148,9 @@ const CestasVendedor: React.FC = () => {
     });
   }, [cestas, searchTerm, statusFilter]);
 
-  const handleViewCesta = (cesta: Cesta) => {
+  const handleViewCesta = async (cesta: Cesta) => {
     setSelectedCesta(cesta);
+    await queryClient.invalidateQueries({ queryKey: ['view_estoque_atual_emitir'] });
     setShowModal(true);
   };
 
@@ -624,7 +657,7 @@ const CestasVendedor: React.FC = () => {
                                 R$ {(item.produto?.preco_unt || 0).toFixed(2)}
                               </td>
                               <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                                {item.produto?.qtd_estoque ?? 0}
+                                {(item.produto?.id ? estoqueMapEmitir[item.produto.id] : undefined) ?? item.produto?.qtd_estoque ?? 0}
                               </td>
                             </tr>
                           ))
@@ -690,93 +723,106 @@ const CestasVendedor: React.FC = () => {
 
       {/* Modal de Entrega de Cestas */}
       {modalEntrega && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+
+            {/* ── Header ── */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                  <Package size={20} className="text-blue-600 dark:text-blue-400" />
+                <div className="p-2.5 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
+                  <Package size={22} className="text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-gray-900 dark:text-white">Entregar Cestas</h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{modalEntrega.cestaNome}</p>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Entregar Cestas</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{modalEntrega.cestaNome}</p>
                 </div>
               </div>
-              <button onClick={() => { setModalEntrega(null); setQtdEntrega(1); setObsEntrega(''); }} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+              <button
+                onClick={() => { setModalEntrega(null); setQtdEntrega(1); setObsEntrega(''); }}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
                 <X size={20} className="text-gray-500" />
               </button>
             </div>
-            <div className="p-6 space-y-6">
 
-              {/* Aviso de estoque zerado */}
+            {/* ── Corpo com scroll ── */}
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+
+              {/* Aviso estoque zerado */}
               {detalhesCesta && maxCestasModal === 0 && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 flex items-center gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
                   <p className="text-sm text-red-700 dark:text-red-300 font-medium">
                     Estoque insuficiente para montar ao menos 1 cesta completa.
                   </p>
                 </div>
               )}
 
-              {/* Aviso de limite */}
+              {/* Aviso limite disponível */}
               {detalhesCesta && maxCestasModal > 0 && (
-                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-blue-500 shrink-0" />
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 flex items-center gap-3">
+                  <AlertCircle className="w-5 h-5 text-blue-500 shrink-0" />
                   <p className="text-sm text-blue-700 dark:text-blue-300">
                     Estoque permite até <span className="font-bold">{maxCestasModal}</span> cesta(s) completa(s).
                   </p>
                 </div>
               )}
 
-              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mt-0.5" />
-                  <div className="text-sm text-yellow-800 dark:text-yellow-200 w-full">
-                    <p className="font-medium mb-1">Atenção ao Estoque</p>
-                    <p className="text-yellow-700 dark:text-yellow-300 text-xs mb-3">Esta ação irá debitar do estoque:</p>
-                    {detalhesCesta && detalhesCesta.itens && detalhesCesta.itens.length > 0 && (
-                      <div className="border border-yellow-200 dark:border-yellow-700 rounded-lg overflow-hidden max-h-40 overflow-y-auto bg-white dark:bg-gray-800">
-                        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                          <thead className="bg-gray-50 dark:bg-gray-700/50 sticky top-0">
-                            <tr>
-                              <th className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 uppercase">Produto</th>
-                              <th className="px-3 py-2 text-right text-[10px] font-medium text-gray-500 uppercase">Necessário</th>
-                              <th className="px-3 py-2 text-right text-[10px] font-medium text-gray-500 uppercase">Estoque</th>
-                              <th className="px-3 py-2 text-center text-[10px] font-medium text-gray-500 uppercase">Status</th>
+              {/* Tabela de itens e estoque */}
+              {detalhesCesta && detalhesCesta.itens && detalhesCesta.itens.length > 0 && (
+                <div className="rounded-xl border border-yellow-200 dark:border-yellow-700 overflow-hidden">
+                  {/* Título da seção */}
+                  <div className="flex items-center gap-2 px-4 py-3 bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-700">
+                    <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 shrink-0" />
+                    <span className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                      Atenção ao Estoque — Esta ação irá debitar:
+                    </span>
+                  </div>
+                  {/* Tabela */}
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <thead className="bg-gray-50 dark:bg-gray-700/50 sticky top-0">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Produto</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-28">Necessário</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-28">Em Estoque</th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-20">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                        {detalhesCesta.itens.map((item: any) => {
+                          const necessario = item.quantidade * qtdEntrega;
+                          const disponivel = (item.produto?.id ? estoqueMapModal[item.produto.id] : undefined) ?? item.produto?.qtd_estoque ?? 0;
+                          const temEstoque = disponivel >= necessario;
+                          return (
+                            <tr key={item.produto.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                              <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                                {item.produto.produto_nome}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-right font-semibold text-gray-700 dark:text-gray-300">
+                                {necessario}
+                              </td>
+                              <td className={`px-4 py-3 text-sm text-right font-semibold ${temEstoque ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                {disponivel}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                {temEstoque
+                                  ? <CheckCircle2 size={16} className="text-green-500 mx-auto" />
+                                  : <AlertTriangle size={16} className="text-red-500 mx-auto" />
+                                }
+                              </td>
                             </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                            {detalhesCesta.itens.map((item: any) => {
-                              const necessario = item.quantidade * qtdEntrega;
-                              // Usa estoque da view; fallback para campo estático
-                              const disponivel = (item.produto?.id ? estoqueMapModal[item.produto.id] : undefined) ?? item.produto?.qtd_estoque ?? 0;
-                              const temEstoque = disponivel >= necessario;
-                              return (
-                                <tr key={item.produto.id}>
-                                  <td className="px-3 py-2 text-xs text-gray-900 dark:text-white truncate max-w-[120px]" title={item.produto.produto_nome}>
-                                    {item.produto.produto_nome}
-                                  </td>
-                                  <td className="px-3 py-2 text-xs text-right font-medium text-gray-700 dark:text-gray-300">{necessario}</td>
-                                  <td className="px-3 py-2 text-xs text-right text-gray-500 dark:text-gray-400">{disponivel}</td>
-                                  <td className="px-3 py-2 text-center">
-                                    {temEstoque
-                                      ? <CheckCircle2 size={14} className="text-green-500 mx-auto" />
-                                      : <AlertTriangle size={14} className="text-red-500 mx-auto" />
-                                    }
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-              </div>
+              )}
 
+              {/* Quantidade */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
                   Quantidade de Cestas a Entregar *
                   {maxCestasModal > 0 && (
                     <span className="ml-2 text-xs font-normal text-gray-400 dark:text-gray-500">
@@ -788,13 +834,13 @@ const CestasVendedor: React.FC = () => {
                   <button
                     onClick={() => setQtdEntrega(prev => Math.max(1, prev - 1))}
                     disabled={qtdEntrega <= 1}
-                    className="w-10 h-10 flex items-center justify-center rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >-</button>
+                    className="w-11 h-11 flex items-center justify-center rounded-xl border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-lg font-bold disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >−</button>
                   <input
                     type="number"
                     min="1"
                     max={maxCestasModal > 0 ? maxCestasModal : undefined}
-                    className="flex-1 text-center py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-lg font-bold bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    className="flex-1 text-center py-3 border border-gray-300 dark:border-gray-600 rounded-xl text-xl font-bold bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     value={qtdEntrega}
                     onChange={(e) => {
                       const val = Math.max(1, parseInt(e.target.value) || 1);
@@ -807,37 +853,47 @@ const CestasVendedor: React.FC = () => {
                       setQtdEntrega(prev => prev + 1);
                     }}
                     disabled={maxCestasModal > 0 && qtdEntrega >= maxCestasModal}
-                    className="w-10 h-10 flex items-center justify-center rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                >+</button>
+                    className="w-11 h-11 flex items-center justify-center rounded-xl border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-lg font-bold disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >+</button>
                 </div>
               </div>
 
+              {/* Observação */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Observação (opcional)</label>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  Observação <span className="font-normal text-gray-400">(opcional)</span>
+                </label>
                 <input
                   type="text"
                   placeholder="Ex: Reposição de estoque semanal"
-                  className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                   value={obsEntrega}
                   onChange={(e) => setObsEntrega(e.target.value)}
                 />
               </div>
+
             </div>
-            <div className="flex gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
+
+            {/* ── Footer fixo ── */}
+            <div className="flex gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700 shrink-0">
               <button
                 onClick={() => { setModalEntrega(null); setQtdEntrega(1); setObsEntrega(''); }}
-                className="flex-1 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                className="flex-1 py-3 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleConfirmarEntrega}
                 disabled={entregarCestasMutation.isPending || qtdEntrega <= 0 || maxCestasModal === 0}
-                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
               >
-                {entregarCestasMutation.isPending ? <span>Registrando...</span> : <><Package size={16} /> Confirmar Entrega</>}
+                {entregarCestasMutation.isPending
+                  ? <span>Registrando...</span>
+                  : <><Package size={16} /> Confirmar Entrega</>
+                }
               </button>
             </div>
+
           </div>
         </div>
       )}
