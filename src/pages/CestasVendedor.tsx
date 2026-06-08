@@ -770,7 +770,7 @@ const CestasVendedor: React.FC = () => {
 
               {/* Tabela de itens e estoque */}
               {detalhesCesta && detalhesCesta.itens && detalhesCesta.itens.length > 0 && (
-                <div className="border border-yellow-200 dark:border-yellow-700 rounded-lg max-h-48 overflow-y-auto bg-white dark:bg-gray-800">
+                <div className="border border-yellow-200 dark:border-yellow-700 rounded-lg overflow-y-auto bg-white dark:bg-gray-800" style={{ maxHeight: 'calc(100vh - 40px)' }}>
                   {/* Título da seção */}
                   <div className="flex items-center gap-2 px-4 py-3 bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-700">
                     <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 shrink-0" />
