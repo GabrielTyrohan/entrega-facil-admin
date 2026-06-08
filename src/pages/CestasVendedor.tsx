@@ -564,12 +564,6 @@ const CestasVendedor: React.FC = () => {
                               Editar
                             </DropdownMenuItem>
                           )}
-                          {cesta.status === 'em_uso' && (
-                            <DropdownMenuItem onClick={() => handleAbrirEntregaLote(cesta.vendedor_id, cesta.vendedor_nome)}>
-                              <Package className="w-4 h-4 mr-2 text-blue-500" />
-                              Entregar Cestas
-                            </DropdownMenuItem>
-                          )}
                           <DropdownMenuItem
                             onClick={() => solicitarExclusaoCesta(cesta)}
                             className="text-red-600 dark:text-red-400"
@@ -630,9 +624,9 @@ const CestasVendedor: React.FC = () => {
 
       {/* Modal de Visualização Detalhada */}
       {showModal && selectedCesta && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
               <div className="flex items-center space-x-3">
                 <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
                   <ShoppingBasket className="w-5 h-5 text-blue-600 dark:text-blue-400" />
@@ -646,7 +640,7 @@ const CestasVendedor: React.FC = () => {
                 <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               </button>
             </div>
-            <div className="p-6 space-y-6">
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
                   <div className="flex items-center space-x-2 mb-2">
@@ -693,78 +687,77 @@ const CestasVendedor: React.FC = () => {
                 </div>
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Produtos na Cesta</h3>
-                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                  <div className="overflow-x-auto max-h-72 overflow-y-auto">
-                    <table className="w-full table-fixed">
-                      <thead className="bg-gray-50 dark:bg-gray-700">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[10%] whitespace-nowrap">Código</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[35%] whitespace-nowrap">Nome</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[20%] whitespace-nowrap">Categoria</th>
-                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[12%] whitespace-nowrap">Quantidade</th>
-                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[13%] whitespace-nowrap">Preço Unit.</th>
-                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[10%] whitespace-nowrap">Estoque</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                        {selectedCesta.itens && selectedCesta.itens.length > 0 ? (
-                          selectedCesta.itens.map((item, index) => (
-                            <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                              <td className="px-4 py-3 whitespace-nowrap text-sm font-mono text-gray-900 dark:text-white">
-                                {item.produto?.produto_cod || 'N/A'}
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap">
-                                <div className="text-sm font-medium text-gray-900 dark:text-white">
-                                  {item.produto?.produto_nome || 'Nome não disponível'}
-                                </div>
-                                {item.produto?.descricao && (
-                                  <div className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-xs">
-                                    {item.produto.descricao}
-                                  </div>
-                                )}
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                                {item.produto?.categoria || 'N/A'}
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white text-right">
-                                {item.quantidade || 0}
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white text-right">
-                                R$ {(item.produto?.preco_unt || 0).toFixed(2)}
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-right">
-                                {(() => {
-                                  const estoqueAtual = estoqueMapEmitir[item.produto?.id] ?? item.produto?.qtd_estoque ?? 0;
-                                  return (
-                                    <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                      estoqueAtual === 0
-                                        ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
-                                        : estoqueAtual <= 5
-                                        ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400'
-                                        : 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
-                                    }`}>
-                                      {estoqueAtual}
-                                    </span>
-                                  );
-                                })()}
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={6} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                              Nenhum produto encontrado nesta cesta
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    Produtos na Cesta
+                  </h3>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    {selectedCesta.itens?.length || 0} produto(s) diferente(s)
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+                  <table className="w-full text-sm" style={{ minWidth: "680px" }}>
+                    <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[12%]">Código</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[38%]">Produto</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[15%]">Categoria</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[10%]">Qtd</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[13%]">Preço Unit.</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[12%]">Estoque</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                      {selectedCesta.itens && selectedCesta.itens.length > 0 ? (
+                        selectedCesta.itens.map((item, index) => (
+                          <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <td className="px-4 py-3 text-sm font-mono text-gray-500 dark:text-gray-400">
+                              {item.produto?.produto_cod || 'N/A'}
+                            </td>
+                            <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                              {item.produto?.produto_nome || 'Nome não disponível'}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+                              {item.produto?.categoria || 'N/A'}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
+                              {item.quantidade || 0}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
+                              {(item.produto?.preco_unt || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {(() => {
+                                const estoqueAtual = estoqueMapEmitir[item.produto?.id] ?? item.produto?.qtd_estoque ?? 0;
+                                return (
+                                  <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                    estoqueAtual === 0
+                                      ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+                                      : estoqueAtual <= 5
+                                      ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400'
+                                      : 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+                                  }`}>
+                                    {estoqueAtual}
+                                  </span>
+                                );
+                              })()}
                             </td>
                           </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                            Nenhum produto encontrado nesta cesta
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
-            <div className="flex justify-end p-6 border-t border-gray-200 dark:border-gray-700">
+            <div className="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-end">
               <button onClick={closeModal} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors">
                 Fechar
               </button>
