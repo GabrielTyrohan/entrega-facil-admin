@@ -695,16 +695,16 @@ const CestasVendedor: React.FC = () => {
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Produtos na Cesta</h3>
                 <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
+                  <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                    <table className="w-full table-fixed">
                       <thead className="bg-gray-50 dark:bg-gray-700">
                         <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Código</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Nome</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Categoria</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Quantidade</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Preço Unit.</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Estoque</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[10%] whitespace-nowrap">Código</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[35%] whitespace-nowrap">Nome</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[20%] whitespace-nowrap">Categoria</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[12%] whitespace-nowrap">Quantidade</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[13%] whitespace-nowrap">Preço Unit.</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[10%] whitespace-nowrap">Estoque</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -727,20 +727,33 @@ const CestasVendedor: React.FC = () => {
                               <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                                 {item.produto?.categoria || 'N/A'}
                               </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white text-right">
                                 {item.quantidade || 0}
                               </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white text-right">
                                 R$ {(item.produto?.preco_unt || 0).toFixed(2)}
                               </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                                {(item.produto?.id ? estoqueMapEmitir[item.produto.id] : undefined) ?? item.produto?.qtd_estoque ?? 0}
+                              <td className="px-4 py-3 whitespace-nowrap text-right">
+                                {(() => {
+                                  const estoqueAtual = estoqueMapEmitir[item.produto?.id] ?? item.produto?.qtd_estoque ?? 0;
+                                  return (
+                                    <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                      estoqueAtual === 0
+                                        ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+                                        : estoqueAtual <= 5
+                                        ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400'
+                                        : 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+                                    }`}>
+                                      {estoqueAtual}
+                                    </span>
+                                  );
+                                })()}
                               </td>
                             </tr>
                           ))
                         ) : (
                           <tr>
-                            <td colSpan={5} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                            <td colSpan={6} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                               Nenhum produto encontrado nesta cesta
                             </td>
                           </tr>
