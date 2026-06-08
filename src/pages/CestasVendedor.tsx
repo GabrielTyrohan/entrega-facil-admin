@@ -7,7 +7,7 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import { toast } from '@/utils/toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, AlertTriangle, Calendar, CheckCircle2, Edit, Eye, Filter, Loader2, MoreHorizontal, Package, PackagePlus, Plus, Search, ShoppingBasket, Trash2, User, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Calendar, CheckCircle2, Edit, Eye, Filter, Loader2, MoreHorizontal, Package, Plus, Search, ShoppingBasket, Trash2, User, X } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -34,6 +34,7 @@ const CestasVendedor: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [cestaParaExcluir, setCestaParaExcluir] = useState<Cesta | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [modalSelecionarVendedor, setModalSelecionarVendedor] = useState(false);
 
   // ── Modal de entrega em lote ──
   const [modalEntregaLote, setModalEntregaLote] = useState<{
@@ -402,11 +403,11 @@ const CestasVendedor: React.FC = () => {
         </div>
         <div className="flex items-center space-x-3">
           <button
-            onClick={() => navigate('/produtos/cestas-base')}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 gap-2 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
+            onClick={() => setModalSelecionarVendedor(true)}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
           >
-            <PackagePlus className="w-4 h-4" />
-            Modelos de Cesta
+            <Package className="w-4 h-4" />
+            <span>Entregar em Lote</span>
           </button>
           <button 
             onClick={() => navigate('/produtos/cestas/nova')}
@@ -933,6 +934,44 @@ const CestasVendedor: React.FC = () => {
                     }
                   </button>
                 </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Seleção de Vendedor */}
+      {modalSelecionarVendedor && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">Selecionar Vendedor</h3>
+              <button onClick={() => setModalSelecionarVendedor(false)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+                <X size={20} className="text-gray-500" />
+              </button>
+            </div>
+            <div className="px-6 py-4 space-y-2 max-h-80 overflow-y-auto">
+              {Array.from(
+                new Map(
+                  cestas
+                    .filter(c => c.status === 'em_uso')
+                    .map(c => [c.vendedor_id, { id: c.vendedor_id, nome: c.vendedor_nome }])
+                ).values()
+              ).map(vendedor => (
+                <button
+                  key={vendedor.id}
+                  onClick={() => {
+                    setModalSelecionarVendedor(false);
+                    handleAbrirEntregaLote(vendedor.id, vendedor.nome);
+                  }}
+                  className="w-full text-left px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-3"
+                >
+                  <User size={18} className="text-gray-400 shrink-0" />
+                  <span className="text-sm font-semibold text-gray-800 dark:text-white">{vendedor.nome}</span>
+                </button>
+              ))}
+              {cestas.filter(c => c.status === 'em_uso').length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-4">Nenhum vendedor com cestas ativas.</p>
               )}
             </div>
           </div>
