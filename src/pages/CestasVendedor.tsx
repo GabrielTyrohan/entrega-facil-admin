@@ -724,7 +724,7 @@ const CestasVendedor: React.FC = () => {
       {/* Modal de Entrega de Cestas */}
       {modalEntrega && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
 
             {/* ── Header ── */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
@@ -770,13 +770,13 @@ const CestasVendedor: React.FC = () => {
 
               {/* Tabela de itens e estoque */}
               {detalhesCesta && detalhesCesta.itens && detalhesCesta.itens.length > 0 && (
-                <div className="rounded-xl border border-yellow-200 dark:border-yellow-700 overflow-hidden">
+                <div className="border border-yellow-200 dark:border-yellow-700 rounded-lg overflow-hidden max-h-48 overflow-y-auto bg-white dark:bg-gray-800">
                   {/* Título da seção */}
                   <div className="flex items-center gap-2 px-4 py-3 bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-700">
                     <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 shrink-0" />
-                    <span className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-                      Atenção ao Estoque — Esta ação irá debitar:
-                    </span>
+                      <span className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                        Atenção ao Estoque — Esta ação irá debitar:
+                      </span>
                   </div>
                   {/* Tabela */}
                   <div className="overflow-x-auto">
