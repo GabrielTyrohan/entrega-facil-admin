@@ -14,7 +14,7 @@ import { useAuth } from '../contexts/AuthContext';
 import type { AdminProfile } from '../contexts/AuthContext';
 import NotaPedidoAutonomo from '../components/NotaPedidoAutonomo';
 import type { NotaPedidoProps } from '../components/NotaPedidoAutonomo';
-import { CestaData, useCestaDetalhes, useCestas, useEntregarCestas } from '../hooks/useCestas';
+import { CestaData, useCestas, useEntregarCestas } from '../hooks/useCestas';
 import { supabase } from '../lib/supabase';
 import { CestaService } from '../services/cestaService';
 
@@ -35,51 +35,20 @@ const CestasVendedor: React.FC = () => {
   const [cestaParaExcluir, setCestaParaExcluir] = useState<Cesta | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const [modalEntrega, setModalEntrega] = useState<{ 
-    cestaId: string; 
-    cestaNome: string; 
+  // ── Modal de entrega em lote ──
+  const [modalEntregaLote, setModalEntregaLote] = useState<{
     vendedorId: string;
-    quantidadeAtual: number;
+    vendedorNome: string;
   } | null>(null);
-  const [qtdEntrega, setQtdEntrega] = useState(1);
+  const [cestasNoLote, setCestasNoLote] = useState<Array<{
+    cestaId: string;
+    cestaNome: string;
+    qtd: number;
+    maxQtd: number;
+  }>>([]);
+  const [etapaLote, setEtapaLote] = useState<1 | 2>(1);
   const [obsEntrega, setObsEntrega] = useState('');
   const [dadosNotaAutonomo, setDadosNotaAutonomo] = useState<NotaPedidoProps | null>(null);
-  const [showNotaModal, setShowNotaModal] = useState(false);
-
-  const { data: detalhesCesta } = useCestaDetalhes(
-    modalEntrega?.cestaId || '',
-    { enabled: !!modalEntrega?.cestaId }
-  );
-
-  // ── IDs dos produtos da cesta aberta no modal ──
-  const produtoIdsModal = useMemo(() => {
-    if (!detalhesCesta?.itens?.length) return [];
-    return detalhesCesta.itens.map((item: any) => item.produto?.id).filter(Boolean);
-  }, [detalhesCesta]);
-
-  // ── Estoque atualizado via view_estoque_atual ──
-  const { data: estoqueAtualModal = [] } = useQuery<{ id: string; qtd_estoque: number }[]>({
-    queryKey: ['view_estoque_atual_modal', produtoIdsModal],
-    queryFn: async () => {
-      if (!produtoIdsModal.length) return [];
-      const { data, error } = await supabase
-        .from('view_estoque_atual')
-        .select('id, qtd_estoque')
-        .in('id', produtoIdsModal);
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: produtoIdsModal.length > 0,
-    staleTime: 0,
-    refetchOnWindowFocus: true,
-  });
-
-  // ── Map produto_id → qtd_estoque ──
-  const estoqueMapModal = useMemo(() => {
-    const map: Record<string, number> = {};
-    estoqueAtualModal.forEach(e => { map[e.id] = e.qtd_estoque; });
-    return map;
-  }, [estoqueAtualModal]);
 
   // ── IDs dos produtos da cesta selecionada (modal Emitir) ──
   const produtoIdsEmitir = useMemo(() => {
@@ -112,26 +81,6 @@ const CestasVendedor: React.FC = () => {
     estoqueAtualEmitir.forEach(e => { map[e.id] = e.qtd_estoque; });
     return map;
   }, [estoqueAtualEmitir]);
-
-  // ── Máximo de cestas que o estoque permite montar ──
-  const maxCestasModal = useMemo(() => {
-    if (!detalhesCesta?.itens?.length) return 0;
-    let max = Infinity;
-    for (const item of detalhesCesta.itens) {
-      const prodId = item.produto?.id;
-      const estoque = (prodId ? estoqueMapModal[prodId] : undefined) ?? item.produto?.qtd_estoque ?? 0;
-      const possivel = Math.floor(estoque / item.quantidade);
-      if (possivel < max) max = possivel;
-    }
-    return max === Infinity ? 0 : max;
-  }, [detalhesCesta, estoqueMapModal]);
-
-  // Ajusta qtdEntrega se ultrapassar o máximo disponível
-  useEffect(() => {
-    if (maxCestasModal > 0 && qtdEntrega > maxCestasModal) {
-      setQtdEntrega(maxCestasModal);
-    }
-  }, [maxCestasModal, qtdEntrega]);
 
   useEffect(() => {
     let filtered = cestas;
@@ -186,128 +135,171 @@ const CestasVendedor: React.FC = () => {
     setCestaParaExcluir(cesta);
   };
 
-  const handleConfirmarEntrega = async () => {
-    if (!modalEntrega || qtdEntrega <= 0) return;
+  // ── Abrir modal de entrega em lote ──
+  const handleAbrirEntregaLote = async (vendedorId: string, vendedorNome: string) => {
+    const cestasDoVendedor = cestas.filter(
+      c => c.vendedor_id === vendedorId && c.status === 'em_uso'
+    );
 
-    if (maxCestasModal === 0) {
-      toast.error('Estoque insuficiente para montar ao menos 1 cesta.');
+    if (cestasDoVendedor.length === 0) {
+      toast.error('Nenhuma cesta ativa para este vendedor.');
       return;
     }
-    if (qtdEntrega > maxCestasModal) {
-      toast.error(`Estoque permite no máximo ${maxCestasModal} cesta(s).`);
-      setQtdEntrega(maxCestasModal);
+
+    const lote = await Promise.all(
+      cestasDoVendedor.map(async (cesta) => {
+        const { data: itens } = await supabase
+          .from('produtos_na_cesta')
+          .select(`quantidade, produtos_cadastrado!inner(id, qtd_estoque)`)
+          .eq('cesta_id', cesta.id);
+
+        const prodIds = (itens || []).map((i: any) => {
+          const p = Array.isArray(i.produtos_cadastrado) ? i.produtos_cadastrado[0] : i.produtos_cadastrado;
+          return p?.id;
+        }).filter(Boolean);
+
+        let estoqueMap: Record<string, number> = {};
+        if (prodIds.length > 0) {
+          const { data: estoqueData } = await supabase
+            .from('view_estoque_atual')
+            .select('id, qtd_estoque')
+            .in('id', prodIds);
+          (estoqueData || []).forEach((e: any) => { estoqueMap[e.id] = e.qtd_estoque; });
+        }
+
+        let maxQtd = Infinity;
+        for (const item of itens || []) {
+          const p = Array.isArray(item.produtos_cadastrado) ? item.produtos_cadastrado[0] : item.produtos_cadastrado;
+          const estoque = estoqueMap[p?.id] ?? p?.qtd_estoque ?? 0;
+          const possivel = Math.floor(estoque / item.quantidade);
+          if (possivel < maxQtd) maxQtd = possivel;
+        }
+
+        return {
+          cestaId: cesta.id,
+          cestaNome: cesta.cesta_nome,
+          qtd: maxQtd > 0 ? 1 : 0,
+          maxQtd: maxQtd === Infinity ? 0 : maxQtd,
+        };
+      })
+    );
+
+    setCestasNoLote(lote);
+    setModalEntregaLote({ vendedorId, vendedorNome });
+    setEtapaLote(1);
+    setObsEntrega('');
+    setDadosNotaAutonomo(null);
+  };
+
+  // ── Prévia da nota (passo 2) ──
+  const handleVisualizarNotaLote = async () => {
+    const cestasComQtd = cestasNoLote.filter(c => c.qtd > 0);
+    if (cestasComQtd.length === 0) return;
+
+    const { data: vendedorData } = await supabase
+      .from('vendedores')
+      .select('*')
+      .eq('id', modalEntregaLote!.vendedorId)
+      .single();
+
+    if (vendedorData?.tipo_vinculo !== 'autonomo') {
+      await handleConfirmarEntregaLote();
       return;
     }
+
+    const itensTodas: NotaPedidoProps['itens'] = [];
+
+    for (const cestaLote of cestasComQtd) {
+      const { data: itensData } = await supabase
+        .from('produtos_na_cesta')
+        .select(`
+          quantidade,
+          produtos_cadastrado!inner(id, produto_nome, produto_cod, preco_unt, unidade_medida)
+        `)
+        .eq('cesta_id', cestaLote.cestaId);
+
+      for (const item of itensData || []) {
+        const p = Array.isArray(item.produtos_cadastrado) ? item.produtos_cadastrado[0] : item.produtos_cadastrado;
+        const qtdTotal = item.quantidade * cestaLote.qtd;
+        const valorUnit = p?.preco_unt || 0;
+
+        const existente = itensTodas.find(i => i.codigo === (p?.produto_cod || ''));
+        if (existente) {
+          existente.quantidade += qtdTotal;
+          existente.valorTotal += valorUnit * qtdTotal;
+        } else {
+          itensTodas.push({
+            codigo: p?.produto_cod || '',
+            descricao: p?.produto_nome || '',
+            unidade: p?.unidade_medida || 'UN',
+            quantidade: qtdTotal,
+            valorUnitario: valorUnit,
+            valorTotal: valorUnit * qtdTotal,
+          });
+        }
+      }
+    }
+
+    const quantidadeTotal = itensTodas.reduce((acc, i) => acc + i.quantidade, 0);
+    const valorTotalPedido = itensTodas.reduce((acc, i) => acc + i.valorTotal, 0);
+    const adminProfile = userProfile as AdminProfile;
+
+    const dadosNota: NotaPedidoProps = {
+      numeroPedido: '######',
+      dataEmissao: new Date().toLocaleDateString('pt-BR'),
+      dataEntrega: new Date().toLocaleDateString('pt-BR'),
+      dataVencimento: new Date().toLocaleDateString('pt-BR'),
+      vendedor: {
+        codigo: vendedorData.id?.slice(0, 8) || '',
+        nome: vendedorData.nome || '',
+        cpfCnpj: vendedorData.cpf_cnpj || '',
+        telefone: vendedorData.telefone || '',
+        endereco: vendedorData.endereco || '',
+      },
+      empresa: {
+        nome: adminProfile?.nome_empresa || 'Empresa',
+        telefone: adminProfile?.telefone || '',
+        cnpj: adminProfile?.cpf_cnpj || '',
+        aviso: `NÃO EFETUAR NENHUM TIPO DE PAGAMENTO PARA O VENDEDOR. REALIZE PAGAMENTOS SOMENTE PARA A CONTA: ${adminProfile?.nome_empresa || 'Empresa'}.`,
+      },
+      itens: itensTodas,
+      quantidadeTotal,
+      valorTotalPedido,
+    };
+
+    setDadosNotaAutonomo(dadosNota);
+    setEtapaLote(2);
+  };
+
+  // ── Confirmar entrega em lote ──
+  const handleConfirmarEntregaLote = async () => {
+    const cestasComQtd = cestasNoLote.filter(c => c.qtd > 0);
+    if (!modalEntregaLote || cestasComQtd.length === 0) return;
 
     try {
-      // 1. Buscar dados do vendedor para verificar tipo_vinculo
-      const { data: vendedorData } = await supabase
-        .from('vendedores')
-        .select('*')
-        .eq('id', modalEntrega.vendedorId)
-        .single();
-
-      // 2. Executar mutation original (RPC com controle de estoque)
-      await entregarCestasMutation.mutateAsync({
-        administrador_id: adminId || user?.id || '',
-        vendedor_id: modalEntrega.vendedorId,
-        cesta_id: modalEntrega.cestaId,
-        quantidade: qtdEntrega,
-        usuario_id: user?.id,
-        usuario_nome: user?.email,
-        observacao: obsEntrega || undefined,
-      });
-
-      // 3. Gerar número do pedido
-      const { data: numData } = await supabase.rpc('next_numero_pedido');
-      const numeroPedido = String(numData || 0).padStart(6, '0');
-
-      // 4. Montar itens da nota
-      const itensNota = (detalhesCesta?.itens || []).map((item: any) => {
-        const qtd = item.quantidade * qtdEntrega;
-        const valorUnit = item.produto?.preco_unt || 0;
-        return {
-          codigo: item.produto?.produto_cod || '',
-          descricao: item.produto?.produto_nome || '',
-          unidade: 'UN',
-          quantidade: qtd,
-          valorUnitario: valorUnit,
-          valorTotal: valorUnit * qtd,
-        };
-      });
-
-      const quantidadeTotal = itensNota.reduce((acc, i) => acc + i.quantidade, 0);
-      const valorTotalPedido = itensNota.reduce((acc, i) => acc + i.valorTotal, 0);
-
-      // 5. Atualizar registro da entrega com campos extras
-      const hoje = new Date().toISOString().split('T')[0];
-      const { data: entregaRecente } = await supabase
-        .from('entregas_cestas_vendedor')
-        .select('id')
-        .eq('cesta_id', modalEntrega.cestaId)
-        .eq('vendedor_id', modalEntrega.vendedorId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (entregaRecente?.id) {
-        await supabase
-          .from('entregas_cestas_vendedor')
-          .update({
-            numero_pedido: numeroPedido,
-            data_vencimento: hoje,
-            valor_total: valorTotalPedido,
-            quantidade_total: quantidadeTotal,
-            status: 'pendente',
-            itens: itensNota,
-          })
-          .eq('id', entregaRecente.id);
+      for (const cestaLote of cestasComQtd) {
+        await entregarCestasMutation.mutateAsync({
+          administrador_id: adminId!,
+          vendedor_id: modalEntregaLote.vendedorId,
+          cesta_id: cestaLote.cestaId,
+          quantidade: cestaLote.qtd,
+          usuario_id: user?.id,
+          usuario_nome: (userProfile as any)?.nome || user?.email,
+          observacao: obsEntrega || undefined,
+        });
       }
 
-      toast.success(`${qtdEntrega} cesta(s) entregue(s) com sucesso!`);
+      toast.success(`Entrega registrada: ${cestasComQtd.length} tipo(s) de cesta para ${modalEntregaLote.vendedorNome}`);
+      setModalEntregaLote(null);
+      setEtapaLote(1);
 
-      // 6. Se vendedor é autônomo, preparar e abrir nota de pedido
-      if (vendedorData?.tipo_vinculo === 'autonomo') {
-        const adminProfile = userProfile as AdminProfile;
-        const nomeEmpresa = adminProfile?.nome_empresa || 'Empresa';
-        const telefoneEmpresa = adminProfile?.telefone || '';
-        const cnpjEmpresa = adminProfile?.cpf_cnpj || '';
-
-        const dadosNota: NotaPedidoProps = {
-          numeroPedido,
-          dataEmissao: new Date().toLocaleDateString('pt-BR'),
-          dataEntrega: new Date().toLocaleDateString('pt-BR'),
-          dataVencimento: new Date().toLocaleDateString('pt-BR'),
-          vendedor: {
-            codigo: vendedorData.id?.slice(0, 8) || '',
-            nome: vendedorData.nome || '',
-            cpfCnpj: '',
-            telefone: vendedorData.telefone || '',
-            endereco: vendedorData.endereco || '',
-          },
-          empresa: {
-            nome: nomeEmpresa,
-            telefone: telefoneEmpresa,
-            cnpj: cnpjEmpresa,
-            aviso: `PAGAMENTO EM DINHEIRO, DÉBITO E CRÉDITO APENAS NO ATO DA ENTREGA PARA O ENTREGADOR OU VIA PIX DISPONÍVEL NESTA FOLHA (CNPJ DA EMPRESA ${cnpjEmpresa} OU VIA QR CODE). NÃO EFETUAR NENHUM TIPO DE PAGAMENTO PARA O VENDEDOR. REALIZE PAGAMENTOS SOMENTE PARA A CONTA: ${nomeEmpresa}.`,
-          },
-          itens: itensNota,
-          quantidadeTotal,
-          valorTotalPedido,
-        };
-
-        setDadosNotaAutonomo(dadosNota);
-        setShowNotaModal(true);
+      if (dadosNotaAutonomo) {
+        setTimeout(() => window.print(), 300);
       }
 
-      // 7. Invalidar cache e limpar modal
-      await queryClient.invalidateQueries({ queryKey: ['view_estoque_atual_modal'] });
-      setModalEntrega(null);
-      setQtdEntrega(1);
-      setObsEntrega('');
       await refetch();
     } catch (err: any) {
-      toast.error(err.message || 'Erro ao registrar entrega.');
+      toast.error(err?.message || 'Erro ao registrar entrega.');
     }
   };
 
@@ -571,20 +563,12 @@ const CestasVendedor: React.FC = () => {
                               Editar
                             </DropdownMenuItem>
                           )}
-                          <DropdownMenuItem onClick={async () => {
-                            await queryClient.invalidateQueries({ queryKey: ['view_estoque_atual_modal'] });
-                            setQtdEntrega(1);
-                            setObsEntrega('');
-                            setModalEntrega({
-                              cestaId: cesta.id,
-                              cestaNome: cesta.cesta_nome,
-                              vendedorId: cesta.vendedor_id,
-                              quantidadeAtual: cesta.quantidade_disponivel ?? 0,
-                            });
-                          }}>
-                            <Package className="w-4 h-4 mr-2 text-blue-500" />
-                            Entregar Cestas
-                          </DropdownMenuItem>
+                          {cesta.status === 'em_uso' && (
+                            <DropdownMenuItem onClick={() => handleAbrirEntregaLote(cesta.vendedor_id, cesta.vendedor_nome)}>
+                              <Package className="w-4 h-4 mr-2 text-blue-500" />
+                              Entregar Cestas
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem
                             onClick={() => solicitarExclusaoCesta(cesta)}
                             className="text-red-600 dark:text-red-400"
@@ -813,197 +797,144 @@ const CestasVendedor: React.FC = () => {
         </div>
       )}
 
-      {/* Modal de Entrega de Cestas */}
-      {modalEntrega && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
-
-            {/* ── Header ── */}
+      {/* Modal de Entrega em Lote */}
+      {modalEntregaLote && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg flex flex-col max-h-[85vh]">
+            {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
-                  <Package size={22} className="text-blue-600 dark:text-blue-400" />
+                <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
+                  <Package className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Entregar Cestas</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">{modalEntrega.cestaNome}</p>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                    {etapaLote === 1 ? 'Entregar Cestas' : 'Prévia da Nota'}
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{modalEntregaLote.vendedorNome}</p>
                 </div>
               </div>
               <button
-                onClick={() => { setModalEntrega(null); setQtdEntrega(1); setObsEntrega(''); }}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                onClick={() => { setModalEntregaLote(null); setEtapaLote(1); }}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               >
                 <X size={20} className="text-gray-500" />
               </button>
             </div>
 
-            {/* ── Corpo com scroll ── */}
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-
-              {/* Aviso estoque zerado */}
-              {detalhesCesta && maxCestasModal === 0 && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 flex items-center gap-3">
-                  <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
-                  <p className="text-sm text-red-700 dark:text-red-300 font-medium">
-                    Estoque insuficiente para montar ao menos 1 cesta completa.
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+              {etapaLote === 1 ? (
+                <>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Informe a quantidade a entregar de cada cesta. Cestas com estoque insuficiente estão desativadas.
                   </p>
-                </div>
-              )}
-
-              {/* Aviso limite disponível */}
-              {detalhesCesta && maxCestasModal > 0 && (
-                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 flex items-center gap-3">
-                  <AlertCircle className="w-5 h-5 text-blue-500 shrink-0" />
-                  <p className="text-sm text-blue-700 dark:text-blue-300">
-                    Estoque permite até <span className="font-bold">{maxCestasModal}</span> cesta(s) completa(s).
-                  </p>
-                </div>
-              )}
-
-              {/* Tabela de itens e estoque */}
-              {detalhesCesta && detalhesCesta.itens && detalhesCesta.itens.length > 0 && (
-                <div className="border border-yellow-200 dark:border-yellow-700 rounded-lg overflow-y-auto bg-white dark:bg-gray-800" style={{ maxHeight: 'calc(100vh - 40px)' }}>
-                  {/* Título da seção */}
-                  <div className="flex items-center gap-2 px-4 py-3 bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-700">
-                    <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 shrink-0" />
-                      <span className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-                        Atenção ao Estoque — Esta ação irá debitar:
-                      </span>
+                  <div className="space-y-3">
+                    {cestasNoLote.map((item, idx) => (
+                      <div
+                        key={item.cestaId}
+                        className={`flex items-center gap-4 p-3 rounded-xl border ${
+                          item.maxQtd === 0
+                            ? 'border-red-200 bg-red-50 dark:bg-red-900/10 opacity-60'
+                            : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/40'
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">{item.cestaNome}</p>
+                          <p className="text-xs text-gray-500">
+                            {item.maxQtd === 0 ? 'Sem estoque' : `Máx: ${item.maxQtd} cestas`}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            disabled={item.maxQtd === 0 || item.qtd <= 0}
+                            onClick={() => setCestasNoLote(prev =>
+                              prev.map((c, i) => i === idx ? { ...c, qtd: Math.max(0, c.qtd - 1) } : c)
+                            )}
+                            className="w-8 h-8 rounded-lg border border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40"
+                          >−</button>
+                          <span className="w-8 text-center text-sm font-bold text-gray-900 dark:text-white">
+                            {item.qtd}
+                          </span>
+                          <button
+                            disabled={item.maxQtd === 0 || item.qtd >= item.maxQtd}
+                            onClick={() => setCestasNoLote(prev =>
+                              prev.map((c, i) => i === idx ? { ...c, qtd: Math.min(c.maxQtd, c.qtd + 1) } : c)
+                            )}
+                            className="w-8 h-8 rounded-lg border border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40"
+                          >+</button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  {/* Tabela */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full table-fixed divide-y divide-gray-200 dark:divide-gray-700">
-                      <thead className="bg-gray-50 dark:bg-gray-700/50 sticky top-0">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap w-[45%]">Produto</th>
-                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap w-[20%]">Necessário</th>
-                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap w-[20%]">Em Estoque</th>
-                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap w-[15%]">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                        {detalhesCesta.itens.map((item: any) => {
-                          const necessario = item.quantidade * qtdEntrega;
-                          const disponivel = (item.produto?.id ? estoqueMapModal[item.produto.id] : undefined) ?? item.produto?.qtd_estoque ?? 0;
-                          const temEstoque = disponivel >= necessario;
-                          return (
-                            <tr key={item.produto.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                              <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                                {item.produto.produto_nome}
-                              </td>
-                          <td className="px-4 py-3 text-sm text-center font-semibold text-gray-700 dark:text-gray-300">
-                            {necessario}
-                          </td>
-                          <td className={`px-4 py-3 text-sm text-center font-semibold ${temEstoque ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                                {disponivel}
-                              </td>
-                              <td className="px-4 py-3 text-center">
-                                {temEstoque
-                                  ? <CheckCircle2 size={16} className="text-green-500 mx-auto" />
-                                  : <AlertTriangle size={16} className="text-red-500 mx-auto" />
-                                }
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+
+                  {/* Observação */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Observação (opcional)
+                    </label>
+                    <textarea
+                      value={obsEntrega}
+                      onChange={e => setObsEntrega(e.target.value)}
+                      rows={2}
+                      placeholder="Ex: entrega parcial, produto substituído..."
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
                   </div>
-                </div>
+                </>
+              ) : (
+                /* Passo 2 — Prévia da nota */
+                <>
+                  <div className="flex items-center gap-2 mb-1">
+                    <CheckCircle2 className="w-5 h-5 text-green-500" />
+                    <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      Confira a nota antes de confirmar:
+                    </p>
+                  </div>
+                  {dadosNotaAutonomo && <NotaPedidoAutonomo {...dadosNotaAutonomo} />}
+                </>
               )}
-
-              {/* Quantidade */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                  Quantidade de Cestas a Entregar *
-                  {maxCestasModal > 0 && (
-                    <span className="ml-2 text-xs font-normal text-gray-400 dark:text-gray-500">
-                      (máx: {maxCestasModal})
-                    </span>
-                  )}
-                </label>
-                <div className="flex items-center gap-4">
-                  <button
-                    onClick={() => setQtdEntrega(prev => Math.max(1, prev - 1))}
-                    disabled={qtdEntrega <= 1}
-                    className="w-11 h-11 flex items-center justify-center rounded-xl border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-lg font-bold disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  >−</button>
-                  <input
-                    type="number"
-                    min="1"
-                    max={maxCestasModal > 0 ? maxCestasModal : undefined}
-                    className="flex-1 text-center py-3 border border-gray-300 dark:border-gray-600 rounded-xl text-xl font-bold bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={qtdEntrega}
-                    onChange={(e) => {
-                      const val = Math.max(1, parseInt(e.target.value) || 1);
-                      setQtdEntrega(maxCestasModal > 0 ? Math.min(val, maxCestasModal) : val);
-                    }}
-                  />
-                  <button
-                    onClick={() => {
-                      if (maxCestasModal > 0 && qtdEntrega >= maxCestasModal) return;
-                      setQtdEntrega(prev => prev + 1);
-                    }}
-                    disabled={maxCestasModal > 0 && qtdEntrega >= maxCestasModal}
-                    className="w-11 h-11 flex items-center justify-center rounded-xl border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-lg font-bold disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  >+</button>
-                </div>
-              </div>
-
-              {/* Observação */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                  Observação <span className="font-normal text-gray-400">(opcional)</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ex: Reposição de estoque semanal"
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                  value={obsEntrega}
-                  onChange={(e) => setObsEntrega(e.target.value)}
-                />
-              </div>
-
             </div>
 
-            {/* ── Footer fixo ── */}
+            {/* Footer */}
             <div className="flex gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700 shrink-0">
-              <button
-                onClick={() => { setModalEntrega(null); setQtdEntrega(1); setObsEntrega(''); }}
-                className="flex-1 py-3 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleConfirmarEntrega}
-                disabled={entregarCestasMutation.isPending || qtdEntrega <= 0 || maxCestasModal === 0}
-                className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-              >
-                {entregarCestasMutation.isPending
-                  ? <span>Registrando...</span>
-                  : <><Package size={16} /> Confirmar Entrega</>
-                }
-              </button>
+              {etapaLote === 1 ? (
+                <>
+                  <button
+                    onClick={() => { setModalEntregaLote(null); setEtapaLote(1); }}
+                    className="flex-1 py-3 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleVisualizarNotaLote}
+                    disabled={cestasNoLote.every(c => c.qtd === 0)}
+                    className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Eye size={16} /> Visualizar Nota →
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setEtapaLote(1)}
+                    className="flex-1 py-3 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    ← Voltar
+                  </button>
+                  <button
+                    onClick={handleConfirmarEntregaLote}
+                    disabled={entregarCestasMutation.isPending}
+                    className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                  >
+                    {entregarCestasMutation.isPending
+                      ? <Loader2 size={16} className="animate-spin" />
+                      : <><Package size={16} /> Confirmar e Imprimir</>
+                    }
+                  </button>
+                </>
+              )}
             </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Nota de Pedido — Vendedor Autônomo */}
-      {showNotaModal && dadosNotaAutonomo && (
-        <div className="fixed inset-0 bg-black/50 z-50 overflow-auto p-4">
-          <div className="bg-white max-w-3xl mx-auto rounded shadow-lg p-4">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold text-gray-900">Nota de Pedido — Vendedor Autônomo</h2>
-              <button
-                onClick={() => setShowNotaModal(false)}
-                className="text-gray-500 hover:text-gray-800 text-sm font-medium"
-              >
-                ✕ Fechar
-              </button>
-            </div>
-            <NotaPedidoAutonomo {...dadosNotaAutonomo} />
           </div>
         </div>
       )}
