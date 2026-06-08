@@ -799,10 +799,10 @@ const CestasVendedor: React.FC = () => {
                               <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
                                 {item.produto.produto_nome}
                               </td>
-                              <td className="px-4 py-3 text-sm text-right font-semibold text-gray-700 dark:text-gray-300">
-                                {necessario}
-                              </td>
-                              <td className={`px-4 py-3 text-sm text-right font-semibold ${temEstoque ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                          <td className="px-4 py-3 text-sm text-center font-semibold text-gray-700 dark:text-gray-300">
+                            {necessario}
+                          </td>
+                          <td className={`px-4 py-3 text-sm text-center font-semibold ${temEstoque ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                                 {disponivel}
                               </td>
                               <td className="px-4 py-3 text-center">
