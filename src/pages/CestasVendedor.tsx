@@ -11,6 +11,9 @@ import { AlertCircle, AlertTriangle, Calendar, CheckCircle2, Edit, Eye, Filter, 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import type { AdminProfile } from '../contexts/AuthContext';
+import NotaPedidoAutonomo from '../components/NotaPedidoAutonomo';
+import type { NotaPedidoProps } from '../components/NotaPedidoAutonomo';
 import { CestaData, useCestaDetalhes, useCestas, useEntregarCestas } from '../hooks/useCestas';
 import { supabase } from '../lib/supabase';
 import { CestaService } from '../services/cestaService';
@@ -20,7 +23,7 @@ type Cesta = CestaData;
 
 const CestasVendedor: React.FC = () => {
   const navigate = useNavigate();
-  const { user, adminId } = useAuth();
+  const { user, adminId, userProfile } = useAuth();
   const entregarCestasMutation = useEntregarCestas();
   const queryClient = useQueryClient();
   const { data: cestas = [], isLoading, error, refetch } = useCestas();
@@ -40,6 +43,8 @@ const CestasVendedor: React.FC = () => {
   } | null>(null);
   const [qtdEntrega, setQtdEntrega] = useState(1);
   const [obsEntrega, setObsEntrega] = useState('');
+  const [dadosNotaAutonomo, setDadosNotaAutonomo] = useState<NotaPedidoProps | null>(null);
+  const [showNotaModal, setShowNotaModal] = useState(false);
 
   const { data: detalhesCesta } = useCestaDetalhes(
     modalEntrega?.cestaId || '',
@@ -182,42 +187,129 @@ const CestasVendedor: React.FC = () => {
   };
 
   const handleConfirmarEntrega = async () => {
-  if (!modalEntrega || qtdEntrega <= 0) return;
+    if (!modalEntrega || qtdEntrega <= 0) return;
 
-  if (maxCestasModal === 0) {
-    toast.error('Estoque insuficiente para montar ao menos 1 cesta.');
-    return;
-  }
-  if (qtdEntrega > maxCestasModal) {
-    toast.error(`Estoque permite no máximo ${maxCestasModal} cesta(s).`);
-    setQtdEntrega(maxCestasModal);
-    return;
-  }
+    if (maxCestasModal === 0) {
+      toast.error('Estoque insuficiente para montar ao menos 1 cesta.');
+      return;
+    }
+    if (qtdEntrega > maxCestasModal) {
+      toast.error(`Estoque permite no máximo ${maxCestasModal} cesta(s).`);
+      setQtdEntrega(maxCestasModal);
+      return;
+    }
 
-  try {
-    await entregarCestasMutation.mutateAsync({
-      administrador_id: adminId || user?.id || '',
-      vendedor_id: modalEntrega.vendedorId,
-      cesta_id: modalEntrega.cestaId,
-      quantidade: qtdEntrega,
-      usuario_id: user?.id,
-      usuario_nome: user?.email,
-      observacao: obsEntrega || undefined,
-    });
+    try {
+      // 1. Buscar dados do vendedor para verificar tipo_vinculo
+      const { data: vendedorData } = await supabase
+        .from('vendedores')
+        .select('*')
+        .eq('id', modalEntrega.vendedorId)
+        .single();
 
-    toast.success(`${qtdEntrega} cesta(s) entregue(s) com sucesso!`);
+      // 2. Executar mutation original (RPC com controle de estoque)
+      await entregarCestasMutation.mutateAsync({
+        administrador_id: adminId || user?.id || '',
+        vendedor_id: modalEntrega.vendedorId,
+        cesta_id: modalEntrega.cestaId,
+        quantidade: qtdEntrega,
+        usuario_id: user?.id,
+        usuario_nome: user?.email,
+        observacao: obsEntrega || undefined,
+      });
 
-    // ✅ Invalida o cache do estoque para forçar refetch com dados atualizados
-    await queryClient.invalidateQueries({ queryKey: ['view_estoque_atual_modal'] });
+      // 3. Gerar número do pedido
+      const { data: numData } = await supabase.rpc('next_numero_pedido');
+      const numeroPedido = String(numData || 0).padStart(6, '0');
 
-    setModalEntrega(null);
-    setQtdEntrega(1);
-    setObsEntrega('');
-    await refetch();
-  } catch (err: any) {
-    toast.error(err.message || 'Erro ao registrar entrega.');
-  }
-};
+      // 4. Montar itens da nota
+      const itensNota = (detalhesCesta?.itens || []).map((item: any) => {
+        const qtd = item.quantidade * qtdEntrega;
+        const valorUnit = item.produto?.preco_unt || 0;
+        return {
+          codigo: item.produto?.produto_cod || '',
+          descricao: item.produto?.produto_nome || '',
+          unidade: 'UN',
+          quantidade: qtd,
+          valorUnitario: valorUnit,
+          valorTotal: valorUnit * qtd,
+        };
+      });
+
+      const quantidadeTotal = itensNota.reduce((acc, i) => acc + i.quantidade, 0);
+      const valorTotalPedido = itensNota.reduce((acc, i) => acc + i.valorTotal, 0);
+
+      // 5. Atualizar registro da entrega com campos extras
+      const hoje = new Date().toISOString().split('T')[0];
+      const { data: entregaRecente } = await supabase
+        .from('entregas_cestas_vendedor')
+        .select('id')
+        .eq('cesta_id', modalEntrega.cestaId)
+        .eq('vendedor_id', modalEntrega.vendedorId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (entregaRecente?.id) {
+        await supabase
+          .from('entregas_cestas_vendedor')
+          .update({
+            numero_pedido: numeroPedido,
+            data_vencimento: hoje,
+            valor_total: valorTotalPedido,
+            quantidade_total: quantidadeTotal,
+            status: 'pendente',
+            itens: itensNota,
+          })
+          .eq('id', entregaRecente.id);
+      }
+
+      toast.success(`${qtdEntrega} cesta(s) entregue(s) com sucesso!`);
+
+      // 6. Se vendedor é autônomo, preparar e abrir nota de pedido
+      if (vendedorData?.tipo_vinculo === 'autonomo') {
+        const adminProfile = userProfile as AdminProfile;
+        const nomeEmpresa = adminProfile?.nome_empresa || 'Empresa';
+        const telefoneEmpresa = adminProfile?.telefone || '';
+        const cnpjEmpresa = adminProfile?.cpf_cnpj || '';
+
+        const dadosNota: NotaPedidoProps = {
+          numeroPedido,
+          dataEmissao: new Date().toLocaleDateString('pt-BR'),
+          dataEntrega: new Date().toLocaleDateString('pt-BR'),
+          dataVencimento: new Date().toLocaleDateString('pt-BR'),
+          vendedor: {
+            codigo: vendedorData.id?.slice(0, 8) || '',
+            nome: vendedorData.nome || '',
+            cpfCnpj: '',
+            telefone: vendedorData.telefone || '',
+            endereco: vendedorData.endereco || '',
+          },
+          empresa: {
+            nome: nomeEmpresa,
+            telefone: telefoneEmpresa,
+            cnpj: cnpjEmpresa,
+            aviso: `PAGAMENTO EM DINHEIRO, DÉBITO E CRÉDITO APENAS NO ATO DA ENTREGA PARA O ENTREGADOR OU VIA PIX DISPONÍVEL NESTA FOLHA (CNPJ DA EMPRESA ${cnpjEmpresa} OU VIA QR CODE). NÃO EFETUAR NENHUM TIPO DE PAGAMENTO PARA O VENDEDOR. REALIZE PAGAMENTOS SOMENTE PARA A CONTA: ${nomeEmpresa}.`,
+          },
+          itens: itensNota,
+          quantidadeTotal,
+          valorTotalPedido,
+        };
+
+        setDadosNotaAutonomo(dadosNota);
+        setShowNotaModal(true);
+      }
+
+      // 7. Invalidar cache e limpar modal
+      await queryClient.invalidateQueries({ queryKey: ['view_estoque_atual_modal'] });
+      setModalEntrega(null);
+      setQtdEntrega(1);
+      setObsEntrega('');
+      await refetch();
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao registrar entrega.');
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -894,6 +986,24 @@ const CestasVendedor: React.FC = () => {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Nota de Pedido — Vendedor Autônomo */}
+      {showNotaModal && dadosNotaAutonomo && (
+        <div className="fixed inset-0 bg-black/50 z-50 overflow-auto p-4">
+          <div className="bg-white max-w-3xl mx-auto rounded shadow-lg p-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Nota de Pedido — Vendedor Autônomo</h2>
+              <button
+                onClick={() => setShowNotaModal(false)}
+                className="text-gray-500 hover:text-gray-800 text-sm font-medium"
+              >
+                ✕ Fechar
+              </button>
+            </div>
+            <NotaPedidoAutonomo {...dadosNotaAutonomo} />
           </div>
         </div>
       )}
