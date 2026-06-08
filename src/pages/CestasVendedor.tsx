@@ -770,7 +770,7 @@ const CestasVendedor: React.FC = () => {
 
               {/* Tabela de itens e estoque */}
               {detalhesCesta && detalhesCesta.itens && detalhesCesta.itens.length > 0 && (
-                <div className="border border-yellow-200 dark:border-yellow-700 rounded-lg overflow-hidden max-h-48 overflow-y-auto bg-white dark:bg-gray-800">
+                <div className="border border-yellow-200 dark:border-yellow-700 rounded-lg max-h-48 overflow-y-auto bg-white dark:bg-gray-800">
                   {/* Título da seção */}
                   <div className="flex items-center gap-2 px-4 py-3 bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-700">
                     <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 shrink-0" />
@@ -780,13 +780,13 @@ const CestasVendedor: React.FC = () => {
                   </div>
                   {/* Tabela */}
                   <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <table className="w-full table-fixed divide-y divide-gray-200 dark:divide-gray-700">
                       <thead className="bg-gray-50 dark:bg-gray-700/50 sticky top-0">
                         <tr>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Produto</th>
-                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-28">Necessário</th>
-                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-28">Em Estoque</th>
-                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-20">Status</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap w-[45%]">Produto</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap w-[20%]">Necessário</th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap w-[20%]">Em Estoque</th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap w-[15%]">Status</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
