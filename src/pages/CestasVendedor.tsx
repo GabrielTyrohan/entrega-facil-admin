@@ -179,7 +179,7 @@ const CestasVendedor: React.FC = () => {
         return {
           cestaId: cesta.id,
           cestaNome: cesta.cesta_nome,
-          qtd: maxQtd > 0 ? 1 : 0,
+          qtd: 0,
           maxQtd: maxQtd === Infinity ? 0 : maxQtd,
         };
       })
@@ -278,9 +278,11 @@ const CestasVendedor: React.FC = () => {
     const cestasComQtd = cestasNoLote.filter(c => c.qtd > 0);
     if (!modalEntregaLote || cestasComQtd.length === 0) return;
 
+    let ultimoId = '';
+
     try {
       for (const cestaLote of cestasComQtd) {
-        await entregarCestasMutation.mutateAsync({
+        const result = await entregarCestasMutation.mutateAsync({
           administrador_id: adminId!,
           vendedor_id: modalEntregaLote.vendedorId,
           cesta_id: cestaLote.cestaId,
@@ -289,6 +291,7 @@ const CestasVendedor: React.FC = () => {
           usuario_nome: (userProfile as any)?.nome || user?.email,
           observacao: obsEntrega || undefined,
         });
+        if (result?.id) ultimoId = result.id.slice(0, 8).toUpperCase();
       }
 
       toast.success(`Entrega registrada: ${cestasComQtd.length} tipo(s) de cesta para ${modalEntregaLote.vendedorNome}`);
@@ -296,6 +299,7 @@ const CestasVendedor: React.FC = () => {
       setEtapaLote(1);
 
       if (dadosNotaAutonomo) {
+        setDadosNotaAutonomo(prev => prev ? { ...prev, numeroPedido: ultimoId } : prev);
         setTimeout(() => gerarPdfNota(), 300);
       }
 

@@ -73,7 +73,9 @@ const NotaPedidoAutonomo: React.FC<NotaPedidoProps> = ({
             </div>
             <div className="text-right">
               <span className="text-[10px] text-gray-500">Nº</span>{' '}
-              <span className="font-bold text-sm">{numeroPedido}</span>
+              <span className="font-bold text-sm">
+                {numeroPedido === '######' ? 'PRÉVIA' : numeroPedido}
+              </span>
             </div>
           </div>
 
