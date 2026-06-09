@@ -4,10 +4,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     ArrowLeft,
     Check,
+    CheckCircle2,
     ChevronDown,
     ChevronRight,
     ClipboardList,
     Edit2,
+    Eye,
     Loader2,
     Minus,
     Package,
@@ -21,6 +23,8 @@ import {
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import NotaPedidoAutonomo from '../components/NotaPedidoAutonomo';
+import type { NotaPedidoProps } from '../components/NotaPedidoAutonomo';
 import { useProdutos } from '../hooks/useProdutos';
 import { useVendedoresByAdmin } from '../hooks/useVendedores';
 import { supabase } from '../lib/supabase';
@@ -85,7 +89,7 @@ const normalizar = (str: string) =>
 
 const EntregaAvulsa: React.FC = () => {
   const navigate = useNavigate();
-  const { user, adminId } = useAuth();
+  const { user, adminId, userProfile } = useAuth();
   const queryClient = useQueryClient();
 
   // ── Tabs ──────────────────────────────────────────────────────────────────
@@ -116,6 +120,10 @@ const EntregaAvulsa: React.FC = () => {
   const [itens, setItens] = useState<ItemAvulso[]>([]);
   const [observacao, setObservacao] = useState('');
   const [isConfirmando, setIsConfirmando] = useState(false);
+
+  // ── Nota / PDF ──
+  const [etapaEntrega, setEtapaEntrega] = useState<1 | 2>(1);
+  const [dadosNotaAvulsa, setDadosNotaAvulsa] = useState<NotaPedidoProps | null>(null);
 
   // ── Vendors ───────────────────────────────────────────────────────────────
   const { data: vendedores = [], isLoading: loadingVendedores } = useVendedoresByAdmin(
@@ -248,7 +256,6 @@ const EntregaAvulsa: React.FC = () => {
       );
       if (e2) throw new Error(e2.message);
 
-      // Registrar movimentações de saída (trigger atualiza qtd_estoque)
       for (const item of itens) {
         await movimentarEstoque({
           adminId: adminId || user?.id || '',
@@ -263,13 +270,94 @@ const EntregaAvulsa: React.FC = () => {
         });
       }
 
+      const novoId = entrega.id.slice(0, 8).toUpperCase();
+
       toast.success(`Entrega confirmada! ${itens.length} produto(s) para ${vendedorSelecionado.nome}.`);
+
+      if (dadosNotaAvulsa) {
+        setDadosNotaAvulsa(prev => prev ? { ...prev, numeroPedido: novoId } : prev);
+        setTimeout(() => gerarPdfNotaAvulsa(vendedorSelecionado.nome), 300);
+      }
+
       setVendedorSelecionado(null); setItens([]); setObservacao(''); setSearchTerm('');
+      setEtapaEntrega(1);
+      setDadosNotaAvulsa(null);
       setAba('historico');
       await invalidateHistory();
     } catch (err: unknown) {
       toast.error(`Erro: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
     } finally { setIsConfirmando(false); }
+  };
+
+  const gerarPdfNotaAvulsa = (nomeVendedor: string) => {
+    const elemento = document.getElementById('nota-pedido-avulsa');
+    if (!elemento) return;
+    const opt = {
+      margin: [8, 8, 8, 8],
+      filename: `nota-avulsa-${nomeVendedor.replace(/\s+/g, '_')}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    };
+    (window as any).html2pdf().set(opt).from(elemento).save();
+  };
+
+  const handleVisualizarNotaAvulsa = async () => {
+    if (!vendedorSelecionado) { toast.error('Selecione um vendedor.'); return; }
+    if (itens.length === 0) { toast.error('Adicione pelo menos um produto.'); return; }
+    for (const item of itens) {
+      if (item.quantidade > item.produto.qtd_estoque) {
+        toast.error(`"${item.produto.produto_nome}": excede estoque (${item.produto.qtd_estoque}).`); return;
+      }
+    }
+
+    const { data: vendedorData } = await supabase
+      .from('vendedores')
+      .select('*')
+      .eq('id', vendedorSelecionado.id)
+      .single();
+
+    if (vendedorData?.tipo_vinculo !== 'autonomo') {
+      await handleConfirmar();
+      return;
+    }
+
+    const adminProfile = userProfile as any;
+
+    const itensNota: NotaPedidoProps['itens'] = itens.map(item => ({
+      codigo: item.produto.produto_cod || '',
+      descricao: item.produto.produto_nome,
+      unidade: 'UN',
+      quantidade: item.quantidade,
+      valorUnitario: item.produto.preco_unt,
+      valorTotal: item.quantidade * item.produto.preco_unt,
+    }));
+
+    setDadosNotaAvulsa({
+      numeroPedido: '######',
+      dataEmissao: new Date().toLocaleDateString('pt-BR'),
+      dataEntrega: new Date().toLocaleDateString('pt-BR'),
+      dataVencimento: new Date().toLocaleDateString('pt-BR'),
+      vendedorInterno: (userProfile as any)?.nome || user?.email || 'Não identificado',
+      vendedor: {
+        codigo: vendedorData.id?.slice(0, 8) || '',
+        nome: vendedorData.nome || '',
+        cpfCnpj: vendedorData.cpf_cnpj || '',
+        telefone: vendedorData.telefone || '',
+        endereco: vendedorData.endereco || '',
+      },
+      empresa: {
+        nome: adminProfile?.nome_empresa || 'Empresa',
+        telefone: adminProfile?.telefone || '',
+        cnpj: adminProfile?.cpf_cnpj || '',
+        aviso: `NÃO EFETUAR NENHUM TIPO DE PAGAMENTO PARA O VENDEDOR. REALIZE PAGAMENTOS SOMENTE PARA A CONTA: ${adminProfile?.nome_empresa || 'Empresa'}.`,
+      },
+      itens: itensNota,
+      quantidadeTotal: itensNota.reduce((acc, i) => acc + i.quantidade, 0),
+      valorTotalPedido: itensNota.reduce((acc, i) => acc + i.valorTotal, 0),
+    });
+
+    setEtapaEntrega(2);
   };
 
   // ── Delete handlers ───────────────────────────────────────────────────────
@@ -828,8 +916,8 @@ const EntregaAvulsa: React.FC = () => {
             </div>
             <div className="flex gap-3">
               <button type="button" onClick={() => setAba('historico')} className="flex-1 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors">Cancelar</button>
-              <button type="button" onClick={handleConfirmar} disabled={isConfirmando || !vendedorSelecionado || itens.length === 0} className="flex-[2] py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 dark:disabled:bg-gray-600 text-white rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2 shadow-sm disabled:cursor-not-allowed">
-                {isConfirmando ? <><Loader2 className="w-4 h-4 animate-spin" />Confirmando...</> : <><Check className="w-4 h-4" />Confirmar Entrega</>}
+              <button type="button" onClick={handleVisualizarNotaAvulsa} disabled={isConfirmando || !vendedorSelecionado || itens.length === 0} className="flex-[2] py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 dark:disabled:bg-gray-600 text-white rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2 shadow-sm disabled:cursor-not-allowed">
+                {isConfirmando ? <><Loader2 className="w-4 h-4 animate-spin" />Confirmando...</> : <><Eye className="w-4 h-4" />Visualizar Nota →</>}
               </button>
             </div>
           </div>
@@ -945,6 +1033,65 @@ const EntregaAvulsa: React.FC = () => {
               <button type="button" onClick={() => setEditando(null)} disabled={isSalvandoEdit} className="flex-1 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors">Cancelar</button>
               <button type="button" onClick={handleSalvarEdicao} disabled={isSalvandoEdit} className="flex-[2] py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm">
                 {isSalvandoEdit ? <><Loader2 className="w-4 h-4 animate-spin" />Salvando...</> : <><Check className="w-4 h-4" />Salvar Alterações</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL PRÉVIA NOTA — ENTREGA AVULSA ── */}
+      {etapaEntrega === 2 && dadosNotaAvulsa && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-fit min-w-[560px] max-w-[90vw] flex flex-col max-h-[85vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
+                  <ClipboardList className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">Prévia da Nota</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{vendedorSelecionado?.nome}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setEtapaEntrega(1); setDadosNotaAvulsa(null); }}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                <X size={20} className="text-gray-500" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              <div className="flex items-center gap-2 mb-3">
+                <CheckCircle2 className="w-5 h-5 text-green-500" />
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  Confira a nota antes de confirmar:
+                </p>
+              </div>
+              <div id="nota-pedido-avulsa">
+                <NotaPedidoAutonomo {...dadosNotaAvulsa} />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700 shrink-0">
+              <button
+                onClick={() => { setEtapaEntrega(1); setDadosNotaAvulsa(null); }}
+                className="flex-1 py-3 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                ← Voltar
+              </button>
+              <button
+                onClick={handleConfirmar}
+                disabled={isConfirmando}
+                className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                {isConfirmando
+                  ? <Loader2 size={16} className="animate-spin" />
+                  : <><Package size={16} /> Confirmar e Gerar PDF</>
+                }
               </button>
             </div>
           </div>
