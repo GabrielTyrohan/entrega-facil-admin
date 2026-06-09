@@ -44,6 +44,7 @@ const CestasVendedor: React.FC = () => {
   const [cestasNoLote, setCestasNoLote] = useState<Array<{
     cestaId: string;
     cestaNome: string;
+    cestaBaseCodigo: string;
     qtd: number;
     maxQtd: number;
   }>>([]);
@@ -179,6 +180,7 @@ const CestasVendedor: React.FC = () => {
         return {
           cestaId: cesta.id,
           cestaNome: cesta.cesta_nome,
+          cestaBaseCodigo: cesta.cesta_base_codigo || '',
           qtd: 0,
           maxQtd: maxQtd === Infinity ? 0 : maxQtd,
         };
@@ -208,37 +210,39 @@ const CestasVendedor: React.FC = () => {
       return;
     }
 
+    // Calcula o valor real de cada cesta somando (qtd × preco_unt) dos produtos internos
     const itensTodas: NotaPedidoProps['itens'] = [];
-
     for (const cestaLote of cestasComQtd) {
+      // Linha representando a cesta
+      itensTodas.push({
+        codigo: cestaLote.cestaBaseCodigo,
+        descricao: cestaLote.cestaNome,
+        unidade: 'CX',
+        quantidade: cestaLote.qtd,
+        valorUnitario: 0,
+        valorTotal: 0,
+      });
+
       const { data: itensData } = await supabase
         .from('produtos_na_cesta')
-        .select(`
-          quantidade,
-          produtos_cadastrado!inner(id, produto_nome, produto_cod, preco_unt, unidade_medida)
-        `)
+        .select('quantidade, produtos_cadastrado!inner(preco_unt)')
         .eq('cesta_id', cestaLote.cestaId);
 
-      for (const item of itensData || []) {
-        const p = Array.isArray(item.produtos_cadastrado) ? item.produtos_cadastrado[0] : item.produtos_cadastrado;
-        const qtdTotal = item.quantidade * cestaLote.qtd;
-        const valorUnit = p?.preco_unt || 0;
+      const valorUnitCesta = (itensData || []).reduce((acc, item) => {
+        const p = Array.isArray(item.produtos_cadastrado)
+          ? item.produtos_cadastrado[0]
+          : item.produtos_cadastrado;
+        return acc + (item.quantidade * (p?.preco_unt || 0));
+      }, 0);
 
-        const existente = itensTodas.find(i => i.codigo === (p?.produto_cod || ''));
-        if (existente) {
-          existente.quantidade += qtdTotal;
-          existente.valorTotal += valorUnit * qtdTotal;
-        } else {
-          itensTodas.push({
-            codigo: p?.produto_cod || '',
-            descricao: p?.produto_nome || '',
-            unidade: p?.unidade_medida || 'UN',
-            quantidade: qtdTotal,
-            valorUnitario: valorUnit,
-            valorTotal: valorUnit * qtdTotal,
-          });
-        }
-      }
+      itensTodas.push({
+        codigo: '',
+        descricao: `  Valor da cesta ${cestaLote.cestaNome}`,
+        unidade: '',
+        quantidade: 0,
+        valorUnitario: valorUnitCesta,
+        valorTotal: valorUnitCesta * cestaLote.qtd,
+      });
     }
 
     const quantidadeTotal = itensTodas.reduce((acc, i) => acc + i.quantidade, 0);

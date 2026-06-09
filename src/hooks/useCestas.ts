@@ -5,6 +5,7 @@ import { CACHE_KEYS, CACHE_TIMES } from '../lib/supabaseCache';
 
 export interface CestaData {
   id: string;
+  cesta_base_codigo?: string;
   vendedor_id: string;
   vendedor_nome: string;
   cesta_nome: string;
@@ -48,6 +49,8 @@ export const useCestas = () => {
             created_at,
             ativo,
             vendedor_id,
+            cesta_base_id,
+            cestas_base (codigo),
             vendedores!inner (
               id,
               nome,
@@ -143,6 +146,9 @@ export const useCestas = () => {
 
             return {
               id: cesta.id,
+              cesta_base_codigo: Array.isArray(cesta.cestas_base)
+                ? cesta.cestas_base[0]?.codigo
+                : (cesta.cestas_base as any)?.codigo || '',
               vendedor_id: cesta.vendedor_id,
               vendedor_nome: Array.isArray(cesta.vendedores)
                 ? cesta.vendedores[0]?.nome || 'Desconhecido'
