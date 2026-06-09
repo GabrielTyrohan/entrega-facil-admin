@@ -113,7 +113,7 @@ const NotaPedidoAutonomo: React.FC<NotaPedidoProps> = ({
             <table className="w-full text-[11px]">
               <thead>
                 <tr className="bg-gray-100">
-                  <th className="px-3 py-1.5 text-left font-semibold border-r border-gray-400">Código</th>
+                  <th className="px-3 py-1.5 text-left font-semibold border-r border-gray-400 w-20">Código</th>
                   <th className="px-3 py-1.5 text-left font-semibold border-r border-gray-400">Descrição</th>
                   <th className="px-3 py-1.5 text-center font-semibold border-r border-gray-400 w-12">UN</th>
                   <th className="px-3 py-1.5 text-center font-semibold border-r border-gray-400 w-16">Quant.</th>
@@ -124,7 +124,7 @@ const NotaPedidoAutonomo: React.FC<NotaPedidoProps> = ({
               <tbody>
                 {itens.map((item, index) => (
                   <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="px-3 py-1.5 border-r border-gray-400 font-mono">{item.codigo}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-400 font-mono w-20">{item.codigo}</td>
                     <td className="px-3 py-1.5 border-r border-gray-400">{item.descricao}</td>
                     <td className="px-3 py-1.5 text-center border-r border-gray-400">{item.unidade}</td>
                     <td className="px-3 py-1.5 text-center border-r border-gray-400">{item.quantidade}</td>

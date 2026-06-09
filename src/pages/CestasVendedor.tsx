@@ -210,38 +210,29 @@ const CestasVendedor: React.FC = () => {
       return;
     }
 
-    // Calcula o valor real de cada cesta somando (qtd × preco_unt) dos produtos internos
     const itensTodas: NotaPedidoProps['itens'] = [];
+
     for (const cestaLote of cestasComQtd) {
-      // Linha representando a cesta
+      const { data: produtoData } = await supabase
+        .from('produtos')
+        .select('cesta_base_id, cestas_base(codigo), preco')
+        .eq('id', cestaLote.cestaId)
+        .single();
+
+      const cestaBaseObj = Array.isArray(produtoData?.cestas_base)
+        ? produtoData.cestas_base[0]
+        : (produtoData?.cestas_base as any);
+
+      const codigoCesta = cestaBaseObj?.codigo || '';
+      const valorUnit = produtoData?.preco || 0;
+
       itensTodas.push({
-        codigo: cestaLote.cestaBaseCodigo,
+        codigo: codigoCesta,
         descricao: cestaLote.cestaNome,
-        unidade: 'CX',
+        unidade: 'UN',
         quantidade: cestaLote.qtd,
-        valorUnitario: 0,
-        valorTotal: 0,
-      });
-
-      const { data: itensData } = await supabase
-        .from('produtos_na_cesta')
-        .select('quantidade, produtos_cadastrado!inner(preco_unt)')
-        .eq('cesta_id', cestaLote.cestaId);
-
-      const valorUnitCesta = (itensData || []).reduce((acc, item) => {
-        const p = Array.isArray(item.produtos_cadastrado)
-          ? item.produtos_cadastrado[0]
-          : item.produtos_cadastrado;
-        return acc + (item.quantidade * (p?.preco_unt || 0));
-      }, 0);
-
-      itensTodas.push({
-        codigo: '',
-        descricao: `  Valor da cesta ${cestaLote.cestaNome}`,
-        unidade: '',
-        quantidade: 0,
-        valorUnitario: valorUnitCesta,
-        valorTotal: valorUnitCesta * cestaLote.qtd,
+        valorUnitario: valorUnit,
+        valorTotal: valorUnit * cestaLote.qtd,
       });
     }
 
