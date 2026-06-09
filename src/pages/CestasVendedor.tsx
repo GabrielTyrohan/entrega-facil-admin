@@ -295,13 +295,28 @@ const CestasVendedor: React.FC = () => {
       setEtapaLote(1);
 
       if (dadosNotaAutonomo) {
-        setTimeout(() => window.print(), 300);
+        setTimeout(() => gerarPdfNota(), 300);
       }
 
       await refetch();
     } catch (err: any) {
       toast.error(err?.message || 'Erro ao registrar entrega.');
     }
+  };
+
+  const gerarPdfNota = () => {
+    const elemento = document.getElementById('nota-pedido');
+    if (!elemento) return;
+
+    const opt = {
+      margin:      [8, 8, 8, 8],
+      filename:    `nota-${modalEntregaLote?.vendedorNome?.replace(/\s+/g, '_') ?? 'pedido'}.pdf`,
+      image:       { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    };
+
+    (window as any).html2pdf().set(opt).from(elemento).save();
   };
 
   const getStatusColor = (status: string) => {
@@ -807,7 +822,7 @@ const CestasVendedor: React.FC = () => {
       {/* Modal de Entrega em Lote */}
       {modalEntregaLote && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg flex flex-col max-h-[85vh]">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-fit min-w-[560px] max-w-[90vw] flex flex-col max-h-[85vh]">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
               <div className="flex items-center gap-3">
@@ -936,7 +951,7 @@ const CestasVendedor: React.FC = () => {
                   >
                     {entregarCestasMutation.isPending
                       ? <Loader2 size={16} className="animate-spin" />
-                      : <><Package size={16} /> Confirmar e Imprimir</>
+                      : <><Package size={16} /> Confirmar e Gerar PDF</>
                     }
                   </button>
                 </>

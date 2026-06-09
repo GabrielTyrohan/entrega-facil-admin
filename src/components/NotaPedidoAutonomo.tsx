@@ -1,5 +1,5 @@
 import React from 'react';
-import { Printer } from 'lucide-react';
+
 
 export interface NotaPedidoProps {
   numeroPedido: string;
@@ -67,17 +67,6 @@ const NotaPedidoAutonomo: React.FC<NotaPedidoProps> = ({
       `}</style>
 
       <div id="nota-pedido" className="bg-white text-black text-xs">
-        {/* Botão imprimir */}
-        <div className="flex justify-end mb-3 print:hidden">
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-          >
-            <Printer size={16} />
-            Imprimir / Salvar PDF
-          </button>
-        </div>
-
         {/* Cabeçalho */}
         <div className="border border-gray-400 rounded-sm">
           <div className="flex items-center justify-between px-3 py-2 border-b border-gray-400">
