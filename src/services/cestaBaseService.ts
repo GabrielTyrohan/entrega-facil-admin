@@ -28,7 +28,6 @@ export interface ItemCestaBase {
 
 export interface CreateCestaBaseData {
   nome: string;
-  codigo?: string;
   descricao?: string;
   preco?: number;
   itens: {
@@ -67,7 +66,6 @@ export class CestaBaseService {
         .insert([{
           administrador_id: adminId,
           nome: dados.nome,
-          codigo: dados.codigo?.trim() || null,
           descricao: dados.descricao,
           preco: dados.preco || 0,
           ativo: true
@@ -106,7 +104,6 @@ export class CestaBaseService {
     try {
       const updateData: any = { updated_at: new Date().toISOString() };
       if (dados.nome !== undefined) updateData.nome = dados.nome;
-      if (dados.codigo !== undefined) updateData.codigo = dados.codigo?.trim() || null;
       if (dados.descricao !== undefined) updateData.descricao = dados.descricao;
       if (dados.preco !== undefined) updateData.preco = dados.preco;
 
