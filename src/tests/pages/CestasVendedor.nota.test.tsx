@@ -25,18 +25,18 @@ vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({
     user: { id: 'user-1', email: 'admin@test.com' },
     adminId: 'admin-1',
-    userProfile: { nome: 'Admin', nome_empresa: 'Empresa Teste', telefone: '11999999999', cpf_cnpj: '00.000.000/0001-00' },
+    userProfile: { nome: 'Admin Teste', nome_empresa: 'Empresa Teste', telefone: '11999999999', cpf_cnpj: '00.000.000/0001-00' },
   }),
 }));
 
 const mockCestas = [
-  { id: 'cesta-1', cesta_nome: 'Cesta Básica', cesta_id: 'cb-1', status: 'em_uso', vendedor_id: 'vend-1', vendedor_nome: 'João Autônomo', quantidade: 2 },
+  { id: 'cesta-1', cesta_nome: 'Cesta Básica', cesta_id: 'cb-1', status: 'em_uso', vendedor_id: 'vend-1', vendedor_nome: 'João Autônomo', quantidade: 2, cesta_base_codigo: '000001' },
 ];
 
 vi.mock('../../hooks/useCestas', () => ({
   useCestas: () => ({ data: mockCestas, isLoading: false, error: null, refetch: vi.fn() }),
   useCestaDetalhes: () => ({ data: null }),
-  useEntregarCestas: () => ({ mutateAsync: vi.fn().mockResolvedValue({ id: 'entrega-abc-123' }), isPending: false }),
+  useEntregarCestas: () => ({ mutateAsync: vi.fn().mockResolvedValue({ id: 'entrega-abc-123-def45678' }), isPending: false }),
 }));
 
 vi.mock('../../components/NotaPedidoAutonomo', () => ({
@@ -54,6 +54,10 @@ vi.mock('../../components/NotaPedidoAutonomo', () => ({
   ),
 }));
 
+vi.mock('sonner', () => ({
+  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
+}));
+
 import { supabase } from '@/lib/supabase';
 import CestasVendedor from '../../pages/CestasVendedor';
 
@@ -68,38 +72,57 @@ function renderPage() {
   );
 }
 
+function createChainMock(data: any = null, error: any = null) {
+  const result = { data, error };
+  const chain: any = {};
+  chain.select = vi.fn().mockReturnValue(chain);
+  chain.eq = vi.fn().mockReturnValue(chain);
+  chain.in = vi.fn().mockReturnValue(chain);
+  chain.order = vi.fn().mockReturnValue(chain);
+  chain.limit = vi.fn().mockReturnValue(chain);
+  chain.single = vi.fn().mockResolvedValue(result);
+  chain.then = vi.fn((resolve: any) => resolve(result));
+  chain[Symbol.toStringTag] = 'Promise';
+  return chain;
+}
+
 describe('CestasVendedor — Nota de Entrega em Lote', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
     (supabase.from as any).mockImplementation((tabela: string) => {
-      const base = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
-        single: vi.fn().mockResolvedValue({ data: null, error: null }),
-      };
-
       if (tabela === 'vendedores') {
-        return {
-          ...base,
-          single: vi.fn().mockResolvedValue({
-            data: { id: 'vend-1', nome: 'João Autônomo', tipo_vinculo: 'autonomo', cpf_cnpj: '123.456.789-00', telefone: '11999999999', endereco: 'Rua A' },
-            error: null,
-          }),
-        };
+        return createChainMock({
+          id: 'vend-1',
+          nome: 'João Autônomo',
+          tipo_vinculo: 'autonomo',
+          cpf_cnpj: '123.456.789-00',
+          telefone: '11999999999',
+          endereco: 'Rua A',
+        });
       }
+
       if (tabela === 'produtos') {
-        return {
-          ...base,
-          single: vi.fn().mockResolvedValue({
-            data: { cesta_base_id: 'cb-1', cestas_base: { codigo: 1 }, preco: 50.0 },
-            error: null,
-          }),
-        };
+        return createChainMock({
+          cesta_base_id: 'cb-1',
+          cestas_base: { codigo: 1 },
+          preco: 50.0,
+        });
       }
-      return base;
+
+      if (tabela === 'produtos_na_cesta') {
+        return createChainMock([
+          { quantidade: 2, produtos_cadastrado: { id: 'prod-1', qtd_estoque: 20 } },
+        ]);
+      }
+
+      if (tabela === 'view_estoque_atual') {
+        return createChainMock([
+          { id: 'prod-1', qtd_estoque: 20 },
+        ]);
+      }
+
+      return createChainMock(null);
     });
   });
 
@@ -113,20 +136,26 @@ describe('CestasVendedor — Nota de Entrega em Lote', () => {
     expect(screen.getByRole('button', { name: /entregar em lote/i })).toBeInTheDocument();
   });
 
-  it('deve abrir modal de entrega em lote ao clicar no botão', async () => {
+  it('deve abrir modal de seleção de vendedor ao clicar no botão', async () => {
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: /entregar em lote/i }));
     await waitFor(() => {
-      expect(screen.getByText('Entregar Cestas')).toBeInTheDocument();
+      expect(screen.getByText('Selecionar Vendedor')).toBeInTheDocument();
     });
   });
 
   it('deve exibir botão "Visualizar Nota →" na etapa 1 do modal', async () => {
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: /entregar em lote/i }));
-    await waitFor(() => screen.getByText('João Autônomo'));
-    fireEvent.click(screen.getByText('João Autônomo'));
+    await waitFor(() => screen.getByText('Selecionar Vendedor'));
+
+    const vendBtn = screen.getAllByText('João Autônomo').find(
+      (el) => el.tagName === 'SPAN' && el.closest('button')
+    );
+    fireEvent.click(vendBtn!);
+
     await waitFor(() => {
+      expect(screen.getByText('Entregar Cestas')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /visualizar nota/i })).toBeInTheDocument();
     });
   });
@@ -134,11 +163,20 @@ describe('CestasVendedor — Nota de Entrega em Lote', () => {
   it('deve exibir prévia da nota na etapa 2 para vendedor autônomo', async () => {
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: /entregar em lote/i }));
-    await waitFor(() => screen.getByText('João Autônomo'));
-    fireEvent.click(screen.getByText('João Autônomo'));
-    await waitFor(() => screen.getAllByText('+'));
-    fireEvent.click(screen.getAllByText('+')[0]);
+    await waitFor(() => screen.getByText('Selecionar Vendedor'));
+
+    const vendBtn = screen.getAllByText('João Autônomo').find(
+      (el) => el.tagName === 'SPAN' && el.closest('button')
+    );
+    fireEvent.click(vendBtn!);
+
+    await waitFor(() => screen.getByText('Entregar Cestas'));
+
+    const plusBtns = screen.getAllByText('+');
+    fireEvent.click(plusBtns[0]);
+
     fireEvent.click(screen.getByRole('button', { name: /visualizar nota/i }));
+
     await waitFor(() => {
       expect(screen.getByText('Prévia da Nota')).toBeInTheDocument();
       expect(screen.getByTestId('nota-pedido')).toBeInTheDocument();
@@ -148,16 +186,24 @@ describe('CestasVendedor — Nota de Entrega em Lote', () => {
   it('nota do lote deve usar unidade UN e não CX', async () => {
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: /entregar em lote/i }));
-    await waitFor(() => screen.getByText('João Autônomo'));
-    fireEvent.click(screen.getByText('João Autônomo'));
-    await waitFor(() => screen.getAllByText('+'));
-    fireEvent.click(screen.getAllByText('+')[0]);
+    await waitFor(() => screen.getByText('Selecionar Vendedor'));
+
+    const vendBtn = screen.getAllByText('João Autônomo').find(
+      (el) => el.tagName === 'SPAN' && el.closest('button')
+    );
+    fireEvent.click(vendBtn!);
+
+    await waitFor(() => screen.getByText('Entregar Cestas'));
+
+    const plusBtns = screen.getAllByText('+');
+    fireEvent.click(plusBtns[0]);
+
     fireEvent.click(screen.getByRole('button', { name: /visualizar nota/i }));
+
     await waitFor(() => {
       const unidades = screen.getAllByTestId(/^unidade-/);
       unidades.forEach(el => {
         expect(el.textContent).toBe('UN');
-        expect(el.textContent).not.toBe('CX');
       });
     });
   });
@@ -165,11 +211,20 @@ describe('CestasVendedor — Nota de Entrega em Lote', () => {
   it('deve exibir botões "← Voltar" e "Confirmar e Gerar PDF" na etapa 2', async () => {
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: /entregar em lote/i }));
-    await waitFor(() => screen.getByText('João Autônomo'));
-    fireEvent.click(screen.getByText('João Autônomo'));
-    await waitFor(() => screen.getAllByText('+'));
-    fireEvent.click(screen.getAllByText('+')[0]);
+    await waitFor(() => screen.getByText('Selecionar Vendedor'));
+
+    const vendBtn = screen.getAllByText('João Autônomo').find(
+      (el) => el.tagName === 'SPAN' && el.closest('button')
+    );
+    fireEvent.click(vendBtn!);
+
+    await waitFor(() => screen.getByText('Entregar Cestas'));
+
+    const plusBtns = screen.getAllByText('+');
+    fireEvent.click(plusBtns[0]);
+
     fireEvent.click(screen.getByRole('button', { name: /visualizar nota/i }));
+
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /voltar/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /confirmar e gerar pdf/i })).toBeInTheDocument();
@@ -179,13 +234,24 @@ describe('CestasVendedor — Nota de Entrega em Lote', () => {
   it('deve voltar à etapa 1 ao clicar em "← Voltar"', async () => {
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: /entregar em lote/i }));
-    await waitFor(() => screen.getByText('João Autônomo'));
-    fireEvent.click(screen.getByText('João Autônomo'));
-    await waitFor(() => screen.getAllByText('+'));
-    fireEvent.click(screen.getAllByText('+')[0]);
+    await waitFor(() => screen.getByText('Selecionar Vendedor'));
+
+    const vendBtn = screen.getAllByText('João Autônomo').find(
+      (el) => el.tagName === 'SPAN' && el.closest('button')
+    );
+    fireEvent.click(vendBtn!);
+
+    await waitFor(() => screen.getByText('Entregar Cestas'));
+
+    const plusBtns = screen.getAllByText('+');
+    fireEvent.click(plusBtns[0]);
+
     fireEvent.click(screen.getByRole('button', { name: /visualizar nota/i }));
+
     await waitFor(() => screen.getByRole('button', { name: /voltar/i }));
+
     fireEvent.click(screen.getByRole('button', { name: /voltar/i }));
+
     await waitFor(() => {
       expect(screen.queryByTestId('nota-pedido')).not.toBeInTheDocument();
       expect(screen.getByText('Entregar Cestas')).toBeInTheDocument();

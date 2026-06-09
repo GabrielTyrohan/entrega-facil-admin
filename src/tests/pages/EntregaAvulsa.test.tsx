@@ -162,11 +162,13 @@ describe('EntregaAvulsa', () => {
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: /nova entrega/i }));
     await waitFor(() => screen.getByText('João Autônomo'));
-    fireEvent.click(screen.getByText('João Autônomo'));
+
+    const select = screen.getByRole('combobox');
+    fireEvent.change(select, { target: { value: 'vend-1' } });
+
     await waitFor(() => screen.getByText('Arroz 5kg'));
 
-    const btnsPlus = screen.getAllByRole('button').filter(b => b.textContent?.trim() === '+');
-    if (btnsPlus.length > 0) fireEvent.click(btnsPlus[0]);
+    fireEvent.click(screen.getByRole('button', { name: /incluir na entrega/i }));
 
     fireEvent.click(screen.getByRole('button', { name: /visualizar nota/i }));
 
@@ -206,11 +208,13 @@ describe('EntregaAvulsa', () => {
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: /nova entrega/i }));
     await waitFor(() => screen.getByText('João Autônomo'));
-    fireEvent.click(screen.getByText('João Autônomo'));
+
+    const select = screen.getByRole('combobox');
+    fireEvent.change(select, { target: { value: 'vend-1' } });
+
     await waitFor(() => screen.getByText('Arroz 5kg'));
 
-    const btnsPlus = screen.getAllByRole('button').filter(b => b.textContent?.trim() === '+');
-    if (btnsPlus.length > 0) fireEvent.click(btnsPlus[0]);
+    fireEvent.click(screen.getByRole('button', { name: /incluir na entrega/i }));
 
     fireEvent.click(screen.getByRole('button', { name: /visualizar nota/i }));
 
@@ -253,10 +257,14 @@ describe('EntregaAvulsa', () => {
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: /nova entrega/i }));
     await waitFor(() => screen.getByText('João Autônomo'));
-    fireEvent.click(screen.getByText('João Autônomo'));
+
+    const select = screen.getByRole('combobox');
+    fireEvent.change(select, { target: { value: 'vend-1' } });
+
     await waitFor(() => screen.getByText('Arroz 5kg'));
-    const btnsPlus = screen.getAllByRole('button').filter(b => b.textContent?.trim() === '+');
-    if (btnsPlus.length > 0) fireEvent.click(btnsPlus[0]);
+
+    fireEvent.click(screen.getByRole('button', { name: /incluir na entrega/i }));
+
     fireEvent.click(screen.getByRole('button', { name: /visualizar nota/i }));
 
     await waitFor(() => {
@@ -295,10 +303,14 @@ describe('EntregaAvulsa', () => {
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: /nova entrega/i }));
     await waitFor(() => screen.getByText('João Autônomo'));
-    fireEvent.click(screen.getByText('João Autônomo'));
+
+    const select = screen.getByRole('combobox');
+    fireEvent.change(select, { target: { value: 'vend-1' } });
+
     await waitFor(() => screen.getByText('Arroz 5kg'));
-    const btnsPlus = screen.getAllByRole('button').filter(b => b.textContent?.trim() === '+');
-    if (btnsPlus.length > 0) fireEvent.click(btnsPlus[0]);
+
+    fireEvent.click(screen.getByRole('button', { name: /incluir na entrega/i }));
+
     fireEvent.click(screen.getByRole('button', { name: /visualizar nota/i }));
     await waitFor(() => screen.getByRole('button', { name: /voltar/i }));
     fireEvent.click(screen.getByRole('button', { name: /voltar/i }));

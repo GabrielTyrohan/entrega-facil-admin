@@ -526,7 +526,7 @@ const CestasVendedor: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-xs text-gray-500 dark:text-gray-400">
-                        {cesta.itens.length} produtos diferentes
+                        {(cesta.itens ?? []).length} produtos diferentes
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
