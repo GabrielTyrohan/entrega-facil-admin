@@ -23,6 +23,7 @@ const NovaCestaBase: React.FC = () => {
   const createCestaBaseMutation = useCreateCestaBase();
 
   const [nomeCesta, setNomeCesta] = useState<string>('');
+  const [codigoCesta, setCodigoCesta] = useState<string>('');
   const [descricao, setDescricao] = useState<string>('');
   const [precoFinalStr, setPrecoFinalStr] = useState<string>('');
   
@@ -136,6 +137,7 @@ const NovaCestaBase: React.FC = () => {
     try {
       await createCestaBaseMutation.mutateAsync({
         nome: nomeCesta.trim(),
+        codigo: codigoCesta.trim() || undefined,
         descricao: descricao.trim() || undefined,
         preco: precoFinalNumber,
         itens: itensCesta.map(item => ({
@@ -204,6 +206,19 @@ const NovaCestaBase: React.FC = () => {
                 }`}
               />
               {errors.nome && <p className="text-red-500 dark:text-red-400 text-xs mt-1">{errors.nome}</p>}
+            </div>
+
+            <div className="md:col-span-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Código <span className="text-gray-400 font-normal">(opcional)</span>
+              </label>
+              <input
+                type="text"
+                value={codigoCesta}
+                onChange={e => setCodigoCesta(e.target.value.toUpperCase())}
+                placeholder="Ex: CESTA-P"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              />
             </div>
 
             <div className="md:col-span-1">
