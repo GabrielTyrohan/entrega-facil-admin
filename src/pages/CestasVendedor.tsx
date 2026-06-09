@@ -250,6 +250,7 @@ const CestasVendedor: React.FC = () => {
       dataEmissao: new Date().toLocaleDateString('pt-BR'),
       dataEntrega: new Date().toLocaleDateString('pt-BR'),
       dataVencimento: new Date().toLocaleDateString('pt-BR'),
+      vendedorInterno: (userProfile as any)?.nome || user?.email || 'Não identificado',
       vendedor: {
         codigo: vendedorData.id?.slice(0, 8) || '',
         nome: vendedorData.nome || '',

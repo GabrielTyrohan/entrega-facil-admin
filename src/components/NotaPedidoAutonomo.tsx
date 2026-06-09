@@ -10,14 +10,10 @@ export interface NotaPedidoProps {
     codigo: string;
     nome: string;
     cpfCnpj: string;
-    rg?: string;
     telefone?: string;
     endereco: string;
-    numero?: string;
-    bairro?: string;
-    cidade?: string;
-    estado?: string;
   };
+  vendedorInterno: string;
   empresa: {
     nome: string;
     telefone: string;
@@ -42,6 +38,7 @@ const NotaPedidoAutonomo: React.FC<NotaPedidoProps> = ({
   dataEntrega,
   dataVencimento,
   vendedor,
+  vendedorInterno,
   empresa,
   itens,
   quantidadeTotal,
@@ -84,7 +81,7 @@ const NotaPedidoAutonomo: React.FC<NotaPedidoProps> = ({
           <div className="flex justify-between px-3 py-1.5 border-b border-gray-400 text-[11px]">
             <div>
               <span className="font-semibold">VENDEDOR(A):</span>{' '}
-              {vendedor.codigo} - {vendedor.nome}
+              {vendedorInterno}
             </div>
             <div>
               <span className="font-semibold">DATA DO PEDIDO:</span> {dataEmissao}
@@ -94,14 +91,11 @@ const NotaPedidoAutonomo: React.FC<NotaPedidoProps> = ({
           {/* Dados do Cliente (Vendedor Autônomo) */}
           <div className="px-3 py-2 border-b border-gray-400 space-y-1">
             <div>
-              <span className="font-semibold">CÓD/CLIENTE:</span> {vendedor.codigo} — {vendedor.nome}
+              <span className="font-semibold">CLIENTE:</span> {vendedor.nome}
             </div>
             <div className="flex gap-6">
               <div>
                 <span className="font-semibold">CPF/CNPJ:</span> {vendedor.cpfCnpj || '—'}
-              </div>
-              <div>
-                <span className="font-semibold">RG/IE:</span> {vendedor.rg || '—'}
               </div>
               <div>
                 <span className="font-semibold">TELEFONE:</span> {vendedor.telefone || '—'}
@@ -109,18 +103,6 @@ const NotaPedidoAutonomo: React.FC<NotaPedidoProps> = ({
             </div>
             <div>
               <span className="font-semibold">ENDEREÇO:</span> {vendedor.endereco || '—'}
-              {vendedor.numero ? `, ${vendedor.numero}` : ''}
-            </div>
-            <div className="flex gap-6">
-              <div>
-                <span className="font-semibold">BAIRRO:</span> {vendedor.bairro || '—'}
-              </div>
-              <div>
-                <span className="font-semibold">CIDADE:</span> {vendedor.cidade || '—'}
-              </div>
-              <div>
-                <span className="font-semibold">ESTADO:</span> {vendedor.estado || '—'}
-              </div>
             </div>
           </div>
 
