@@ -53,6 +53,7 @@ const CestasVendedor: React.FC = () => {
   const [obsEntrega, setObsEntrega] = useState('');
   const [dadosNotaAutonomo, setDadosNotaAutonomo] = useState<NotaPedidoProps | null>(null);
   const [notaParaImprimir, setNotaParaImprimir] = useState<NotaPedidoProps | null>(null);
+  const [isConfirmandoEntrega, setIsConfirmandoEntrega] = useState(false);
 
   // ── IDs dos produtos da cesta selecionada (modal Emitir) ──
   const produtoIdsEmitir = useMemo(() => {
@@ -272,13 +273,14 @@ const CestasVendedor: React.FC = () => {
 
   // ── Confirmar entrega em lote ──
   const handleConfirmarEntregaLote = async () => {
+    if (isConfirmandoEntrega) return;
     const cestasComQtd = cestasNoLote.filter(c => c.qtd > 0);
     if (!modalEntregaLote || cestasComQtd.length === 0) return;
 
-    // Salvar snapshot ANTES de zerar o modal
     const vendedorIdSnapshot = modalEntregaLote.vendedorId;
     const vendedorNomeSnapshot = modalEntregaLote.vendedorNome;
 
+    setIsConfirmandoEntrega(true);
     let ultimoId = '';
 
     try {
@@ -301,16 +303,18 @@ const CestasVendedor: React.FC = () => {
 
       if (dadosNotaAutonomo) {
         const dadosFinais = { ...dadosNotaAutonomo, numeroPedido: ultimoId };
-        setNotaParaImprimir(dadosFinais); // mantém no DOM
+        setNotaParaImprimir(dadosFinais);
         setTimeout(async () => {
           await gerarPdfNotaComDados(dadosFinais, vendedorIdSnapshot, vendedorNomeSnapshot);
-          setNotaParaImprimir(null); // remove só depois de gerar
+          setNotaParaImprimir(null);
         }, 300);
       }
 
       await refetch();
     } catch (err: any) {
       toast.error(err?.message || 'Erro ao registrar entrega.');
+    } finally {
+      setIsConfirmandoEntrega(false);
     }
   };
 
@@ -330,7 +334,17 @@ const CestasVendedor: React.FC = () => {
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     };
 
-    const blob: Blob = await (window as any).html2pdf().set(opt).from(elemento).outputBlob();
+    const blob: Blob = await new Promise((resolve) => {
+      (window as any).html2pdf()
+        .set(opt)
+        .from(elemento)
+        .toPdf()
+        .get('pdf')
+        .then((pdf: any) => {
+          const out = pdf.output('blob');
+          resolve(out);
+        });
+    });
 
     await salvarESalvarPdf(blob, {
       adminId: adminId!,
@@ -969,10 +983,10 @@ const CestasVendedor: React.FC = () => {
                   </button>
                   <button
                     onClick={handleConfirmarEntregaLote}
-                    disabled={entregarCestasMutation.isPending}
+                    disabled={isConfirmandoEntrega}
                     className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
                   >
-                    {entregarCestasMutation.isPending
+                    {isConfirmandoEntrega
                       ? <Loader2 size={16} className="animate-spin" />
                       : <><Package size={16} /> Confirmar e Gerar PDF</>
                     }
