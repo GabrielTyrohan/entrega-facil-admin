@@ -280,11 +280,15 @@ const CestasVendedor: React.FC = () => {
     const vendedorIdSnapshot = modalEntregaLote.vendedorId;
     const vendedorNomeSnapshot = modalEntregaLote.vendedorNome;
 
+    // Zera imediatamente para evitar que re-renders recalculem cestasComQtd
+    setCestasNoLote(prev => prev.map(c => ({ ...c, qtd: 0 })));
     setIsConfirmandoEntrega(true);
+
     let ultimoId = '';
 
     try {
       for (const cestaLote of cestasComQtd) {
+        console.log('[entrega] cesta:', cestaLote.cestaNome, 'qtd:', cestaLote.qtd); // remover depois
         const result = await entregarCestasMutation.mutateAsync({
           administrador_id: adminId!,
           vendedor_id: vendedorIdSnapshot,
@@ -313,6 +317,8 @@ const CestasVendedor: React.FC = () => {
       await refetch();
     } catch (err: any) {
       toast.error(err?.message || 'Erro ao registrar entrega.');
+      // Se falhou, restaura as quantidades para o usuário poder tentar de novo
+      setCestasNoLote(cestasComQtd.map(c => ({ ...c })));
     } finally {
       setIsConfirmandoEntrega(false);
     }
