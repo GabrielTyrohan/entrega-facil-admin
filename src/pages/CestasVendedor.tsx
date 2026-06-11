@@ -274,13 +274,17 @@ const CestasVendedor: React.FC = () => {
     const cestasComQtd = cestasNoLote.filter(c => c.qtd > 0);
     if (!modalEntregaLote || cestasComQtd.length === 0) return;
 
+    // Salvar snapshot ANTES de zerar o modal
+    const vendedorIdSnapshot = modalEntregaLote.vendedorId;
+    const vendedorNomeSnapshot = modalEntregaLote.vendedorNome;
+
     let ultimoId = '';
 
     try {
       for (const cestaLote of cestasComQtd) {
         const result = await entregarCestasMutation.mutateAsync({
           administrador_id: adminId!,
-          vendedor_id: modalEntregaLote.vendedorId,
+          vendedor_id: vendedorIdSnapshot,
           cesta_id: cestaLote.cestaId,
           quantidade: cestaLote.qtd,
           usuario_id: user?.id,
@@ -290,13 +294,14 @@ const CestasVendedor: React.FC = () => {
         if (result?.id) ultimoId = result.id.slice(0, 8).toUpperCase();
       }
 
-      toast.success(`Entrega registrada: ${cestasComQtd.length} tipo(s) de cesta para ${modalEntregaLote.vendedorNome}`);
+      toast.success(`Entrega registrada: ${cestasComQtd.length} tipo(s) de cesta para ${vendedorNomeSnapshot}`);
       setModalEntregaLote(null);
       setEtapaLote(1);
 
       if (dadosNotaAutonomo) {
-        setDadosNotaAutonomo(prev => prev ? { ...prev, numeroPedido: ultimoId } : prev);
-        setTimeout(() => gerarPdfNota(), 300);
+        const dadosFinais = { ...dadosNotaAutonomo, numeroPedido: ultimoId };
+        setDadosNotaAutonomo(dadosFinais);
+        setTimeout(() => gerarPdfNotaComDados(dadosFinais, vendedorIdSnapshot, vendedorNomeSnapshot), 300);
       }
 
       await refetch();
@@ -305,27 +310,31 @@ const CestasVendedor: React.FC = () => {
     }
   };
 
-  const gerarPdfNota = async () => {
+  const gerarPdfNotaComDados = async (
+    dados: NotaPedidoProps,
+    vendedorId: string,
+    vendedorNome: string
+  ) => {
     const elemento = document.getElementById('nota-pedido');
     if (!elemento) return;
 
     const opt = {
-      margin:      [8, 8, 8, 8],
-      filename:    `nota-${modalEntregaLote?.vendedorNome?.replace(/\s+/g, '_') ?? 'pedido'}.pdf`,
-      image:       { type: 'jpeg', quality: 0.98 },
+      margin: [8, 8, 8, 8],
+      filename: `nota-${vendedorNome.replace(/\s+/g, '_')}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true },
-      jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     };
 
     const blob: Blob = await (window as any).html2pdf().set(opt).from(elemento).outputBlob();
 
     await salvarESalvarPdf(blob, {
-      adminId:      adminId!,
-      vendedorId:   modalEntregaLote?.vendedorId,
-      vendedorNome: modalEntregaLote?.vendedorNome ?? 'vendedor',
-      tipo:         'cesta',
-      numeroPedido: dadosNotaAutonomo?.numeroPedido ?? 'sem-numero',
-      filename:     opt.filename,
+      adminId: adminId!,
+      vendedorId,
+      vendedorNome,
+      tipo: 'cesta',
+      numeroPedido: dados.numeroPedido ?? 'sem-numero',
+      filename: opt.filename,
     });
   };
 
