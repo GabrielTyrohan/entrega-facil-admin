@@ -30,7 +30,19 @@ vi.mock('../../contexts/AuthContext', () => ({
 }));
 
 const mockCestas = [
-  { id: 'cesta-1', cesta_nome: 'Cesta Básica', cesta_id: 'cb-1', status: 'em_uso', vendedor_id: 'vend-1', vendedor_nome: 'João Autônomo', quantidade: 2, cesta_base_codigo: '000001' },
+  {
+    id: 'cesta-1',
+    cesta_nome: 'Cesta Básica',
+    cesta_id: 'cb-1',
+    status: 'em_uso',
+    vendedor_id: 'vend-1',
+    vendedor_nome: 'João Autônomo',
+    quantidade: 2,
+    cesta_base_codigo: '000001',
+    itens: [
+      { produto: { id: 'prod-1', qtd_estoque: 20 }, quantidade: 2 },
+    ],
+  },
 ];
 
 vi.mock('../../hooks/useCestas', () => ({

@@ -87,6 +87,21 @@ const CestasVendedor: React.FC = () => {
     return map;
   }, [estoqueAtualEmitir]);
 
+  // ── MaxQtd dinâmico por cesta (estoque vivo da query) ──
+  const maxQtdMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    cestas.forEach(cesta => {
+      let max = Infinity;
+      for (const item of cesta.itens ?? []) {
+        const estoque = item.produto?.qtd_estoque ?? 0;
+        const possivel = Math.floor(estoque / item.quantidade);
+        if (possivel < max) max = possivel;
+      }
+      map[cesta.id] = max === Infinity ? 0 : max;
+    });
+    return map;
+  }, [cestas]);
+
   useEffect(() => {
     let filtered = cestas;
 
@@ -899,42 +914,45 @@ const CestasVendedor: React.FC = () => {
                     Informe a quantidade a entregar de cada cesta. Cestas com estoque insuficiente estão desativadas.
                   </p>
                   <div className="space-y-3">
-                    {cestasNoLote.map((item, idx) => (
-                      <div
-                        key={item.cestaId}
-                        className={`flex items-center gap-4 p-3 rounded-xl border ${
-                          item.maxQtd === 0
-                            ? 'border-red-200 bg-red-50 dark:bg-red-900/10 opacity-60'
-                            : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/40'
-                        }`}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">{item.cestaNome}</p>
-                          <p className="text-xs text-gray-500">
-                            {item.maxQtd === 0 ? 'Sem estoque' : `Máx: ${item.maxQtd} cestas`}
-                          </p>
+                    {cestasNoLote.map((item, idx) => {
+                      const estoqueAtual = maxQtdMap[item.cestaId] ?? 0;
+                      return (
+                        <div
+                          key={item.cestaId}
+                          className={`flex items-center gap-4 p-3 rounded-xl border ${
+                            estoqueAtual === 0
+                              ? 'border-red-200 bg-red-50 dark:bg-red-900/10 opacity-60'
+                              : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/40'
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">{item.cestaNome}</p>
+                            <p className="text-xs text-gray-500">
+                              {estoqueAtual === 0 ? 'Sem estoque' : `Máx: ${estoqueAtual} cestas`}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              disabled={estoqueAtual === 0 || item.qtd <= 0}
+                              onClick={() => setCestasNoLote(prev =>
+                                prev.map((c, i) => i === idx ? { ...c, qtd: Math.max(0, c.qtd - 1) } : c)
+                              )}
+                              className="w-8 h-8 rounded-lg border border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40"
+                            >−</button>
+                            <span className="w-8 text-center text-sm font-bold text-gray-900 dark:text-white">
+                              {item.qtd}
+                            </span>
+                            <button
+                              disabled={estoqueAtual === 0 || item.qtd >= estoqueAtual}
+                              onClick={() => setCestasNoLote(prev =>
+                                prev.map((c, i) => i === idx ? { ...c, qtd: Math.min(estoqueAtual, c.qtd + 1) } : c)
+                              )}
+                              className="w-8 h-8 rounded-lg border border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40"
+                            >+</button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <button
-                            disabled={item.maxQtd === 0 || item.qtd <= 0}
-                            onClick={() => setCestasNoLote(prev =>
-                              prev.map((c, i) => i === idx ? { ...c, qtd: Math.max(0, c.qtd - 1) } : c)
-                            )}
-                            className="w-8 h-8 rounded-lg border border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40"
-                          >−</button>
-                          <span className="w-8 text-center text-sm font-bold text-gray-900 dark:text-white">
-                            {item.qtd}
-                          </span>
-                          <button
-                            disabled={item.maxQtd === 0 || item.qtd >= item.maxQtd}
-                            onClick={() => setCestasNoLote(prev =>
-                              prev.map((c, i) => i === idx ? { ...c, qtd: Math.min(c.maxQtd, c.qtd + 1) } : c)
-                            )}
-                            className="w-8 h-8 rounded-lg border border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40"
-                          >+</button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* Observação */}
