@@ -31,6 +31,8 @@ export default function HistoricoPdfs() {
       return data ?? [];
     },
     enabled: !!adminId,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
   const notasFiltradas = notas.filter((n) => {

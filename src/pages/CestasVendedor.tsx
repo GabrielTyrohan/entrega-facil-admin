@@ -288,7 +288,6 @@ const CestasVendedor: React.FC = () => {
 
     try {
       for (const cestaLote of cestasComQtd) {
-        console.log('[entrega] cesta:', cestaLote.cestaNome, 'qtd:', cestaLote.qtd); // remover depois
         const result = await entregarCestasMutation.mutateAsync({
           administrador_id: adminId!,
           vendedor_id: vendedorIdSnapshot,
@@ -315,6 +314,7 @@ const CestasVendedor: React.FC = () => {
       }
 
       await refetch();
+      queryClient.invalidateQueries({ queryKey: ['notas_pdf'] }); // invalida cache do histórico
     } catch (err: any) {
       toast.error(err?.message || 'Erro ao registrar entrega.');
       // Se falhou, restaura as quantidades para o usuário poder tentar de novo
