@@ -52,6 +52,7 @@ const CestasVendedor: React.FC = () => {
   const [etapaLote, setEtapaLote] = useState<1 | 2>(1);
   const [obsEntrega, setObsEntrega] = useState('');
   const [dadosNotaAutonomo, setDadosNotaAutonomo] = useState<NotaPedidoProps | null>(null);
+  const [notaParaImprimir, setNotaParaImprimir] = useState<NotaPedidoProps | null>(null);
 
   // ── IDs dos produtos da cesta selecionada (modal Emitir) ──
   const produtoIdsEmitir = useMemo(() => {
@@ -300,8 +301,11 @@ const CestasVendedor: React.FC = () => {
 
       if (dadosNotaAutonomo) {
         const dadosFinais = { ...dadosNotaAutonomo, numeroPedido: ultimoId };
-        setDadosNotaAutonomo(dadosFinais);
-        setTimeout(() => gerarPdfNotaComDados(dadosFinais, vendedorIdSnapshot, vendedorNomeSnapshot), 300);
+        setNotaParaImprimir(dadosFinais); // mantém no DOM
+        setTimeout(async () => {
+          await gerarPdfNotaComDados(dadosFinais, vendedorIdSnapshot, vendedorNomeSnapshot);
+          setNotaParaImprimir(null); // remove só depois de gerar
+        }, 300);
       }
 
       await refetch();
@@ -1015,6 +1019,13 @@ const CestasVendedor: React.FC = () => {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Nota oculta para geração de PDF */}
+      {notaParaImprimir && (
+        <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -1 }}>
+          <NotaPedidoAutonomo {...notaParaImprimir} />
         </div>
       )}
 
