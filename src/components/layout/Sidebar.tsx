@@ -187,6 +187,13 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
       icon: <Truck className="w-5 h-5" />,
       group: 'Operacional'
     },
+    {
+      path: '/historico-pdfs',
+      label: 'Histórico de Notas',
+      icon: <FileText className="w-5 h-5" />,
+      adminOnly: true,
+      group: 'Operacional',
+    },
     
     // FINANCEIRO
     {

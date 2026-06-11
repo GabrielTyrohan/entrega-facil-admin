@@ -29,6 +29,7 @@ import { useProdutos } from '../hooks/useProdutos';
 import { useVendedoresByAdmin } from '../hooks/useVendedores';
 import { supabase } from '../lib/supabase';
 import { movimentarEstoque } from '../utils/movimentarEstoque';
+import { salvarESalvarPdf } from '../utils/pdfStorage';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -289,17 +290,28 @@ const EntregaAvulsa: React.FC = () => {
     } finally { setIsConfirmando(false); }
   };
 
-  const gerarPdfNotaAvulsa = (nomeVendedor: string) => {
+  const gerarPdfNotaAvulsa = async (nomeVendedor: string) => {
     const elemento = document.getElementById('nota-pedido-avulsa');
     if (!elemento) return;
+
     const opt = {
-      margin: [8, 8, 8, 8],
-      filename: `nota-avulsa-${nomeVendedor.replace(/\s+/g, '_')}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
+      margin:      [8, 8, 8, 8],
+      filename:    `nota-avulsa-${nomeVendedor.replace(/\s+/g, '_')}.pdf`,
+      image:       { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' },
     };
-    (window as any).html2pdf().set(opt).from(elemento).save();
+
+    const blob: Blob = await (window as any).html2pdf().set(opt).from(elemento).outputBlob();
+
+    await salvarESalvarPdf(blob, {
+      adminId:      adminId!,
+      vendedorId:   vendedorSelecionado?.id,
+      vendedorNome: nomeVendedor,
+      tipo:         'avulsa',
+      numeroPedido: dadosNotaAvulsa?.numeroPedido ?? 'sem-numero',
+      filename:     opt.filename,
+    });
   };
 
   const handleVisualizarNotaAvulsa = async () => {

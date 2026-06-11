@@ -17,6 +17,7 @@ import type { NotaPedidoProps } from '../components/NotaPedidoAutonomo';
 import { CestaData, useCestas, useEntregarCestas } from '../hooks/useCestas';
 import { supabase } from '../lib/supabase';
 import { CestaService } from '../services/cestaService';
+import { salvarESalvarPdf } from '../utils/pdfStorage';
 
 
 type Cesta = CestaData;
@@ -304,7 +305,7 @@ const CestasVendedor: React.FC = () => {
     }
   };
 
-  const gerarPdfNota = () => {
+  const gerarPdfNota = async () => {
     const elemento = document.getElementById('nota-pedido');
     if (!elemento) return;
 
@@ -316,7 +317,16 @@ const CestasVendedor: React.FC = () => {
       jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' },
     };
 
-    (window as any).html2pdf().set(opt).from(elemento).save();
+    const blob: Blob = await (window as any).html2pdf().set(opt).from(elemento).outputBlob();
+
+    await salvarESalvarPdf(blob, {
+      adminId:      adminId!,
+      vendedorId:   modalEntregaLote?.vendedorId,
+      vendedorNome: modalEntregaLote?.vendedorNome ?? 'vendedor',
+      tipo:         'cesta',
+      numeroPedido: dadosNotaAutonomo?.numeroPedido ?? 'sem-numero',
+      filename:     opt.filename,
+    });
   };
 
   const getStatusColor = (status: string) => {

@@ -15,6 +15,7 @@ import Devedores from './pages/Devedores';
 import EditarVendedor from './pages/EditarVendedor';
 import EntregaAvulsa from './pages/EntregaAvulsa';
 import Entregas from './pages/Entregas';
+import HistoricoPdfs from './pages/HistoricoPdfs';
 import MovimentacoesEstoque from './pages/Estoque/MovimentacoesEstoque';
 import RelatorioEstoque from './pages/Estoque/RelatorioEstoque';
 import NovaEntrega from './pages/NovaEntrega';
@@ -130,6 +131,7 @@ function App() {
                           <Route path="/produtos/cestas/nova" element={<NovaCesta />} />
                           <Route path="/produtos/cestas/editar/:id" element={<EditarCesta />} />
                           <Route path="/entregas/avulsas" element={<EntregaAvulsa />} />
+                          <Route path="/historico-pdfs" element={<HistoricoPdfs />} />
 
                           {/* Rotas com <ExpedicaoGuard> */}
                           <Route path="/dashboard" element={<ExpedicaoGuard><Dashboard /></ExpedicaoGuard>} />
