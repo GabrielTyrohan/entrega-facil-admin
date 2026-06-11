@@ -332,9 +332,13 @@ const CestasVendedor: React.FC = () => {
     const elemento = document.getElementById('nota-pedido');
     if (!elemento) return;
 
+    const nomeSeguro = vendedorNome.replace(/\s+/g, '_');
+    const numeroSeguro = (dados.numeroPedido ?? 'SEM-NUM').replace(/[^a-zA-Z0-9]/g, '');
+    const filename = `nota-${nomeSeguro}-${numeroSeguro}.pdf`;
+
     const opt = {
       margin: [8, 8, 8, 8],
-      filename: `nota-${vendedorNome.replace(/\s+/g, '_')}.pdf`,
+      filename,
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
@@ -358,7 +362,7 @@ const CestasVendedor: React.FC = () => {
       vendedorNome,
       tipo: 'cesta',
       numeroPedido: dados.numeroPedido ?? 'sem-numero',
-      filename: opt.filename,
+      filename,
     });
   };
 
