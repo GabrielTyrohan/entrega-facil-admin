@@ -242,22 +242,31 @@ const NovaCesta: React.FC = () => {
 
       navigate('/produtos/cestas');
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
+      const msg =
+        (error as any)?.message ||
+        (error instanceof Error ? error.message : String(error));
 
-      if (msg.startsWith('CESTA_JA_EXISTE:')) {
-        const nomeCesta = msg.split(':')[1];
+      // Cesta duplicada — bloqueada pelo banco (409) ou pelo service
+      if (
+        msg.startsWith('CESTA_JA_EXISTE:') ||
+        msg.includes('uq_vendedor_cesta_base_ativa') ||
+        msg.includes('duplicate key') ||
+        (error as any)?.code === '23505'
+      ) {
+        const nomeCesta = msg.startsWith('CESTA_JA_EXISTE:')
+          ? msg.split(':')[1]
+          : cestaSelecionada?.nome ?? 'esta cesta';
+
         toast.error(
-          `Este vendedor já possui uma "${nomeCesta}" ativa. Para enviar mais unidades, use "Entregar em Lote".`,
+          `Este vendedor já possui "${nomeCesta}" ativa. Para enviar mais unidades, use "Entregar em Lote".`,
           { duration: 6000 }
         );
         return;
       }
 
-      if (error instanceof Error) {
-        setErrors({ submit: `Erro ao distribuir cesta: ${error.message}` });
-      } else {
-        setErrors({ submit: 'Erro inesperado ao distribuir cesta. Tente novamente.' });
-      }
+      // Erro genérico — mostra no banner
+      setErrors({ submit: `Erro ao emitir cesta: ${msg}` });
+
     } finally {
       setIsLoading(false);
     }
