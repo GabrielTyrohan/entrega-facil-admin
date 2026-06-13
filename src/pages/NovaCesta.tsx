@@ -259,7 +259,7 @@ const NovaCesta: React.FC = () => {
 
         toast.error(
           `Este vendedor já possui "${nomeCesta}" ativa. Para enviar mais unidades, use "Entregar em Lote".`,
-          { duration: 6000 }
+          { duration: 8000 }
         );
         return;
       }
