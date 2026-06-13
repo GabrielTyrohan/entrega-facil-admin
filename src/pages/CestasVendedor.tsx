@@ -48,7 +48,6 @@ const CestasVendedor: React.FC = () => {
     cestaNome: string;
     cestaBaseCodigo: string;
     qtd: number;
-    maxQtd: number;
   }>>([]);
   const [etapaLote, setEtapaLote] = useState<1 | 2>(1);
   const [obsEntrega, setObsEntrega] = useState('');
@@ -160,7 +159,6 @@ const CestasVendedor: React.FC = () => {
   const handleAbrirEntregaLote = async (vendedorId: string, vendedorNome: string) => {
     // Força dados frescos antes de calcular maxQtd
     await queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CESTAS] });
-    await queryClient.invalidateQueries({ queryKey: ['view_estoque_atual_emitir'] });
 
     const cestasDoVendedor = cestas.filter(
       c => c.vendedor_id === vendedorId && c.status === 'em_uso'
@@ -171,44 +169,12 @@ const CestasVendedor: React.FC = () => {
       return;
     }
 
-    const lote = await Promise.all(
-      cestasDoVendedor.map(async (cesta) => {
-        const { data: itens } = await supabase
-          .from('produtos_na_cesta')
-          .select(`quantidade, produtos_cadastrado!inner(id, qtd_estoque)`)
-          .eq('cesta_id', cesta.id);
-
-        const prodIds = (itens || []).map((i: any) => {
-          const p = Array.isArray(i.produtos_cadastrado) ? i.produtos_cadastrado[0] : i.produtos_cadastrado;
-          return p?.id;
-        }).filter(Boolean);
-
-        let estoqueMap: Record<string, number> = {};
-        if (prodIds.length > 0) {
-          const { data: estoqueData } = await supabase
-            .from('view_estoque_atual')
-            .select('id, qtd_estoque')
-            .in('id', prodIds);
-          (estoqueData || []).forEach((e: any) => { estoqueMap[e.id] = e.qtd_estoque; });
-        }
-
-        let maxQtd = Infinity;
-        for (const item of itens || []) {
-          const p = Array.isArray(item.produtos_cadastrado) ? item.produtos_cadastrado[0] : item.produtos_cadastrado;
-          const estoque = estoqueMap[p?.id] ?? p?.qtd_estoque ?? 0;
-          const possivel = Math.floor(estoque / item.quantidade);
-          if (possivel < maxQtd) maxQtd = possivel;
-        }
-
-        return {
-          cestaId: cesta.id,
-          cestaNome: cesta.cesta_nome,
-          cestaBaseCodigo: cesta.cesta_base_codigo || '',
-          qtd: 0,
-          maxQtd: maxQtd === Infinity ? 0 : maxQtd,
-        };
-      })
-    );
+    const lote = cestasDoVendedor.map(cesta => ({
+      cestaId: cesta.id,
+      cestaNome: cesta.cesta_nome,
+      cestaBaseCodigo: cesta.cesta_base_codigo || '',
+      qtd: 0,
+    }));
 
     setCestasNoLote(lote);
     setModalEntregaLote({ vendedorId, vendedorNome });
