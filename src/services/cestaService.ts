@@ -23,6 +23,7 @@ export interface ProdutoNaCesta {
 export interface CreateCestaData {
   nome: string;
   vendedor_id: string;
+  cesta_base_id?: string;
   descricao?: string;
   itens: {
     produto_cadastrado_id: string;
@@ -48,6 +49,21 @@ export class CestaService {
 
     if (vendedorError || !vendedor) {
       throw new Error('Vendedor não encontrado ou inativo');
+    }
+
+    // Bloquear duplicata: vendedor já tem cesta ativa desse tipo
+    if (cestaData.cesta_base_id) {
+      const { data: cestaExistente } = await supabase
+        .from('produtos')
+        .select('id, nome')
+        .eq('vendedor_id', cestaData.vendedor_id)
+        .eq('cesta_base_id', cestaData.cesta_base_id)
+        .eq('ativo', true)
+        .maybeSingle();
+
+      if (cestaExistente) {
+        throw new Error(`CESTA_JA_EXISTE:${cestaExistente.nome}`);
+      }
     }
 
     const produtoIds = cestaData.itens.map(item => item.produto_cadastrado_id);
@@ -80,6 +96,7 @@ export class CestaService {
         nome: nomeCesta,
         preco: precoTotal,
         vendedor_id: cestaData.vendedor_id,
+        cesta_base_id: cestaData.cesta_base_id || null,
         descricao: cestaData.descricao || 'Cesta de produtos',
         ativo: true,
         sincronizado: false

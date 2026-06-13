@@ -242,6 +242,17 @@ const NovaCesta: React.FC = () => {
 
       navigate('/produtos/cestas');
     } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+
+      if (msg.startsWith('CESTA_JA_EXISTE:')) {
+        const nomeCesta = msg.split(':')[1];
+        toast.error(
+          `Este vendedor já possui uma "${nomeCesta}" ativa. Para enviar mais unidades, use "Entregar em Lote".`,
+          { duration: 6000 }
+        );
+        return;
+      }
+
       if (error instanceof Error) {
         setErrors({ submit: `Erro ao distribuir cesta: ${error.message}` });
       } else {
