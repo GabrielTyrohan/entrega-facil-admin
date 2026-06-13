@@ -16,6 +16,7 @@ import NotaPedidoAutonomo from '../components/NotaPedidoAutonomo';
 import type { NotaPedidoProps } from '../components/NotaPedidoAutonomo';
 import { CestaData, useCestas, useEntregarCestas } from '../hooks/useCestas';
 import { supabase } from '../lib/supabase';
+import { CACHE_KEYS } from '../lib/supabaseCache';
 import { CestaService } from '../services/cestaService';
 import { salvarESalvarPdf } from '../utils/pdfStorage';
 
@@ -157,6 +158,10 @@ const CestasVendedor: React.FC = () => {
 
   // ── Abrir modal de entrega em lote ──
   const handleAbrirEntregaLote = async (vendedorId: string, vendedorNome: string) => {
+    // Força dados frescos antes de calcular maxQtd
+    await queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CESTAS] });
+    await queryClient.invalidateQueries({ queryKey: ['view_estoque_atual_emitir'] });
+
     const cestasDoVendedor = cestas.filter(
       c => c.vendedor_id === vendedorId && c.status === 'em_uso'
     );

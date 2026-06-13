@@ -172,7 +172,7 @@ export const useCestas = () => {
       }
     },
     enabled: !!user?.id,
-    staleTime: CACHE_TIMES.CESTAS.staleTime,
+    staleTime: 0,
     gcTime: CACHE_TIMES.CESTAS.gcTime
   });
 };
