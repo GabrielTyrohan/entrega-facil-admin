@@ -16,6 +16,7 @@ import {
   FileKey,
   FileText,
   LayoutDashboard,
+  Lock,
   LogOut,
   MessageSquare,
   Package,
@@ -32,7 +33,11 @@ import {
 } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { toast } from '@/utils/toast';
 import packageJson from '../../../package.json';
+
+export const MAINTENANCE_ROUTES = ['/vendas-atacado', '/orcamentos-pj'];
+const MAINTENANCE_MSG = 'Esta área está temporariamente indisponível por estar em manutenção. Em breve retornaremos com uma nova solução de emissão fiscal.';
 
 interface MenuItem {
   path: string;
@@ -42,6 +47,8 @@ interface MenuItem {
   adminOnly?: boolean;
   funcionarioOnly?: boolean;
   group?: string;
+  disabled?: boolean;
+  maintenanceMessage?: string;
 }
 
 interface SidebarProps {
@@ -229,14 +236,18 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
       label: 'Vendas Atacado',
       icon: <ShoppingCart className="w-5 h-5" />,
       permission: 'vendas_atacado',
-      group: 'Comercial'
+      group: 'Comercial',
+      disabled: true,
+      maintenanceMessage: MAINTENANCE_MSG,
     },
     {
       path: '/orcamentos-pj',
       label: 'Orçamento PJ',
       icon: <FileText className="w-5 h-5" />,
       permission: 'orcamentos_pj',
-      group: 'Comercial'
+      group: 'Comercial',
+      disabled: true,
+      maintenanceMessage: MAINTENANCE_MSG,
     },
     {
       path: '/tabela-precos',
@@ -402,6 +413,24 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
                 <div className={`space-y-1 ${!isPrincipal && !isGroupOpen ? 'hidden' : ''}`}>
                   {items.map((item) => {
                     const isActive = location.pathname === item.path;
+                    const isDisabled = item.disabled;
+
+                    if (isDisabled) {
+                      return (
+                        <div
+                          key={item.path}
+                          onClick={() => toast.info(item.maintenanceMessage || MAINTENANCE_MSG, { duration: 5000 })}
+                          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg
+                                    transition-all duration-200 cursor-not-allowed opacity-50
+                                    text-gray-400 dark:text-gray-600 ${!isPrincipal ? 'ml-2' : ''}`}
+                        >
+                          {item.icon}
+                          <span className="text-sm flex-1">{item.label}</span>
+                          <Lock className="w-4 h-4 shrink-0" />
+                        </div>
+                      );
+                    }
+
                     return (
                       <Link
                         key={item.path}
@@ -414,7 +443,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
                           isActive
                             ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium'
                             : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                        } ${!isPrincipal ? 'ml-2' : ''}`} // Indentação para itens dentro de grupos
+                        } ${!isPrincipal ? 'ml-2' : ''}`}
                       >
                         {item.icon}
                         <span className="text-sm">{item.label}</span>
