@@ -46,6 +46,8 @@ const NovaEntrega: React.FC = () => {
   const [selectedCliente, setSelectedCliente] = useState<any | null>(null);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [selectedVendedor, setSelectedVendedor] = useState<string>('');
+  const [cestaVendedor, setCestaVendedor] = useState<any | null>(null);
+  const [itensOriginais, setItensOriginais] = useState<CartItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Data Hooks
@@ -96,6 +98,39 @@ const NovaEntrega: React.FC = () => {
     enabled: currentStep === 3
   });
 
+  // Buscar cesta do vendedor quando vendedor e cesta base são selecionados
+  React.useEffect(() => {
+    const buscarCestaVendedor = async () => {
+      if (!selectedVendedor || !cestaSelecionadaId) {
+        setCestaVendedor(null);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('produtos')
+          .select('*')
+          .eq('vendedor_id', selectedVendedor)
+          .eq('cesta_base_id', cestaSelecionadaId)
+          .eq('ativo', true)
+          .single();
+
+        if (error) {
+          console.error('Erro ao buscar cesta do vendedor:', error);
+          setCestaVendedor(null);
+          return;
+        }
+
+        setCestaVendedor(data);
+      } catch (err) {
+        console.error('Erro ao buscar cesta do vendedor:', err);
+        setCestaVendedor(null);
+      }
+    };
+
+    buscarCestaVendedor();
+  }, [selectedVendedor, cestaSelecionadaId]);
+
   const cestaSelecionada = useMemo(() => {
     return cestasBase.find((c: any) => c.id === cestaSelecionadaId);
   }, [cestasBase, cestaSelecionadaId]);
@@ -114,15 +149,31 @@ const NovaEntrega: React.FC = () => {
           };
         });
       setCartItems(novosItens);
+      setItensOriginais(novosItens);
     } else {
       setCartItems([]);
+      setItensOriginais([]);
     }
   }, [cestaSelecionada]);
 
-  // Resumo de items
-  const totalValue = useMemo(() => {
+  // Calcular valor original dos itens (quando a cesta foi selecionada)
+  const valorOriginalItens = useMemo(() => {
+    return itensOriginais.reduce((acc, item) => acc + (item.quantidade * item.precoUnitario), 0);
+  }, [itensOriginais]);
+
+  // Calcular valor atual dos itens
+  const valorAtualItens = useMemo(() => {
     return cartItems.reduce((acc, item) => acc + (item.quantidade * item.precoUnitario), 0);
   }, [cartItems]);
+
+  // Valor base: cestaVendedor.preco (quando vendedor selecionado) ou cestaSelecionada.preco (fallback)
+  const valorBaseCesta = cestaVendedor?.preco ?? cestaSelecionada?.preco ?? 0;
+
+  // Valor final da entrega = valor-base + (valor atual - valor original)
+  const totalValue = useMemo(() => {
+    const diferenca = valorAtualItens - valorOriginalItens;
+    return valorBaseCesta + diferenca;
+  }, [valorBaseCesta, valorAtualItens, valorOriginalItens]);
 
   // Helpers
   const formatPhoneNumber = (phone: string | null | undefined) => {
@@ -195,7 +246,7 @@ const NovaEntrega: React.FC = () => {
   };
 
   const handleFinalize = async () => {
-    if (!selectedCliente || cartItems.length === 0 || !selectedVendedor) {
+    if (!selectedCliente || cartItems.length === 0 || !selectedVendedor || !cestaVendedor) {
       toast.error('Por favor, preencha todos os campos obrigatórios.');
       return;
     }
@@ -203,13 +254,10 @@ const NovaEntrega: React.FC = () => {
     setIsSubmitting(true);
     try {
       // 1. Create Entrega
-      // We use the first product as the "main" product for legacy compatibility
-      const mainProduct = cartItems[0];
-
       const entregaData = {
         cliente_id: selectedCliente.id,
         vendedor_id: selectedVendedor,
-        produto_id: mainProduct.produtoId, 
+        produto_id: cestaVendedor.id, // ID da cesta do vendedor na tabela produtos
         valor: totalValue,
         data_entrega: new Date().toISOString(),
         status_entrega: 'Pendente',
@@ -241,7 +289,6 @@ const NovaEntrega: React.FC = () => {
         .insert(itensData);
 
       if (itensError) {
-        // If items fail, we might want to delete the header or just warn
         console.error('Error creating items:', itensError);
         toast.error('Entrega criada, mas houve erro ao salvar os itens.');
       } else {
@@ -249,7 +296,7 @@ const NovaEntrega: React.FC = () => {
         
         // Invalidate queries
         queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
-        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CLIENTES] }); // Update client stats if any
+        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CLIENTES] });
         
         navigate('/entregas');
       }
@@ -489,9 +536,23 @@ const NovaEntrega: React.FC = () => {
                 </div>
               ))}
             </div>
-            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
-              <span className="font-bold text-gray-900 dark:text-white">Total</span>
-              <span className="font-bold text-xl text-blue-600 dark:text-blue-400">R$ {totalValue.toFixed(2)}</span>
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600 dark:text-gray-400">Valor base da cesta</span>
+                <span className="text-gray-900 dark:text-white">R$ {valorBaseCesta.toFixed(2)}</span>
+              </div>
+              {valorAtualItens !== valorOriginalItens && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600 dark:text-gray-400">Ajuste de itens</span>
+                  <span className={`${valorAtualItens > valorOriginalItens ? 'text-red-600' : 'text-green-600'}`}>
+                    {valorAtualItens > valorOriginalItens ? '+' : ''}R$ {(valorAtualItens - valorOriginalItens).toFixed(2)}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
+                <span className="font-bold text-gray-900 dark:text-white">Total</span>
+                <span className="font-bold text-xl text-blue-600 dark:text-blue-400">R$ {totalValue.toFixed(2)}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -529,6 +590,14 @@ const NovaEntrega: React.FC = () => {
               ))}
             </div>
           )}
+          
+          {selectedVendedor && !cestaVendedor && (
+            <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+              <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                Este vendedor não possui esta cesta disponível. Selecione outro vendedor.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -543,7 +612,7 @@ const NovaEntrega: React.FC = () => {
         
         <button
           onClick={handleFinalize}
-          disabled={isSubmitting || !selectedVendedor}
+          disabled={isSubmitting || !selectedVendedor || !cestaVendedor}
           className="px-8 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 shadow-lg"
         >
           {isSubmitting ? (
