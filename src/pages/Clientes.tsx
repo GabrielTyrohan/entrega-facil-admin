@@ -8,8 +8,10 @@ import {
 import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { PAGINATION } from '@/lib/constants/pagination';
-import { Edit, Eye, MoreHorizontal, Search, Trash2, UserPlus } from 'lucide-react';
+import { Edit, Eye, MoreHorizontal, Trash2, UserPlus } from 'lucide-react';
 import React, { useState } from 'react';
+import PageHeader from '../components/layout/PageHeader';
+import { TableContainer, TableEmptyState, TableErrorState, TableToolbar } from '../components/table';
 import ClienteModal from '../components/ui/ClienteModal';
 import ClientePJModal from '../components/ui/ClientePJModal';
 import EditClienteModal from '../components/ui/EditClienteModal';
@@ -48,9 +50,9 @@ const Clientes: React.FC = () => {
   }, [searchTerm]);
 
   // Usar hooks de cache para buscar dados
-  const { 
-    data: clientesDataFiltered = [], 
-    isLoading: isLoadingFiltered, 
+  const {
+    data: clientesDataFiltered = [],
+    isLoading: isLoadingFiltered,
     error: errorFiltered,
     refetch: refetchFiltered,
     totalPages: totalPagesFiltered,
@@ -62,11 +64,6 @@ const Clientes: React.FC = () => {
     search: debouncedSearchTerm || undefined,
     vendedor_id: selectedVendedor || undefined
   });
-
-  // Alias variables to satisfy linter usage checks
-  // They are used in render but linter might miss them if used only in JSX
-  const _error = errorFiltered;
-  const _refetch = refetchFiltered;
 
   // Buscar vendedores do admin
   const { 
@@ -103,6 +100,25 @@ const Clientes: React.FC = () => {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pt-BR');
+  };
+
+  const hasActiveFilters = searchTerm !== '' || selectedVendedor !== '';
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setDebouncedSearchTerm('');
+    setSelectedVendedor('');
+    setCurrentPage(0);
+  };
+
+  const formatEndereco = (cliente: Cliente) => {
+    return `${cliente.endereco || ''}${cliente.numero ? `, ${cliente.numero}` : ''}${cliente.Bairro || cliente.bairro ? `, ${cliente.Bairro || cliente.bairro}` : ''}${cliente.Cidade || cliente.cidade ? `, ${cliente.Cidade || cliente.cidade}` : ''}${cliente.Estado || cliente.estado ? ` - ${cliente.Estado || cliente.estado}` : ''}${cliente.cep ? `, CEP: ${cliente.cep}` : ''}${cliente.complemento ? `, ${cliente.complemento}` : ''}`.replace(/^, /g, '') || 'N/A';
+  };
+
+  const getClienteNome = (cliente: Cliente) => {
+    return cliente.tipo_pessoa === 'PJ'
+      ? cliente.responsavel_pj_nome
+      : `${cliente.nome}${cliente.sobrenome ? ' ' + cliente.sobrenome : ''}`;
   };
 
   const formatPhoneNumber = (phone: string | null | undefined) => {
@@ -150,7 +166,7 @@ const Clientes: React.FC = () => {
 
   if (isLoadingFinal) {
     return (
-      <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
+      <div className="space-y-4 sm:space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div className="space-y-2">
             <Skeleton className="h-8 w-48" />
@@ -222,71 +238,43 @@ const Clientes: React.FC = () => {
     );
   }
 
-  if (_error) {
+  if (errorFiltered) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Clientes</h1>
-            <p className="text-gray-600 dark:text-gray-400">Gerencie seus clientes</p>
-          </div>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-8 shadow-sm border border-gray-200 dark:border-gray-700">
-          <div className="text-center py-12">
-            <div className="mx-auto w-16 h-16 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-4">
-              <Search className="w-8 h-8 text-red-600 dark:text-red-400" />
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Erro ao carregar clientes</h3>
-            <p className="text-gray-500 dark:text-gray-400 mb-6">
-              Ocorreu um erro ao buscar os clientes. Tente novamente.
-            </p>
-            <button 
-              onClick={() => _refetch()}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-            >
-              Tentar Novamente
-            </button>
-          </div>
-        </div>
+      <div className="space-y-4 sm:space-y-6">
+        <PageHeader title="Clientes" description="Gerencie seus clientes" />
+        <TableErrorState onRetry={() => refetchFiltered()} />
       </div>
     );
   }
   return (
-    <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <div className="flex items-center gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Clientes</h1>
-            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">Gerencie seus clientes</p>
-          </div>
-        </div>
-        <button
-          onClick={() => setIsNovoClienteOpen(true)}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors shadow-sm hover:shadow-md w-full sm:w-auto justify-center"
-        >
-          <UserPlus size={20} />
-          <span>Novo Cliente</span>
-        </button>
-      </div>
+    <div className="space-y-4 sm:space-y-6">
+      <PageHeader
+        title="Clientes"
+        description="Gerencie seus clientes"
+        actions={
+          <button
+            onClick={() => setIsNovoClienteOpen(true)}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors shadow-sm hover:shadow-md w-full sm:w-auto justify-center"
+          >
+            <UserPlus size={20} />
+            <span>Novo Cliente</span>
+          </button>
+        }
+      />
 
-      {/* Filtros */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-        <div className="flex flex-col space-y-3 sm:space-y-4 lg:flex-row lg:space-y-0 lg:space-x-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar clientes..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2.5 sm:py-2 w-full border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent touch-manipulation"
-            />
-          </div>
-          
+      <TableToolbar
+        search={{
+          value: searchTerm,
+          onChange: setSearchTerm,
+          placeholder: 'Buscar clientes...',
+          ariaLabel: 'Buscar clientes',
+        }}
+        filters={
           <select
             value={selectedVendedor}
             onChange={(e) => setSelectedVendedor(e.target.value)}
-            className="px-4 py-2.5 sm:py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent touch-manipulation min-w-0 lg:min-w-[200px]"
+            aria-label="Filtrar por vendedor"
+            className="px-4 py-2.5 sm:py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent touch-manipulation min-w-0 w-full lg:w-auto lg:min-w-[200px]"
           >
             <option value="">Todos os vendedores</option>
             {vendedores.map((vendedor: Vendedor) => (
@@ -295,72 +283,76 @@ const Clientes: React.FC = () => {
               </option>
             ))}
           </select>
-        </div>
-        
-        {/* Informações de paginação */}
-        <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-          <span>
-             {totalCountFinal !== undefined ? `${totalCountFinal} clientes encontrados` : 'Carregando...'}
-          </span>
-          <span>
-            {itemsPerPage} por página
-          </span>
-        </div>
-      </div>
-
-      {/* Estado de erro */}
-      {_error && (
-        <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-lg mb-4 flex items-center justify-between">
-          <span>Erro ao carregar clientes. Tente novamente.</span>
-          <button 
-            onClick={() => _refetch()}
-            className="text-sm font-medium hover:underline"
-          >
-            Tentar novamente
-          </button>
-        </div>
-      )}
+        }
+        resultText={totalCountFinal !== undefined ? `${totalCountFinal} clientes encontrados` : 'Carregando...'}
+        trailingInfo={`${itemsPerPage} por página`}
+        onClearFilters={clearFilters}
+        hasActiveFilters={hasActiveFilters}
+      />
 
       {/* Tabela de Clientes */}
-      <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden ${isLoadingFinal ? 'opacity-50 pointer-events-none' : ''}`}>
-        <div className="overflow-x-auto">
+      <TableContainer>
           <table className="w-full min-w-[800px]">
-            <thead className="bg-gray-50 dark:bg-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0 z-10">
               <tr>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                   Cliente
                 </th>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden sm:table-cell">
+                <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden sm:table-cell">
                   Contato
                 </th>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden lg:table-cell">
+                <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden lg:table-cell">
                   Endereço
                 </th>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden md:table-cell">
+                <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden md:table-cell">
                   Vendedor
                 </th>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden lg:table-cell">
+                <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden lg:table-cell">
                   Data Cadastro
                 </th>
-                <th className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                <th scope="col" className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                   Ações
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
               {currentClientes.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-3 sm:px-6 py-8 sm:py-12 text-center">
-                    <div className="text-sm sm:text-base text-gray-500 dark:text-gray-400">
-                      {searchTerm || selectedVendedor ? 'Nenhum cliente encontrado com os critérios de busca.' : 'Nenhum cliente cadastrado ainda.'}
-                    </div>
-                  </td>
-                </tr>
+                hasActiveFilters ? (
+                  <TableEmptyState
+                    colSpan={6}
+                    title="Não encontramos resultados para os filtros atuais."
+                    action={
+                      <button
+                        type="button"
+                        onClick={clearFilters}
+                        className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        Limpar filtros
+                      </button>
+                    }
+                  />
+                ) : (
+                  <TableEmptyState
+                    colSpan={6}
+                    title="Nenhum cliente cadastrado"
+                    description="Cadastre seu primeiro cliente para começar."
+                    action={
+                      <button
+                        type="button"
+                        onClick={() => setIsNovoClienteOpen(true)}
+                        className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                      >
+                        <UserPlus size={20} />
+                        <span>Novo Cliente</span>
+                      </button>
+                    }
+                  />
+                )
               ) : (
                 currentClientes.map((cliente, index) => (
-                  <tr 
-                    key={cliente.id} 
-                    className="hover:bg-gray-50 dark:hover:bg-gray-700 animate-fade-in-up"
+                  <tr
+                    key={cliente.id}
+                    className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors animate-fade-in-up"
                     style={{ animationDelay: `${index * 75}ms` }}
                   >
                     <td className="px-3 sm:px-6 py-3 sm:py-4">
@@ -369,10 +361,8 @@ const Clientes: React.FC = () => {
                           {cliente.nome.charAt(0).toUpperCase()}
                         </div>
                         <div className="ml-3 min-w-0 flex-1">
-                          <div className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                          {cliente.tipo_pessoa === 'PJ'
-                            ? cliente.responsavel_pj_nome
-                            : `${cliente.nome}${cliente.sobrenome ? ' ' + cliente.sobrenome : ''}`}
+                          <div className="text-sm font-medium text-gray-900 dark:text-white truncate" title={getClienteNome(cliente) || undefined}>
+                          {getClienteNome(cliente)}
                           </div>
                           {/* Mobile-only info */}
                           <div className="sm:hidden mt-1 space-y-1">
@@ -390,8 +380,8 @@ const Clientes: React.FC = () => {
                       <div className="text-sm text-gray-900 dark:text-white">{formatPhoneNumber(cliente.telefone)}</div>
                     </td>
                     <td className="px-3 sm:px-6 py-3 sm:py-4 hidden lg:table-cell">
-                      <div className="text-sm text-gray-900 dark:text-white max-w-xs truncate">
-                        {`${cliente.endereco || ''}${cliente.numero ? `, ${cliente.numero}` : ''}${cliente.Bairro || cliente.bairro ? `, ${cliente.Bairro || cliente.bairro}` : ''}${cliente.Cidade || cliente.cidade ? `, ${cliente.Cidade || cliente.cidade}` : ''}${cliente.Estado || cliente.estado ? ` - ${cliente.Estado || cliente.estado}` : ''}${cliente.cep ? `, CEP: ${cliente.cep}` : ''}${cliente.complemento ? `, ${cliente.complemento}` : ''}`.replace(/^, /g, '') || 'N/A'}
+                      <div className="text-sm text-gray-900 dark:text-white max-w-xs truncate" title={formatEndereco(cliente)}>
+                        {formatEndereco(cliente)}
                       </div>
                     </td>
                     <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden md:table-cell">
@@ -405,7 +395,11 @@ const Clientes: React.FC = () => {
                     <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-right text-sm font-medium">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-2 touch-manipulation">
+                          <button
+                            aria-label={`Ações do cliente ${getClienteNome(cliente)}`}
+                            aria-haspopup="menu"
+                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-2 touch-manipulation"
+                          >
                             <MoreHorizontal className="w-4 h-4" />
                           </button>
                         </DropdownMenuTrigger>
@@ -433,8 +427,7 @@ const Clientes: React.FC = () => {
               )}
             </tbody>
           </table>
-        </div>
-      </div>
+      </TableContainer>
 
       {/* Paginação */}
       {totalPagesFiltered > 1 && (

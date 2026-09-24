@@ -1,7 +1,9 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Calendar, CreditCard, FileText, Key, Mail, MapPin, Phone, Save, User } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { QUERY_KEYS } from '../lib/constants/queryKeys';
 import { supabase } from '../lib/supabase';
 import { VendedorService } from '../services/vendedorService';
 import { toast } from '../utils/toast';
@@ -19,6 +21,7 @@ const EditarVendedor: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { user, adminId } = useAuth();
   const targetId = adminId || user?.id; // Usa adminId se for funcionário, ou user.id se for admin
+  const queryClient = useQueryClient();
 
   const [formData, setFormData] = useState({
     nome: '',
@@ -235,9 +238,8 @@ const EditarVendedor: React.FC = () => {
             telefone: formData.telefone,
             endereco: formData.endereco,
             ativo: formData.ativo,
-            percentualMinimo: formData.percentualMinimo,
-            diaFechamento: formData.diaFechamento,
-            dia_fechamento: formData.diaFechamento, // snake_case exigido pela coluna do banco
+            percentual_minimo: formData.percentualMinimo,
+            dia_fechamento: Number(formData.diaFechamento),
             tipo_vinculo: formData.tipoVinculo,    // 'representado' | 'autonomo'
           })
         }
@@ -247,6 +249,11 @@ const EditarVendedor: React.FC = () => {
         const error = await response.json();
         throw new Error(error.error || 'Erro ao atualizar vendedor');
       }
+
+      // Invalida a lista de vendedores ANTES de navegar (evita stale de 5 min)
+      await queryClient.invalidateQueries({
+        queryKey: [QUERY_KEYS.VENDEDORES]
+      });
 
       toast.success('Vendedor atualizado com sucesso!');
       navigate('/vendedores');

@@ -13,6 +13,7 @@ import {
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { Link } from 'react-router-dom';
+import PageHeader from '../components/layout/PageHeader';
 
 // ─── Tooltip ──────────────────────────────────────────────────────────────────
 const Tooltip: React.FC<{ text: string }> = ({ text }) => {
@@ -74,6 +75,23 @@ const Badge = ({
   );
 };
 
+// ─── DashboardSection ─────────────────────────────────────────────────────────
+const DashboardSection: React.FC<{
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}> = ({ title, description, children }) => (
+  <section className="space-y-4">
+    <div>
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h2>
+      {description && (
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{description}</p>
+      )}
+    </div>
+    {children}
+  </section>
+);
+
 // ─── StatCard ─────────────────────────────────────────────────────────────────
 interface StatCardProps {
   title: string;
@@ -86,13 +104,19 @@ interface StatCardProps {
   showChange?: boolean;
   subtitle?: string;
   tooltip?: string;
+  linkTo?: string;
+  linkLabel?: string;
+  linkAriaLabel?: string;
 }
 
 const StatCard: React.FC<StatCardProps> = ({
   title, value, change, changeType, icon: Icon,
-  color, isLoading, showChange = false, subtitle, tooltip
+  color, isLoading, showChange = false, subtitle, tooltip,
+  linkTo, linkLabel = 'Ver detalhes', linkAriaLabel,
 }) => (
-  <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+  <div className={`bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 h-full relative transition-shadow ${
+    linkTo ? 'has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-blue-500 hover:shadow-md hover:border-blue-200 dark:hover:border-blue-800' : ''
+  }`}>
     {isLoading ? (
       <div className="flex items-center justify-between">
         <div className="flex-1 min-w-0">
@@ -107,9 +131,9 @@ const StatCard: React.FC<StatCardProps> = ({
         <div className="flex-1 min-w-0 animate-fade-in-up">
           <div className="flex items-center gap-0.5 mb-1">
             <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 truncate">{title}</p>
-            {tooltip && <Tooltip text={tooltip} />}
+            {tooltip && <span className="relative z-10"><Tooltip text={tooltip} /></span>}
           </div>
-          <p className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white break-words">{value}</p>
+          <p className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 dark:text-white break-words">{value}</p>
           {subtitle && (
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{subtitle}</p>
           )}
@@ -132,6 +156,17 @@ const StatCard: React.FC<StatCardProps> = ({
         <div className={`w-10 h-10 sm:w-12 sm:h-12 ${color} rounded-lg flex items-center justify-center flex-shrink-0 ml-3`}>
           <Icon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
         </div>
+      </div>
+    )}
+    {!isLoading && linkTo && (
+      <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+        <Link
+          to={linkTo}
+          aria-label={linkAriaLabel || `${linkLabel}: ${title}`}
+          className="inline-flex items-center gap-1 text-xs sm:text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline focus-visible:outline-none after:absolute after:inset-0 after:content-[''] after:rounded-lg"
+        >
+          {linkLabel} <ArrowRight className="w-3.5 h-3.5" />
+        </Link>
       </div>
     )}
   </div>
@@ -170,7 +205,7 @@ const InadimplenciaCard: React.FC<{
           {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
         </div>
       ) : !data ? (
-        <p className="text-sm text-gray-500 text-center py-4">Sem dados</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">Não há dados suficientes para este período.</p>
       ) : (
         <div className="space-y-3">
           {faixas.map(f => (
@@ -822,6 +857,8 @@ const Dashboard: React.FC = () => {
       subtitle: taxaInadimplencia ? `${taxaInadimplencia}% do faturamento` : undefined,
       icon: AlertTriangle, color: 'bg-red-500',
       isLoading, showChange: false,
+      linkTo: '/devedores',
+      linkLabel: 'Ver devedores',
     },
     {
       title: 'Orçamentos PJ',
@@ -844,6 +881,8 @@ const Dashboard: React.FC = () => {
       changeType: stats?.percentualEntregas >= 0 ? 'increase' : 'decrease',
       icon: Truck, color: 'bg-green-500',
       isLoading, showChange: true,
+      linkTo: '/entregas',
+      linkLabel: 'Ver entregas',
     },
     {
       title: 'Entregas Hoje',
@@ -852,6 +891,8 @@ const Dashboard: React.FC = () => {
       subtitle: 'registradas hoje',
       icon: Calendar, color: 'bg-indigo-500',
       isLoading: loadingStates.entregasHoje, showChange: false,
+      linkTo: '/entregas',
+      linkLabel: 'Ver entregas',
     },
     {
       title: 'Vendedores Ativos',
@@ -859,46 +900,46 @@ const Dashboard: React.FC = () => {
       value: String(stats?.vendedoresAtivos || 0),
       icon: Users, color: 'bg-blue-500',
       isLoading, showChange: false,
+      linkTo: '/vendedores',
+      linkLabel: 'Ver vendedores',
     },
   ] as const;
 
   return (
-    <div className="space-y-6 sm:space-y-8 p-4 sm:p-6 lg:p-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0">
-        <div className="text-center sm:text-left">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
-          <p className="text-gray-600 dark:text-gray-400 text-sm sm:text-base flex flex-col sm:flex-row sm:items-center gap-2 mt-1">
-            Visão geral do sistema
-            {stats?.periodoInicio && stats?.periodoFim && (
-              <span className="bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 text-xs px-2.5 py-0.5 rounded-full inline-flex items-center">
-                <Calendar className="w-3.5 h-3.5 mr-1.5" />
-                {new Date(stats.periodoInicio + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} a {new Date(stats.periodoFim + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-              </span>
+    <div className="space-y-6 sm:space-y-8">
+      <PageHeader
+        title="Dashboard"
+        description="Visão geral da operação"
+        actions={
+          <div className="text-left sm:text-right">
+            {someLoading && (
+              <div className="flex items-center gap-2 justify-start sm:justify-end mb-2">
+                <Activity className="w-3 h-3 animate-pulse text-blue-500" />
+                <span className="text-xs text-gray-500">Atualizando...</span>
+              </div>
             )}
-          </p>
-        </div>
-        <div className="text-center sm:text-right">
-          {someLoading && (
-            <div className="flex items-center gap-2 justify-center sm:justify-end mb-2">
-              <Activity className="w-3 h-3 animate-pulse text-blue-500" />
-              <span className="text-xs text-gray-500">Atualizando...</span>
-            </div>
-          )}
-          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Data e hora</p>
-          <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white">
-            {formatDateTime(currentDateTime)}
-          </p>
-        </div>
-      </div>
+            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Data e hora</p>
+            <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white">
+              {formatDateTime(currentDateTime)}
+            </p>
+          </div>
+        }
+      >
+        {stats?.periodoInicio && stats?.periodoFim && (
+          <span className="bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 text-xs px-2.5 py-0.5 rounded-full inline-flex items-center">
+            <Calendar className="w-3.5 h-3.5 mr-1.5" />
+            {new Date(stats.periodoInicio + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} a {new Date(stats.periodoFim + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+          </span>
+        )}
+      </PageHeader>
 
-      {/* Stats */}
+      {/* SEÇÃO 1 — O que está acontecendo agora */}
       {!isExpedicao && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <DashboardSection title="Visão geral" description="Principais números da operação no período">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {statsRow1.map((stat, index) => <StatCard key={index} {...stat} />)}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {statsRow2.map((stat, index) => <StatCard key={index} {...stat} />)}
           </div>
           {/* Card de resumo de vendedores por tipo de vínculo */}
@@ -906,28 +947,28 @@ const Dashboard: React.FC = () => {
             data={vendedoresPorTipo}
             isLoading={loadingStates.vendedoresTipo}
           />
-        </div>
+        </DashboardSection>
       )}
 
-      {/* Gráfico mensal */}
-      {!isExpedicao && (
-        <FaturamentoMensalChart data={charts.faturamentoMensal} isLoading={loadingStates.grafico} />
-      )}
-
-      {/* Inadimplência + Estoque */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        {!isExpedicao && (
-          <InadimplenciaCard data={inadimplencia} isLoading={loadingStates.inadimplencia} />
-        )}
-        <EstoqueAlertsCard data={estoqueAlerts} isLoading={loadingStates.estoque} />
-      </div>
-
-      {/* Top Vendedores + Top Produtos */}
-      {!isExpedicao && (
+      {/* SEÇÃO 2 — O que precisa de atenção */}
+      <DashboardSection title="Atenção necessária" description="Itens que precisam de acompanhamento">
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <TopVendedoresCard data={vendedores} isLoading={loadingStates.vendedores} />
-          <TopProdutosCard data={topProdutos} isLoading={loadingStates.topProdutos} />
+          {!isExpedicao && (
+            <InadimplenciaCard data={inadimplencia} isLoading={loadingStates.inadimplencia} />
+          )}
+          <EstoqueAlertsCard data={estoqueAlerts} isLoading={loadingStates.estoque} />
         </div>
+      </DashboardSection>
+
+      {/* SEÇÃO 3 — O que quero analisar */}
+      {!isExpedicao && (
+        <DashboardSection title="Análises" description="Evolução e desempenho no período">
+          <FaturamentoMensalChart data={charts.faturamentoMensal} isLoading={loadingStates.grafico} />
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <TopVendedoresCard data={vendedores} isLoading={loadingStates.vendedores} />
+            <TopProdutosCard data={topProdutos} isLoading={loadingStates.topProdutos} />
+          </div>
+        </DashboardSection>
       )}
     </div>
   );

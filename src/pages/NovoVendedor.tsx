@@ -1,7 +1,9 @@
+import { useQueryClient } from '@tanstack/react-query';
 import React, { useState } from 'react';
 import { ArrowLeft, Save, User, Mail, Phone, Lock, MapPin, Calendar, FileText, CreditCard } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { QUERY_KEYS } from '../lib/constants/queryKeys';
 import { supabase } from '../lib/supabase';
 import { toast } from '../utils/toast';
 
@@ -15,7 +17,9 @@ interface DadosBancarios {
 
 const NovoVendedor: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, adminId } = useAuth();
+  const targetAdminId = adminId || user?.id;
+  const queryClient = useQueryClient();
 
   // Função para gerar senha numérica de 6 dígitos
   const gerarSenhaAleatoria = (): string => {
@@ -147,7 +151,7 @@ const NovoVendedor: React.FC = () => {
 
     // Chama a RPC function que cria o hash no backend
     const { data, error } = await supabase.rpc('criar_vendedor_com_hash', {
-      p_administrador_id: user?.id,
+      p_administrador_id: targetAdminId,
       p_nome: formData.nome,
       p_senha_plain: formData.senha, // Envia senha em texto plano (6 dígitos)
       p_telefone: formData.telefone || null,
@@ -189,6 +193,11 @@ const NovoVendedor: React.FC = () => {
     }
 
     // Mostrar senha ao admin com destaque
+    // Invalida a lista de vendedores ANTES de navegar (evita stale de 5 min)
+    await queryClient.invalidateQueries({
+      queryKey: [QUERY_KEYS.VENDEDORES]
+    });
+
     toast.success(
       `✅ Vendedor criado com sucesso!\n\n🔐 SENHA DE ACESSO: ${formData.senha}\n\n⚠️ Anote esta senha! Ela não poderá ser recuperada.`
     );

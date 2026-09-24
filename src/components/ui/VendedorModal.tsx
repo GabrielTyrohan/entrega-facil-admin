@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { X, Mail, Phone, Calendar, DollarSign, TrendingUp } from 'lucide-react';
 import type { Vendedor } from '../../hooks/useVendedores';
 import { useTotalVendasPorVendedor } from '../../hooks/useDashboard';
+import { useModalFocus } from './useModalFocus';
 
 interface VendedorModalProps {
   vendedor: Vendedor | null;
@@ -13,9 +14,12 @@ const VendedorModal: React.FC<VendedorModalProps> = ({ vendedor, isOpen, onClose
   // CORREÇÃO: Mover todos os hooks ANTES de qualquer early return
   // Hook para buscar total de vendas do vendedor
   const { data: totalVendas, isLoading: isLoadingVendas } = useTotalVendasPorVendedor(
-    vendedor?.id || '', 
+    vendedor?.id || '',
     { enabled: !!vendedor?.id && isOpen }
   );
+
+  const titleId = React.useId();
+  const panelRef = useModalFocus<HTMLDivElement>(isOpen);
 
   // Implementar fechamento com Esc
   useEffect(() => {
@@ -61,15 +65,24 @@ const VendedorModal: React.FC<VendedorModalProps> = ({ vendedor, isOpen, onClose
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4"
       onClick={handleBackdropClick}
     >
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-xs sm:max-w-lg md:max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-xs sm:max-w-lg md:max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col"
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-          <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 dark:text-white truncate pr-4">
+          <h2 id={titleId} className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 dark:text-white truncate pr-4">
             Detalhes do Vendedor
           </h2>
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors touch-manipulation flex-shrink-0"
+            aria-label="Fechar"
+            className="p-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors touch-manipulation flex-shrink-0"
           >
             <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           </button>

@@ -29,16 +29,15 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onLogout }) => {
     };
   }, []);
 
-  // Função para obter saudação baseada no horário
   const getGreeting = () => {
     const currentHour = new Date().getHours();
-    
+
     if (currentHour >= 5 && currentHour < 12) {
-      return 'Bom Dia!';
+      return 'Bom dia';
     } else if (currentHour >= 12 && currentHour < 18) {
-      return 'Boa Tarde!';
+      return 'Boa tarde';
     } else {
-      return 'Boa Noite!';
+      return 'Boa noite';
     }
   };
 
@@ -49,14 +48,15 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onLogout }) => {
         <div className="flex items-center min-w-0 flex-1">
           <button
             onClick={onMenuClick}
+            aria-label="Abrir menu"
             className="lg:hidden p-2 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-700 transition-colors touch-manipulation"
           >
             <Menu className="w-5 h-5" />
           </button>
-          
-          {/* Nome da empresa */}
+
+          {/* Saudação + nome da empresa */}
           <div className="hidden lg:block ml-4">
-            <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">{getGreeting()}</h4>
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{getGreeting()}</p>
             <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
               {userProfile?.nome_empresa || 'Empresa não configurada'}
             </h1>
@@ -68,6 +68,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onLogout }) => {
           {/* Theme toggle */}
           <button
             onClick={toggleTheme}
+            aria-label={theme === 'light' ? 'Ativar tema escuro' : 'Ativar tema claro'}
             className="p-2 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-700 transition-colors touch-manipulation"
           >
             {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
@@ -75,8 +76,11 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, onLogout }) => {
 
           {/* User menu */}
           <div className="relative" ref={menuRef}>
-            <button 
+            <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
+              aria-label="Abrir menu do usuário"
+              aria-haspopup="menu"
+              aria-expanded={isMenuOpen}
               className="flex items-center space-x-2 p-2 rounded-md text-gray-700 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-700 transition-colors touch-manipulation"
             >
               <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 text-white font-medium">

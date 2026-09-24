@@ -13,6 +13,12 @@ import { handleSupabaseError } from '@/utils/supabaseErrorHandler';
 import { toast } from '@/utils/toast';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+// Sanitiza texto de busca para uso em filtros PostgREST .or().
+// Remove apenas os caracteres que quebrariam a sintaxe da expressão
+// (vírgula separa condições; parênteses agrupam condições).
+// Espaços, acentos e demais caracteres são preservados.
+const sanitizeSearch = (search: string) => search.replace(/[,()]/g, '');
+
 // Interface Unificada (Mantendo campos legados para compatibilidade)
 export interface Cliente {
   id: string;
@@ -105,13 +111,14 @@ export const useClientes = (
       }
 
       // Busca por nome, telefone ou CPF (com suporte a PJ)
-      if (search) {
+      const sanitizedSearch = sanitizeSearch(search);
+      if (sanitizedSearch) {
         // Query para PF: busca em nome, sobrenome, telefone, cpf
-        const pfFilter = `and(tipo_pessoa.eq.PF,or(nome.ilike.%${search}%,sobrenome.ilike.%${search}%,telefone.ilike.%${search}%,cpf.ilike.%${search}%))`;
-        
+        const pfFilter = `and(tipo_pessoa.eq.PF,or(nome.ilike.%${sanitizedSearch}%,sobrenome.ilike.%${sanitizedSearch}%,telefone.ilike.%${sanitizedSearch}%,cpf.ilike.%${sanitizedSearch}%))`;
+
         // Query para PJ: busca em responsavel_pj_nome, telefone, cpf
-        const pjFilter = `and(tipo_pessoa.eq.PJ,or(responsavel_pj_nome.ilike.%${search}%,telefone.ilike.%${search}%,cpf.ilike.%${search}%))`;
-        
+        const pjFilter = `and(tipo_pessoa.eq.PJ,or(responsavel_pj_nome.ilike.%${sanitizedSearch}%,telefone.ilike.%${sanitizedSearch}%,cpf.ilike.%${sanitizedSearch}%))`;
+
         query = query.or(`${pfFilter},${pjFilter}`);
       }
 
@@ -188,13 +195,16 @@ export const useClientesLegacy = (options?: {
   }
 
   if (options?.search) {
-    const orFilter = `nome.ilike.%${options.search}%,email.ilike.%${options.search}%,telefone.ilike.%${options.search}%`;
-    query = query.or(orFilter);
+    const sanitizedSearch = sanitizeSearch(options.search);
+    if (sanitizedSearch) {
+      const orFilter = `nome.ilike.%${sanitizedSearch}%,email.ilike.%${sanitizedSearch}%,telefone.ilike.%${sanitizedSearch}%`;
+      query = query.or(orFilter);
+    }
   }
 
   const queryResult = useSupabaseQuery('CLIENTES', query, [
-    CACHE_KEYS.CLIENTES, 
-    'list', 
+    CACHE_KEYS.CLIENTES,
+    'list',
     { 
       ativo: options?.ativo, 
       search: options?.search,
@@ -268,14 +278,16 @@ export const useClientesByAdmin = (administradorId: string, options?: {
 
     if (options?.search) {
       // Lógica unificada para busca
-      const search = options.search;
-      // Query para PF: busca em nome, sobrenome, telefone, cpf, email
-      const pfFilter = `and(tipo_pessoa.eq.PF,or(nome.ilike.%${search}%,sobrenome.ilike.%${search}%,telefone.ilike.%${search}%,cpf.ilike.%${search}%,email.ilike.%${search}%))`;
-      
-      // Query para PJ: busca em responsavel_pj_nome, telefone, cpf, email, razao_social, nome_fantasia, cnpj
-      const pjFilter = `and(tipo_pessoa.eq.PJ,or(responsavel_pj_nome.ilike.%${search}%,telefone.ilike.%${search}%,cpf.ilike.%${search}%,email.ilike.%${search}%,razao_social.ilike.%${search}%,nome_fantasia.ilike.%${search}%,cnpj.ilike.%${search}%))`;
-      
-      query = query.or(`${pfFilter},${pjFilter}`);
+      const search = sanitizeSearch(options.search);
+      if (search) {
+        // Query para PF: busca em nome, sobrenome, telefone, cpf, email
+        const pfFilter = `and(tipo_pessoa.eq.PF,or(nome.ilike.%${search}%,sobrenome.ilike.%${search}%,telefone.ilike.%${search}%,cpf.ilike.%${search}%,email.ilike.%${search}%))`;
+
+        // Query para PJ: busca em responsavel_pj_nome, telefone, cpf, email, razao_social, nome_fantasia, cnpj
+        const pjFilter = `and(tipo_pessoa.eq.PJ,or(responsavel_pj_nome.ilike.%${search}%,telefone.ilike.%${search}%,cpf.ilike.%${search}%,email.ilike.%${search}%,razao_social.ilike.%${search}%,nome_fantasia.ilike.%${search}%,cnpj.ilike.%${search}%))`;
+
+        query = query.or(`${pfFilter},${pjFilter}`);
+      }
     }
 
     const { data, error, count } = await query;
@@ -462,8 +474,11 @@ export const useClientesPaginados = (
   }
 
   if (options?.search) {
-    const orFilter = `nome.ilike.%${options.search}%,email.ilike.%${options.search}%,telefone.ilike.%${options.search}%`;
-    query = query.or(orFilter);
+    const sanitizedSearch = sanitizeSearch(options.search);
+    if (sanitizedSearch) {
+      const orFilter = `nome.ilike.%${sanitizedSearch}%,email.ilike.%${sanitizedSearch}%,telefone.ilike.%${sanitizedSearch}%`;
+      query = query.or(orFilter);
+    }
   }
 
   return useSupabaseQuery('CLIENTES', query, [CACHE_KEYS.CLIENTES, 'paginated', page, limit, options], {

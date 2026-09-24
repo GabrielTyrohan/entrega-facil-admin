@@ -1,7 +1,8 @@
 import { Briefcase, Building2, CreditCard, FileText, Mail, MapPin, Phone, Shield, User, Users, X } from 'lucide-react';
-import React from 'react';
+import React, { useEffect } from 'react';
 import type { Cliente } from '../../hooks/useClientes';
 import { useVendedor } from '../../hooks/useVendedores';
+import { useModalFocus } from './useModalFocus';
 
 interface ClientePJModalProps {
   cliente: Cliente | null;
@@ -12,9 +13,29 @@ interface ClientePJModalProps {
 const ClientePJModal: React.FC<ClientePJModalProps> = ({ cliente, isOpen, onClose }) => {
   // Hook para buscar dados do vendedor
   const { data: vendedor } = useVendedor(
-    cliente?.vendedor_id || '', 
+    cliente?.vendedor_id || '',
     { enabled: !!cliente?.vendedor_id && isOpen }
   ) as { data: { nome: string } | null };
+
+  const titleId = React.useId();
+  const panelRef = useModalFocus<HTMLDivElement>(isOpen);
+
+  // Fechamento com ESC (modal somente leitura, sem estado a perder)
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen || !cliente) return null;
 
@@ -67,13 +88,20 @@ const ClientePJModal: React.FC<ClientePJModalProps> = ({ cliente, isOpen, onClos
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4"
       onClick={handleBackdropClick}
     >
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-xs sm:max-w-lg md:max-w-2xl lg:max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-xs sm:max-w-lg md:max-w-2xl lg:max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col"
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-          <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 dark:text-white truncate pr-4">
+          <h2 id={titleId} className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 dark:text-white truncate pr-4">
             Detalhes da Empresa (PJ)
           </h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors touch-manipulation flex-shrink-0">
+          <button type="button" onClick={onClose} aria-label="Fechar" className="p-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors touch-manipulation flex-shrink-0">
             <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           </button>
         </div>
@@ -296,6 +324,17 @@ const ClientePJModal: React.FC<ClientePJModalProps> = ({ cliente, isOpen, onClos
             </div>
 
           </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-end p-4 sm:p-6 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors touch-manipulation text-sm sm:text-base"
+          >
+            Fechar
+          </button>
         </div>
       </div>
     </div>

@@ -7,9 +7,11 @@ import {
 import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/Skeleton";
 import VendedorModal from '@/components/ui/VendedorModal';
-import { CheckCircle, Clock, Edit, Eye, MoreHorizontal, Plus, Search, Trash2 } from 'lucide-react';
+import { CheckCircle, Clock, Edit, Eye, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import PageHeader from '../components/layout/PageHeader';
+import { TableContainer, TableEmptyState, TableErrorState, TableToolbar } from '../components/table';
 import { useAuth } from '../contexts/AuthContext';
 import { useTotalEntregasPorAdministrador } from '../hooks/useDashboard';
 import {
@@ -25,19 +27,46 @@ const Vendedores: React.FC = () => {
   const targetId = adminId || user?.id; // Usa adminId se for funcionário, ou user.id se for admin
   
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [selectedVendedor, setSelectedVendedor] = useState<Vendedor | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [vendedorParaExcluir, setVendedorParaExcluir] = useState<Vendedor | null>(null);
 
-  // React Query hooks para dados
-  // CORREÇÃO: Usar isLoading ao invés de loading e passar currentPage
-  const { data, isLoading, error } = useVendedores(currentPage);
-  
+  // Debounce para busca server-side
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // React Query hooks para dados (busca server-side em todo o conjunto paginado)
+  const { data, isLoading, error, refetch } = useVendedores(currentPage, debouncedSearchTerm || undefined);
+
   // Acessar os dados corretamente:
   const vendedores = data?.vendedores || [];
   const totalPages = data?.totalPages || 1;
   const total = data?.total || 0;
+
+  const hasActiveSearch = searchTerm.trim() !== '';
+
+  const clearSearch = () => {
+    setSearchTerm('');
+    setDebouncedSearchTerm('');
+    setCurrentPage(0);
+  };
+
+  // Resetar página ao aplicar busca e evitar página inválida após filtro
+  React.useEffect(() => {
+    setCurrentPage(0);
+  }, [debouncedSearchTerm]);
+
+  React.useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages - 1) {
+      setCurrentPage(0);
+    }
+  }, [totalPages, currentPage]);
 
   const deleteVendedorMutation = useDeleteVendedor();
   
@@ -65,12 +94,8 @@ const Vendedores: React.FC = () => {
     }
   };
 
-  // Filtragem local apenas na página atual (já que a paginação é no servidor)
-  const currentVendedores = vendedores.filter((vendedor: Vendedor) =>
-    vendedor.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    vendedor.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    vendedor.telefone?.includes(searchTerm)
-  );
+  // Dados já filtrados (server-side) e paginados pelo hook
+  const currentVendedores = vendedores;
 
   // Formatação de data
   const formatDate = (dateString: string) => {
@@ -131,7 +156,7 @@ const Vendedores: React.FC = () => {
   // Estados de loading e error do React Query
   if (isLoading) {
     return (
-      <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
+      <div className="space-y-4 sm:space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="space-y-2">
             <Skeleton className="h-8 w-48" />
@@ -218,119 +243,115 @@ const Vendedores: React.FC = () => {
 
   if (error) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Vendedores</h1>
-            <p className="text-gray-600 dark:text-gray-400">Gerencie sua equipe de vendas</p>
-          </div>
-        </div>
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-          <p className="text-red-600 dark:text-red-400">
-            {error instanceof Error ? error.message : 'Erro ao carregar vendedores'}
-          </p>
-          <button 
-            onClick={() => window.location.reload()}
-            className="mt-2 text-red-600 dark:text-red-400 underline hover:no-underline"
-          >
-            Tentar novamente
-          </button>
-        </div>
+      <div className="space-y-4 sm:space-y-6">
+        <PageHeader title="Vendedores" description="Gerencie sua equipe de vendas" />
+        <TableErrorState onRetry={() => refetch()} />
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Vendedores</h1>
-          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">Gerencie sua equipe de vendas</p>
-        </div>
-        <button 
-          onClick={() => navigate('/vendedores/novo')}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 sm:py-2 rounded-lg font-medium flex items-center justify-center space-x-2 transition-colors touch-manipulation"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Novo Vendedor</span>
-        </button>
-      </div>
+    <div className="space-y-4 sm:space-y-6">
+      <PageHeader
+        title="Vendedores"
+        description="Gerencie sua equipe de vendas"
+        actions={
+          <button
+            onClick={() => navigate('/vendedores/novo')}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 sm:py-2 rounded-lg font-medium flex items-center justify-center space-x-2 transition-colors touch-manipulation w-full sm:w-auto"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Novo Vendedor</span>
+          </button>
+        }
+      />
 
-      {/* Filters */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-        <div className="flex flex-col space-y-3 sm:flex-row sm:space-y-0 sm:space-x-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar vendedores..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2.5 sm:py-2 w-full border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent touch-manipulation"
-            />
-          </div>
-        </div>
-        
-        {/* Informações de paginação */}
-        <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-          <span>
-            Mostrando {currentVendedores.length} de {total} vendedores
-          </span>
-          <span>
-            Página {currentPage + 1} de {totalPages}
-          </span>
-        </div>
-      </div>
+      <TableToolbar
+        search={{
+          value: searchTerm,
+          onChange: setSearchTerm,
+          placeholder: 'Buscar vendedores...',
+          ariaLabel: 'Buscar vendedores',
+        }}
+        resultText={`${total} vendedores encontrados`}
+        trailingInfo={`Página ${currentPage + 1} de ${totalPages}`}
+        onClearFilters={clearSearch}
+        hasActiveFilters={hasActiveSearch}
+        clearLabel="Limpar busca"
+      />
 
       {/* Vendedores Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div className="overflow-x-auto">
+      <TableContainer>
           <table className="w-full min-w-[900px]">
-            <thead className="bg-gray-50 dark:bg-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0 z-10">
               <tr>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                   Vendedor
                 </th>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden sm:table-cell">
+                <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden sm:table-cell">
                   Contato
                 </th>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden md:table-cell">
+                <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden md:table-cell">
                   Status
                 </th>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden md:table-cell">
+                <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden md:table-cell">
                   Vínculo
                 </th>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden lg:table-cell">
+                <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden lg:table-cell">
                   Pgto.
                 </th>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden lg:table-cell">
+                <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden lg:table-cell">
                   Entregas
                 </th>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden lg:table-cell">
-                  PERCENTUAL.MIN
+                <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden lg:table-cell">
+                  PERCENTUAL MÍN.
                 </th>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden xl:table-cell">
+                <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden xl:table-cell">
                   Data Cadastro
                 </th>
-                <th className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                <th scope="col" className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                   Ações
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
               {currentVendedores.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="px-3 sm:px-6 py-8 sm:py-12 text-center">
-                    <div className="text-sm sm:text-base text-gray-500 dark:text-gray-400">
-                      {searchTerm ? 'Nenhum vendedor encontrado com os critérios de busca.' : 'Nenhum vendedor cadastrado ainda.'}
-                    </div>
-                  </td>
-                </tr>
+                hasActiveSearch ? (
+                  <TableEmptyState
+                    colSpan={9}
+                    title="Não encontramos resultados para os filtros atuais."
+                    action={
+                      <button
+                        type="button"
+                        onClick={clearSearch}
+                        className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        Limpar busca
+                      </button>
+                    }
+                  />
+                ) : (
+                  <TableEmptyState
+                    colSpan={9}
+                    title="Nenhum vendedor cadastrado"
+                    description="Cadastre seu primeiro vendedor para começar."
+                    action={
+                      <button
+                        type="button"
+                        onClick={() => navigate('/vendedores/novo')}
+                        className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Novo Vendedor</span>
+                      </button>
+                    }
+                  />
+                )
               ) : (
                 currentVendedores.map((vendedor: Vendedor, index) => (
-                  <tr 
-                    key={vendedor.id} 
-                    className="hover:bg-gray-50 dark:hover:bg-gray-700 animate-fade-in-up"
+                  <tr
+                    key={vendedor.id}
+                    className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors animate-fade-in-up"
                     style={{ animationDelay: `${index * 75}ms` }}
                   >
                     <td className="px-3 sm:px-6 py-3 sm:py-4">
@@ -339,7 +360,7 @@ const Vendedores: React.FC = () => {
                           {vendedor.nome.charAt(0).toUpperCase()}
                         </div>
                         <div className="ml-3 min-w-0 flex-1">
-                          <div className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                          <div className="text-sm font-medium text-gray-900 dark:text-white truncate" title={vendedor.nome}>
                             {vendedor.nome}
                           </div>
                           {/* Mobile-only info */}
@@ -368,7 +389,7 @@ const Vendedores: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden sm:table-cell">
-                      <div className="text-sm text-gray-900 dark:text-white">{vendedor.email || 'N/A'}</div>
+                      <div className="text-sm text-gray-900 dark:text-white" title={vendedor.email || undefined}>{vendedor.email || 'N/A'}</div>
                       <div className="text-sm text-gray-500 dark:text-gray-400">{formatPhone(vendedor.telefone)}</div>
                     </td>
                     <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden md:table-cell">
@@ -408,7 +429,9 @@ const Vendedores: React.FC = () => {
 
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <button 
+                            <button
+                              aria-label={`Ações do vendedor ${vendedor.nome}`}
+                              aria-haspopup="menu"
                               className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-2 touch-manipulation"
                               disabled={deleteVendedorMutation.isPending}
                             >
@@ -441,8 +464,7 @@ const Vendedores: React.FC = () => {
               )}
             </tbody>
           </table>
-        </div>
-      </div>
+      </TableContainer>
 
       {/* Paginação */}
       {totalPages > 1 && (

@@ -15,6 +15,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAdicionarClienteAdmin } from '../hooks/useAdicionarClienteAdmin';
 import { useVendedoresByAdmin } from '../hooks/useVendedores';
+import { useModalFocus } from './ui/useModalFocus';
 import { supabase } from '../lib/supabase';
 import { toast } from '../utils/toast';
 
@@ -156,12 +157,18 @@ const validateCNPJ = (cnpj: string) => {
 };
 
 // ─── Componente auxiliar ──────────────────────────────────────────────────────
-const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
-  <div>
-    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
-    {children}
-  </div>
-);
+const Field = ({ label, children }: { label: string; children: React.ReactElement }) => {
+  const fieldId = React.useId();
+  const control = React.isValidElement(children)
+    ? React.cloneElement(children as React.ReactElement<{ id?: string }>, { id: fieldId })
+    : children;
+  return (
+    <div>
+      <label htmlFor={fieldId} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
+      {control}
+    </div>
+  );
+};
 
 const inputCls = "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 text-sm";
 
@@ -173,6 +180,8 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState<FormData>(INITIAL_DATA);
   const [adminId, setAdminId] = useState<string | null>(null);
+  const titleId = React.useId();
+  const panelRef = useModalFocus<HTMLDivElement>(isOpen);
 
   // ✅ Ref para evitar auto-seleção repetida de vendedor
   const autoSelecionouVendedor = useRef(false);
@@ -413,12 +422,19 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col"
+      >
 
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700 shrink-0">
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Novo Cliente</h2>
+            <h2 id={titleId} className="text-xl font-bold text-gray-900 dark:text-white">Novo Cliente</h2>
             <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${
               isPJ
                 ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
@@ -427,7 +443,7 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
               {isPJ ? 'Pessoa Jurídica' : 'Pessoa Física'}
             </span>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+          <button type="button" onClick={onClose} aria-label="Fechar" className="p-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
             <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           </button>
         </div>
@@ -859,7 +875,7 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-4 sm:p-6 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-t border-gray-200 dark:border-gray-700 shrink-0">
           <button
             type="button"
             onClick={currentStep === 0 ? onClose : handleBack}

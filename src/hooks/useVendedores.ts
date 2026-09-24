@@ -28,21 +28,28 @@ export interface Vendedor {
   comissao_percentual?: number;
 }
 
-// ===== BUSCAR VENDEDORES (com paginação) =====
-export const useVendedores = (page: number = 0) => {
+// ===== BUSCAR VENDEDORES (com paginação + busca server-side) =====
+export const useVendedores = (page: number = 0, search?: string) => {
   const { adminId } = useAuth();
+  const normalizedSearch = search?.trim().replace(/[,()]/g, '') || '';
 
   return useQuery({
-    queryKey: [QUERY_KEYS.VENDEDORES, { adminId, page }],
+    queryKey: [QUERY_KEYS.VENDEDORES, { adminId, page, search: normalizedSearch }],
     queryFn: async () => {
       const { from, to } = PAGINATION.calculateRange(page, 15);
 
       // ✅ Filtro explícito por administrador_id como segunda camada de segurança
       // além do RLS — garante isolamento mesmo se uma política RLS falhar
-      const { data, error, count } = await supabase
+      let query = supabase
         .from('vendedores')
         .select('*', { count: 'exact' })
-        .eq('administrador_id', adminId!)
+        .eq('administrador_id', adminId!);
+
+      if (normalizedSearch) {
+        query = query.or(`nome.ilike.%${normalizedSearch}%,email.ilike.%${normalizedSearch}%,telefone.ilike.%${normalizedSearch}%`);
+      }
+
+      const { data, error, count } = await query
         .range(from, to)
         .order('nome');
 
