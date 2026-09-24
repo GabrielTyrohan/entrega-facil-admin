@@ -47,6 +47,8 @@ interface FormData {
   cnpj: string;
   inscricao_estadual: string;
   inscricao_municipal: string;
+  codigo_municipio: string;
+  indicador_ie: number;
   responsavel_pj_nome: string;
   responsavel_pj_cpf: string;
   responsavel_pj_cargo: string;
@@ -75,7 +77,8 @@ const INITIAL_DATA: FormData = {
   nome: '', sobrenome: '', cpf: '', rg: '', data_nascimento: '',
   sexo: '', estado_civil: '', nacionalidade: 'Brasileira', nome_pai: '', nome_mae: '',
   razao_social: '', nome_fantasia: '', cnpj: '', inscricao_estadual: '',
-  inscricao_municipal: '', responsavel_pj_nome: '', responsavel_pj_cpf: '',
+  inscricao_municipal: '', codigo_municipio: '', indicador_ie: 9,
+  responsavel_pj_nome: '', responsavel_pj_cpf: '',
   responsavel_pj_cargo: '', responsavel_pj_telefone: '',
   telefone: '', email: '',
   cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '',
@@ -172,6 +175,38 @@ const Field = ({ label, children }: { label: string; children: React.ReactElemen
 
 const inputCls = "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500 text-sm";
 
+// ─── Fiscais PJ (Fiscal Contora) ─────────────────────────────────────────────
+export const INDICADOR_IE_OPTIONS = [
+  { value: 1, label: '1 - Contribuinte ICMS' },
+  { value: 2, label: '2 - Contribuinte isento' },
+  { value: 9, label: '9 - Não contribuinte' },
+] as const;
+
+interface ViaCepResponse {
+  cep?: string;
+  logradouro?: string;
+  complemento?: string;
+  bairro?: string;
+  localidade?: string;
+  uf?: string;
+  ibge?: string;
+  erro?: boolean;
+}
+
+export async function buscarEnderecoPorCep(cep: string): Promise<ViaCepResponse | null> {
+  const somenteDigitos = cep.replace(/\D/g, '');
+  if (somenteDigitos.length !== 8) return null;
+  try {
+    const res = await fetch(`https://viacep.com.br/ws/${somenteDigitos}/json/`);
+    if (!res.ok) return null;
+    const data = (await res.json()) as ViaCepResponse;
+    if (data?.erro) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onClose }) => {
   const { user, userType, userProfile } = useAuth();
@@ -233,6 +268,37 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
   const handleChange = (field: keyof FormData, value: any) =>
     setFormData(prev => ({ ...prev, [field]: value }));
 
+  const [buscandoCep, setBuscandoCep] = useState(false);
+
+  const handleBuscarCep = async () => {
+    const dados = await buscarEnderecoPorCep(formData.cep);
+    if (!dados) {
+      toast.error('CEP não encontrado. Preencha o endereço manualmente.');
+      return;
+    }
+    // Preenche endereço; codigo_municipio somente se a busca retornar IBGE (não inventar).
+    setFormData(prev => ({
+      ...prev,
+      logradouro: dados.logradouro || prev.logradouro,
+      bairro: dados.bairro || prev.bairro,
+      cidade: dados.localidade || prev.cidade,
+      estado: dados.uf || prev.estado,
+      complemento: dados.complemento || prev.complemento,
+      codigo_municipio: dados.ibge || prev.codigo_municipio,
+    }));
+    if (dados.ibge) {
+      toast.success('Endereço preenchido. Código IBGE detectado.');
+    } else {
+      toast.success('Endereço preenchido a partir do CEP.');
+    }
+  };
+
+  const handleCepBlur = () => {
+    if (formData.cep.replace(/\D/g, '').length === 8) {
+      void handleBuscarCep();
+    }
+  };
+
   // ── Pessoas autorizadas ──
   const addPessoa = () =>
     setFormData(p => ({ ...p, pessoas_autorizadas: [...p.pessoas_autorizadas, { nome: '' }] }));
@@ -277,6 +343,9 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
           }
           if (!formData.responsavel_pj_nome || !formData.responsavel_pj_telefone) {
             toast.error('Nome e telefone do responsável são obrigatórios.'); return false;
+          }
+          if (formData.indicador_ie === 1 && !formData.inscricao_estadual) {
+            toast.error('Inscrição Estadual é obrigatória para contribuinte ICMS.'); return false;
           }
         } else {
           if (!formData.nome || !formData.sobrenome) {
@@ -367,6 +436,8 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
             cnpj: formData.cnpj.replace(/\D/g,''),
             inscricao_estadual: formData.inscricao_estadual || undefined,
             inscricao_municipal: formData.inscricao_municipal || undefined,
+            codigo_municipio: formData.codigo_municipio || undefined,
+            indicador_ie: formData.indicador_ie,
             responsavel_pj_nome: formData.responsavel_pj_nome,
             responsavel_pj_cpf: formData.responsavel_pj_cpf.replace(/\D/g,'') || undefined,
             responsavel_pj_cargo: formData.responsavel_pj_cargo || undefined,
@@ -648,6 +719,26 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
               <Field label="Inscrição Municipal">
                 <input className={inputCls} value={formData.inscricao_municipal} onChange={e => handleChange('inscricao_municipal', e.target.value)} />
               </Field>
+              <Field label="Indicador IE *">
+                <select
+                  className={inputCls}
+                  value={String(formData.indicador_ie)}
+                  onChange={e => handleChange('indicador_ie', Number(e.target.value))}
+                >
+                  {INDICADOR_IE_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Código Município (IBGE)">
+                <input
+                  className={inputCls}
+                  value={formData.codigo_municipio}
+                  onChange={e => handleChange('codigo_municipio', e.target.value.replace(/\D/g, '').slice(0, 7))}
+                  placeholder="Preenchido via CEP (IBGE)"
+                  inputMode="numeric"
+                />
+              </Field>
 
               <div className="md:col-span-2 pt-2 border-t border-gray-200 dark:border-gray-700">
                 <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">
@@ -687,7 +778,25 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
             <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
               <div className="md:col-span-2">
                 <Field label="CEP *">
-                  <input className={inputCls} value={formData.cep} onChange={e => handleChange('cep', maskCEP(e.target.value))} placeholder="00000-000" maxLength={9} />
+                  <div className="flex gap-2">
+                    <input
+                      className={inputCls}
+                      value={formData.cep}
+                      onChange={e => handleChange('cep', maskCEP(e.target.value))}
+                      onBlur={handleCepBlur}
+                      placeholder="00000-000"
+                      maxLength={9}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setBuscandoCep(true); void handleBuscarCep().finally(() => setBuscandoCep(false)); }}
+                      disabled={buscandoCep}
+                      className="px-3 py-2 text-sm bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 shrink-0"
+                      title="Buscar endereço pelo CEP"
+                    >
+                      {buscandoCep ? '...' : 'Buscar'}
+                    </button>
+                  </div>
                 </Field>
               </div>
               <div className="md:col-span-4">
@@ -725,6 +834,22 @@ export const NovoClienteModal: React.FC<NovoClienteModalProps> = ({ isOpen, onCl
                   </select>
                 </Field>
               </div>
+              {isPJ && (
+                <div className="md:col-span-6">
+                  <Field label="Código Município (IBGE)">
+                    <input
+                      className={inputCls}
+                      value={formData.codigo_municipio}
+                      onChange={e => handleChange('codigo_municipio', e.target.value.replace(/\D/g, '').slice(0, 7))}
+                      placeholder="Preenchido automaticamente via CEP"
+                      inputMode="numeric"
+                    />
+                  </Field>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Preenchido automaticamente quando a busca de CEP retornar o código IBGE.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

@@ -23,6 +23,16 @@ import { useNavigate } from 'react-router-dom';
 
 const MARGIN_OPTIONS = [10, 15, 20, 30, 40];
 
+export const INDICADOR_PRESENCA_OPTIONS = [
+  { value: 0, label: '0 - Não se aplica' },
+  { value: 1, label: '1 - Presencial' },
+  { value: 2, label: '2 - Internet' },
+  { value: 3, label: '3 - Teleatendimento' },
+  { value: 4, label: '4 - NFC-e entrega em domicílio' },
+  { value: 5, label: '5 - Presencial fora do estabelecimento' },
+  { value: 9, label: '9 - Não presencial - outros' },
+] as const;
+
 interface ProductSelectorProps {
   value: string;
   onChange: (value: string) => void;
@@ -139,7 +149,10 @@ const NovoOrcamento: React.FC = () => {
     hora_saida: '',
     observacoes: '',
     margem_padrao: 40,
-    forma_pagamento: 'outros'
+    forma_pagamento: 'outros',
+    // Fiscais — escolha explícita (não inferir por CNPJ)
+    consumidor_final: true,
+    indicador_presenca: 1
   });
 
   const [itens, setItens] = useState<Partial<OrcamentoPJItem>[]>([]);
@@ -303,6 +316,8 @@ const NovoOrcamento: React.FC = () => {
   margem_lucro_geral: 0,
   numero_orcamento: Math.floor(Math.random() * 1000000),
   forma_pagamento: formData.forma_pagamento,
+  consumidor_final: formData.consumidor_final,
+  indicador_presenca: formData.indicador_presenca,
   created_by: user?.id,
   itens: itens as OrcamentoPJItem[]
 });
@@ -460,6 +475,37 @@ const NovoOrcamento: React.FC = () => {
                 <option value="transferencia">Transferência</option>
                 <option value="cheque">Cheque</option>
                 <option value="outros">Outros</option>
+              </select>
+              <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Consumidor Final</label>
+            <div className="relative">
+              <select
+                value={formData.consumidor_final ? 'sim' : 'nao'}
+                onChange={(e) => setFormData({ ...formData, consumidor_final: e.target.value === 'sim' })}
+                className="w-full pl-4 pr-12 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white transition-shadow appearance-none"
+              >
+                <option value="sim">Sim - consumidor final</option>
+                <option value="nao">Não - revenda / uso intermediário</option>
+              </select>
+              <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Indicador de Presença</label>
+            <div className="relative">
+              <select
+                value={formData.indicador_presenca}
+                onChange={(e) => setFormData({ ...formData, indicador_presenca: Number(e.target.value) })}
+                className="w-full pl-4 pr-12 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white transition-shadow appearance-none"
+              >
+                {INDICADOR_PRESENCA_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
               </select>
               <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
             </div>

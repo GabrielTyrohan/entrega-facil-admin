@@ -4,11 +4,35 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useUpdateCliente, type Cliente } from '../../hooks/useClientes';
 import { useVendedoresByAdmin } from '../../hooks/useVendedores';
 import { useModalFocus } from './useModalFocus';
+import { toast } from '../../utils/toast';
 
 interface EditClientePJModalProps {
   isOpen: boolean;
   onClose: () => void;
   cliente: Cliente | null;
+}
+
+export const INDICADOR_IE_OPTIONS = [
+  { value: 1, label: '1 - Contribuinte ICMS' },
+  { value: 2, label: '2 - Contribuinte isento' },
+  { value: 9, label: '9 - Não contribuinte' },
+] as const;
+
+async function buscarEnderecoPorCep(cep: string) {
+  const somenteDigitos = cep.replace(/\D/g, '');
+  if (somenteDigitos.length !== 8) return null;
+  try {
+    const res = await fetch(`https://viacep.com.br/ws/${somenteDigitos}/json/`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data?.erro) return null;
+    return data as {
+      logradouro?: string; bairro?: string; localidade?: string;
+      uf?: string; ibge?: string; complemento?: string;
+    };
+  } catch {
+    return null;
+  }
 }
 
 const EditClientePJModal: React.FC<EditClientePJModalProps> = ({ isOpen, onClose, cliente }) => {
@@ -23,6 +47,8 @@ const EditClientePJModal: React.FC<EditClientePJModalProps> = ({ isOpen, onClose
     cnpj: '',
     inscricao_estadual: '',
     inscricao_municipal: '',
+    codigo_municipio: '',
+    indicador_ie: 9,
     responsavel_pj_nome: '',
     responsavel_pj_cpf: '',
     responsavel_pj_cargo: '',
@@ -51,6 +77,8 @@ const EditClientePJModal: React.FC<EditClientePJModalProps> = ({ isOpen, onClose
         cnpj: formatCNPJ(cliente.cnpj || cliente.cpf || ''),
         inscricao_estadual: cliente.inscricao_estadual || '',
         inscricao_municipal: cliente.inscricao_municipal || '',
+        codigo_municipio: cliente.codigo_municipio || '',
+        indicador_ie: cliente.indicador_ie ?? 9,
         responsavel_pj_nome: cliente.responsavel_pj_nome || '',
         responsavel_pj_cpf: formatCPF(cliente.responsavel_pj_cpf || ''),
         responsavel_pj_cargo: cliente.responsavel_pj_cargo || '',
@@ -88,13 +116,30 @@ const EditClientePJModal: React.FC<EditClientePJModalProps> = ({ isOpen, onClose
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
-    
+
     if (type === 'checkbox') {
       const checked = (e.target as HTMLInputElement).checked;
       setFormData(prev => ({ ...prev, [name]: checked }));
+    } else if (name === 'indicador_ie') {
+      setFormData(prev => ({ ...prev, indicador_ie: Number(value) }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
+  };
+
+  const handleCepBlur = async () => {
+    const dados = await buscarEnderecoPorCep(formData.cep);
+    if (!dados) return;
+    // Preenche endereço; codigo_municipio somente se a busca retornar IBGE (não inventar).
+    setFormData(prev => ({
+      ...prev,
+      logradouro: dados.logradouro || prev.logradouro,
+      bairro: dados.bairro || prev.bairro,
+      cidade: dados.localidade || prev.cidade,
+      estado: dados.uf || prev.estado,
+      complemento: (dados.complemento as string) || prev.complemento,
+      codigo_municipio: dados.ibge || prev.codigo_municipio,
+    }));
   };
 
   // Format functions
@@ -180,10 +225,16 @@ const EditClientePJModal: React.FC<EditClientePJModalProps> = ({ isOpen, onClose
     e.preventDefault();
     if (!cliente) return;
 
+    const indicadorIe = Number((formData as any).indicador_ie);
+    if (indicadorIe === 1 && !(formData as any).inscricao_estadual) {
+      toast.error('Inscrição Estadual é obrigatória para contribuinte ICMS.');
+      return;
+    }
+
     setIsLoading(true);
     try {
       // Desestruturar campos lowercase que NÃO existem no banco (colunas reais: Bairro, Cidade, Estado)
-      const { bairro, cidade, estado, logradouro, ...restFormData } = formData;
+      const { bairro, cidade, estado, logradouro, ...restFormData } = formData as any;
 
       const dataToUpdate = {
         razao_social: restFormData.razao_social,
@@ -196,6 +247,8 @@ const EditClientePJModal: React.FC<EditClientePJModalProps> = ({ isOpen, onClose
         cpf: restFormData.cnpj.replace(/\D/g, ''),
         inscricao_estadual: restFormData.inscricao_estadual,
         inscricao_municipal: restFormData.inscricao_municipal,
+        codigo_municipio: restFormData.codigo_municipio || undefined,
+        indicador_ie: indicadorIe,
         responsavel_pj_nome: restFormData.responsavel_pj_nome,
         responsavel_pj_cpf: restFormData.responsavel_pj_cpf.replace(/\D/g, ''),
         responsavel_pj_cargo: restFormData.responsavel_pj_cargo,
@@ -340,6 +393,37 @@ const EditClientePJModal: React.FC<EditClientePJModalProps> = ({ isOpen, onClose
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Indicador IE *
+                </label>
+                <select
+                  name="indicador_ie"
+                  value={String((formData as any).indicador_ie ?? 9)}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                >
+                  {INDICADOR_IE_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Código Município (IBGE)
+                </label>
+                <input
+                  type="text"
+                  name="codigo_municipio"
+                  value={(formData as any).codigo_municipio || ''}
+                  onChange={e => setFormData(prev => ({ ...prev, codigo_municipio: e.target.value.replace(/\D/g, '').slice(0, 7) } as any))}
+                  placeholder="Preenchido via CEP (IBGE)"
+                  inputMode="numeric"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Telefone Empresa
                 </label>
                 <input
@@ -447,10 +531,14 @@ const EditClientePJModal: React.FC<EditClientePJModalProps> = ({ isOpen, onClose
                   name="cep"
                   value={formData.cep}
                   onChange={handleCEPChange}
+                  onBlur={() => { void handleCepBlur(); }}
                   placeholder="00000-000"
                   maxLength={9}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                 />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Ao sair do campo, o endereço e o código IBGE são preenchidos automaticamente (quando disponíveis).
+                </p>
               </div>
 
               <div>

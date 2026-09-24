@@ -1,8 +1,16 @@
 // src/services/nfeConfigService.ts
+// LEGADO — integração antiga (Nuvem Fiscal) descontinuada.
+// `configurarEmpresaNFe` NÃO deve mais ser chamado pelo frontend.
+// Mantido apenas para histórico. A configuração do certificado
+// agora é feita diretamente no painel da Fiscal Contora.
 import { supabase } from '../lib/supabase'
 
 const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
 
+/**
+ * @deprecated Integração antiga (Nuvem Fiscal) — NÃO utilizar.
+ * O certificado é configurado no painel da Fiscal Contora.
+ */
 export async function configurarEmpresaNFe(params: {
   certificadoBase64: string
   senha: string
@@ -31,12 +39,27 @@ export async function buscarStatusCertificado() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Não autenticado')
 
+  // Tenta buscar o status estendido (Fiscal Contora). Se a coluna
+  // nfe_integracao_status ainda não existir no cache do PostgREST,
+  // faz fallback para os campos legados.
   const { data, error } = await supabase
     .from('administradores')
-    .select('nfe_certificado_configurado, nfe_certificado_validade, nfe_ambiente, nfe_regime_tributario')
+    .select('nfe_certificado_configurado, nfe_certificado_validade, nfe_ambiente, nfe_regime_tributario, nfe_integracao_status')
     .eq('id', user.id)
     .single()
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    // Fallback: coluna nova pode não estar visível — tenta sem ela.
+    if (error.message?.includes('nfe_integracao_status')) {
+      const retry = await supabase
+        .from('administradores')
+        .select('nfe_certificado_configurado, nfe_certificado_validade, nfe_ambiente, nfe_regime_tributario')
+        .eq('id', user.id)
+        .single()
+      if (retry.error) throw new Error(retry.error.message)
+      return { ...retry.data, nfe_integracao_status: null as string | null };
+    }
+    throw new Error(error.message)
+  }
   return data
 }

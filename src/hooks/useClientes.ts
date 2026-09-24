@@ -64,6 +64,9 @@ export interface Cliente {
   cnpj?: string;
   inscricao_estadual?: string;
   inscricao_municipal?: string;
+  // Dados fiscais PJ (Fiscal Contora)
+  codigo_municipio?: string;
+  indicador_ie?: number;
   responsavel_pj_nome?: string;
   responsavel_pj_cpf?: string;
   responsavel_pj_cargo?: string;
@@ -262,7 +265,7 @@ export const useClientesByAdmin = (administradorId: string, options?: {
     // 2. Construir query de clientes
     let query = supabase
       .from('clientes')
-      .select('id, nome, sobrenome, telefone, endereco, ativo, created_at, vendedor_id, cpf, rg, data_nascimento, sexo, estado_civil, nacionalidade, nome_pai, nome_mae, nome_conjuge, menor_idade, updated_at, email, tipo_pessoa, responsavel_pj_nome, responsavel_pj_cpf, razao_social, nome_fantasia, cnpj, inscricao_estadual, inscricao_municipal, responsavel_pj_cargo, responsavel_pj_telefone, Bairro, Cidade, Estado, numero, complemento, cep, renda_mensal, ponto_referencia, sincronizado', { count: 'exact' })
+      .select('id, nome, sobrenome, telefone, endereco, ativo, created_at, vendedor_id, cpf, rg, data_nascimento, sexo, estado_civil, nacionalidade, nome_pai, nome_mae, nome_conjuge, menor_idade, updated_at, email, tipo_pessoa, responsavel_pj_nome, responsavel_pj_cpf, razao_social, nome_fantasia, cnpj, inscricao_estadual, inscricao_municipal, codigo_municipio, indicador_ie, responsavel_pj_cargo, responsavel_pj_telefone, Bairro, Cidade, Estado, numero, complemento, cep, renda_mensal, ponto_referencia, sincronizado', { count: 'exact' })
       .in('vendedor_id', vendedorIds)
       .order('nome')
       .range(from, to);

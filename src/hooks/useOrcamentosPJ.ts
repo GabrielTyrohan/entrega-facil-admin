@@ -34,6 +34,9 @@ export interface OrcamentoPJ {
   valor_total: number;
   margem_lucro_geral: number;
   forma_pagamento?: string;
+  // Dados fiscais (Fiscal Contora) — definidos explicitamente, sem inferência por CNPJ
+  consumidor_final?: boolean;
+  indicador_presenca?: number;
   itens?: OrcamentoPJItem[];
   created_at?: string;
   updated_at?: string;

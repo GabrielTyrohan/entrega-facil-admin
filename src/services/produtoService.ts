@@ -26,6 +26,8 @@ export interface ProdutoCadastrado {
   aliquota_cofins?: number;
   cst_icms?: string;
   aliquota_icms?: number;
+  // Origem da mercadoria (0-8). Default 0. Não alterar NCM/CEST/CFOP/etc. automaticamente.
+  origem_mercadoria?: number;
   // Campos de gestão
   fornecedor_principal?: string;
   ultima_compra?: string; // ISO date
@@ -59,6 +61,7 @@ export interface CreateProdutoData {
   aliquota_cofins?: number;
   cst_icms?: string;
   aliquota_icms?: number;
+  origem_mercadoria?: number;
   fornecedor_principal?: string;
   ultima_compra?: string;
   estoque_minimo?: number;

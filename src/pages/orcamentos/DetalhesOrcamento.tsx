@@ -3,21 +3,40 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useCliente } from '@/hooks/useClientes';
 import { useOrcamentoPJById, useUpdateOrcamentoPJ } from '@/hooks/useOrcamentosPJ';
 import { supabase } from '@/lib/supabase';
+import { nfeService } from '@/services/nfeService';
 import { toast } from '@/utils/toast';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   CheckCircle,
   Clock,
+  FileCheck,
   Mail,
   Printer,
   ShoppingCart,
   XCircle
 } from 'lucide-react';
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import Barcode from 'react-barcode';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useReactToPrint } from 'react-to-print';
+
+interface NotaFiscalContora {
+  id: string;
+  status?: string;
+  provedor?: string;
+  provedor_documento_id?: string;
+  provedor_status?: string;
+  processamento_status?: string;
+  ambiente?: string;
+  idempotency_key?: string;
+  erro_codigo?: string;
+  erro_mensagem?: string;
+  protocolo_autorizacao?: string;
+  numero?: number;
+  chave_acesso?: string;
+  [key: string]: unknown;
+}
 
 const DetalhesOrcamento: React.FC = () => {
   const { id } = useParams();
@@ -58,8 +77,10 @@ const DetalhesOrcamento: React.FC = () => {
 
   const updateOrcamento = useUpdateOrcamentoPJ();
   const printRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
+  const [isValidandoNFe, setIsValidandoNFe] = useState(false);
 
-  const { data: notasVinculadas } = useQuery({
+  const { data: notasVinculadas, refetch: refetchNotas } = useQuery({
     queryKey: ['notas-fiscais-orcamento', id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -69,14 +90,38 @@ const DetalhesOrcamento: React.FC = () => {
         .eq('referencia_id', id)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return data;
+      return (data || []) as NotaFiscalContora[];
     },
     enabled: !!id,
     refetchOnMount: true,
     staleTime: 0,
   });
 
-  const notaAutorizada = notasVinculadas?.find((n: any) => n.status === 'autorizada') || notasVinculadas?.[0];
+  // Rascunho fiscal x NF-e autorizada: somente status === 'autorizada'
+  // representa documento autorizado. Qualquer outro status é rascunho/validação.
+  const notaAutorizada = notasVinculadas?.find((n) => n.status === 'autorizada');
+  const notaRascunho = notasVinculadas?.[0];
+  const notaFiscalExibicao = notaAutorizada ?? notaRascunho;
+  const isAutorizada = !!notaAutorizada;
+  const isFiscalContora = notaFiscalExibicao?.provedor === 'fiscal_contora';
+
+  const handleValidarNFe = async () => {
+    if (!orcamento || isValidandoNFe) return;
+    setIsValidandoNFe(true);
+    try {
+      await nfeService.emitirNFe(orcamento.id, orcamento.cliente_id);
+      toast.success(
+        'NF-e validada pela Fiscal Contora em homologação. Nenhum documento foi transmitido à SEFAZ.',
+        { duration: 8000 }
+      );
+      await refetchNotas();
+      queryClient.invalidateQueries({ queryKey: ['notas-fiscais-orcamento', id] });
+    } catch (error: any) {
+      toast.error(error?.message || 'Erro ao validar NF-e em homologação');
+    } finally {
+      setIsValidandoNFe(false);
+    }
+  };
 
   const formatarChave = (chave: string) => chave.match(/.{1,4}/g)?.join(' ') ?? chave;
 
@@ -269,6 +314,19 @@ const DetalhesOrcamento: React.FC = () => {
           )}
 
           <button
+            onClick={handleValidarNFe}
+            disabled={isValidandoNFe}
+            title="Valida a estrutura fiscal em homologação (Fiscal Contora). Nenhum documento é transmitido à SEFAZ."
+            className="flex flex-col items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors leading-tight"
+          >
+            <span className="flex items-center gap-2 font-medium">
+              <FileCheck className="w-4 h-4" />
+              {isValidandoNFe ? 'Validando...' : 'Validar NF-e'}
+            </span>
+            <span className="text-[10px] uppercase tracking-wide opacity-90">Homologação</span>
+          </button>
+
+          <button
             onClick={handlePrint}
             className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg transition-colors"
           >
@@ -286,6 +344,53 @@ const DetalhesOrcamento: React.FC = () => {
         </div>
       </div>
 
+      {/* Status fiscal (Fiscal Contora — homologação) */}
+      {notaFiscalExibicao && (
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+          <h2 className="font-semibold text-gray-900 dark:text-white mb-2">
+            {isAutorizada ? 'Nota Fiscal' : 'Rascunho fiscal — Validação em homologação'}
+          </h2>
+          {isFiscalContora ? (
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-gray-500 dark:text-gray-400">Provedor:</dt>
+                <dd className="font-medium text-gray-900 dark:text-white">Fiscal Contora</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-gray-500 dark:text-gray-400">Ambiente:</dt>
+                <dd className="font-medium text-gray-900 dark:text-white">Homologação</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-gray-500 dark:text-gray-400">Status:</dt>
+                <dd className="font-medium text-gray-900 dark:text-white">{notaFiscalExibicao.provedor_status || notaFiscalExibicao.status || '—'}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-gray-500 dark:text-gray-400">Processamento:</dt>
+                <dd className="font-medium text-gray-900 dark:text-white">{notaFiscalExibicao.processamento_status || '—'}</dd>
+              </div>
+              {notaFiscalExibicao.provedor_documento_id && (
+                <div className="flex justify-between gap-4 sm:col-span-2">
+                  <dt className="text-gray-500 dark:text-gray-400">ID Fiscal Contora:</dt>
+                  <dd className="font-mono text-xs text-gray-900 dark:text-white break-all text-right">{notaFiscalExibicao.provedor_documento_id}</dd>
+                </div>
+              )}
+              {!isAutorizada && (
+                <p className="sm:col-span-2 text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Estrutura validada em homologação. Nenhum documento foi transmitido à SEFAZ.
+                  {notaFiscalExibicao.erro_mensagem ? ` Detalhe: ${notaFiscalExibicao.erro_mensagem}` : ''}
+                </p>
+              )}
+            </dl>
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {isAutorizada
+                ? `Status: ${notaFiscalExibicao.status}`
+                : 'Rascunho fiscal em validação. Nenhum documento foi transmitido à SEFAZ.'}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Área de Impressão / Visualização */}
       <div className="rounded-lg shadow-lg overflow-auto border border-gray-200 dark:border-gray-700 flex justify-center bg-gray-50 dark:bg-gray-900 py-8">
         <div 
@@ -301,12 +406,22 @@ const DetalhesOrcamento: React.FC = () => {
             backgroundColor: 'white' 
           }} 
         >
-          {/* Layout Estilo DANFE */}
-          <div 
-            className="border-2 border-gray-800 text-[9px] font-sans leading-tight flex flex-col" 
-            style={{ padding: '8mm', minHeight: '100%' }} 
+          {/* Layout Estilo DANFE — RASCUNHO SEM VALOR FISCAL */}
+          <div
+            className="border-2 border-gray-800 text-[9px] font-sans leading-tight flex flex-col"
+            style={{ padding: '8mm', minHeight: '100%' }}
           >
-            
+
+            {/* Aviso fiscal — nunca tratar rascunho como DANFE oficial */}
+            <div className="border-2 border-yellow-600 bg-yellow-50 p-2 mb-2 text-center">
+              <div className="font-bold text-[10px] text-yellow-800">Documento sem valor fiscal</div>
+              <div className="text-[8px] text-yellow-700">
+                {isAutorizada
+                  ? 'Documento autorizado — verifique chave e protocolo oficiais.'
+                  : 'Rascunho fiscal — Validação em homologação (Fiscal Contora). Nenhum documento foi transmitido à SEFAZ.'}
+              </div>
+            </div>
+
             {/* Header: Emitente e DANFE */}
             <div className="border-b-2 border-gray-800">
               {/* Canhoto */}
@@ -316,7 +431,14 @@ const DetalhesOrcamento: React.FC = () => {
                 </div>
                 <div style={{ width: '140px' }} className="text-center border-l border-gray-800 pl-2 flex-shrink-0">
                   <div className="font-bold text-[10px]">NF-e</div>
-                  <div className="text-[9px]">Nº {orcamento.numero_orcamento.toString().padStart(9, '0')}</div>
+                  <div className="text-[9px]">
+                    {isAutorizada && notaAutorizada?.numero
+                      ? `Nº ${String(notaAutorizada.numero).padStart(9, '0')}`
+                      : `Orçamento Nº ${orcamento.numero_orcamento.toString().padStart(9, '0')}`}
+                  </div>
+                  {!isAutorizada && (
+                    <div className="text-[7px] text-gray-500">(não é número oficial da NF-e)</div>
+                  )}
                   <div className="text-[8px]">SÉRIE 1</div>
                 </div>
               </div>
@@ -338,14 +460,21 @@ const DetalhesOrcamento: React.FC = () => {
                 {/* DANFE */}
                 <div style={{ width: '20%' }} className="p-2 border-r border-gray-800 text-center flex flex-col justify-center flex-shrink-0">
                   <div className="font-bold text-[14px]">DANFE</div>
-                  <div className="text-[7px] leading-tight mb-1">Documento Auxiliar da NF-e</div>
+                  <div className="text-[7px] leading-tight mb-1">
+                    {isAutorizada ? 'Documento Auxiliar da NF-e' : 'Rascunho — sem valor fiscal'}
+                  </div>
                   <div className="text-[8px] mb-1">
                     <div>0 - Entrada</div>
                     <div className="font-bold">1 - Saída</div>
                   </div>
                   <div className="font-bold border border-gray-800 py-1 text-[13px]">
-                    Nº {orcamento.numero_orcamento.toString().padStart(9, '0')}
+                    {isAutorizada && notaAutorizada?.numero
+                      ? `Nº ${String(notaAutorizada.numero).padStart(9, '0')}`
+                      : `Nº ${orcamento.numero_orcamento.toString().padStart(9, '0')}`}
                   </div>
+                  {!isAutorizada && (
+                    <div className="text-[7px] text-gray-500">nº do orçamento (não oficial)</div>
+                  )}
                   <div className="font-bold text-[9px] mt-1">SÉRIE 1</div>
                   <div className="text-[7px]">Folha 1/1</div>
                 </div>
@@ -353,7 +482,7 @@ const DetalhesOrcamento: React.FC = () => {
                 {/* Chave */}
                 <div style={{ width: '37%' }} className="flex flex-col gap-1 justify-center p-2">
                   <div className="flex justify-center items-center w-full mb-1">
-                    {notaAutorizada?.chave_acesso ? (
+                    {isAutorizada && notaAutorizada?.chave_acesso ? (
                       <Barcode
                         value={notaAutorizada.chave_acesso}
                         format="CODE128"
@@ -364,15 +493,17 @@ const DetalhesOrcamento: React.FC = () => {
                         background="transparent"
                       />
                     ) : (
-                      <div className="bg-gray-200 flex items-center justify-center text-gray-400 text-[7px]" style={{ height: '35px', width: '100%' }}>
-                        (NOTA NÃO EMITIDA)
+                      <div className="bg-gray-200 flex items-center justify-center text-gray-500 text-[7px] text-center px-2" style={{ height: '35px', width: '100%' }}>
+                        (RASCUNHO FISCAL — SEM VALOR FISCAL)
                       </div>
                     )}
                   </div>
                   <div>
                     <div className="font-bold text-[7px]">CHAVE DE ACESSO</div>
                     <div className="bg-gray-100 p-1 text-center text-[7px] font-mono break-all leading-tight">
-                      {notaAutorizada?.chave_acesso ? formatarChave(notaAutorizada.chave_acesso) : 'Nota ainda não emitida'}
+                      {isAutorizada && notaAutorizada?.chave_acesso
+                        ? formatarChave(notaAutorizada.chave_acesso)
+                        : 'Rascunho fiscal — nota ainda não autorizada'}
                     </div>
                   </div>
                   <div className="text-[6px] text-center leading-tight">
@@ -390,7 +521,11 @@ const DetalhesOrcamento: React.FC = () => {
                </div>
                <div style={{ width: '41.67%' }}>
                   <div className="font-bold">PROTOCOLO DE AUTORIZAÇÃO DE USO</div>
-                  <div>{orcamento.created_at ? new Date(orcamento.created_at).getTime() : ''} - {formatDate(orcamento.data_orcamento)}</div>
+                  <div>
+                    {isAutorizada && notaAutorizada?.protocolo_autorizacao
+                      ? notaAutorizada.protocolo_autorizacao
+                      : 'Aguardando autorização — nenhum documento transmitido à SEFAZ'}
+                  </div>
                </div>
             </div>
 
@@ -588,23 +723,24 @@ const DetalhesOrcamento: React.FC = () => {
                         <th className="p-1 text-right" style={{ width: '4%' }}>AL.IC</th>
                      </tr>
                   </thead>
-                  <tbody>
-                     {orcamento.itens?.map((item, index) => (
-                        <tr key={item.id} className="border-b border-gray-200">
-                           <td className="p-1 border-r border-gray-200 text-[7px]">{item.produto?.produto_cod || index + 1}</td>
-                           <td className="p-1 border-r border-gray-200 text-[7px] truncate" style={{ maxWidth: '200px' }}>{item.descricao}</td>
-                           <td className="p-1 border-r border-gray-200 text-center text-[7px]">{item.produto?.ncm || '00000000'}</td>
-                           <td className="p-1 border-r border-gray-200 text-center text-[7px]">5102</td>
-                           <td className="p-1 border-r border-gray-200 text-center text-[7px]">UN</td>
-                           <td className="p-1 border-r border-gray-200 text-right text-[7px]">{item.quantidade}</td>
-                           <td className="p-1 border-r border-gray-200 text-right text-[7px]">{formatCurrency(item.valor_venda_unitario).replace('R$', '').trim()}</td>
-                           <td className="p-1 border-r border-gray-200 text-right text-[7px]">{formatCurrency(item.valor_total).replace('R$', '').trim()}</td>
-                           <td className="p-1 border-r border-gray-200 text-right text-[7px]">0,00</td>
-                           <td className="p-1 border-r border-gray-200 text-right text-[7px]">0,00</td>
-                           <td className="p-1 text-right text-[7px]">0</td>
-                        </tr>
-                     ))}
-                  </tbody>
+                   <tbody>
+                      {orcamento.itens?.map((item, index) => (
+                         <tr key={item.id} className="border-b border-gray-200">
+                            <td className="p-1 border-r border-gray-200 text-[7px]">{item.produto?.produto_cod || index + 1}</td>
+                            <td className="p-1 border-r border-gray-200 text-[7px] truncate" style={{ maxWidth: '200px' }}>{item.descricao}</td>
+                            <td className="p-1 border-r border-gray-200 text-center text-[7px]">{item.produto?.ncm || '—'}</td>
+                            <td className="p-1 border-r border-gray-200 text-center text-[7px]">—</td>
+                            <td className="p-1 border-r border-gray-200 text-center text-[7px]">5102</td>
+                            <td className="p-1 border-r border-gray-200 text-center text-[7px]">UN</td>
+                            <td className="p-1 border-r border-gray-200 text-right text-[7px]">{item.quantidade}</td>
+                            <td className="p-1 border-r border-gray-200 text-right text-[7px]">{formatCurrency(item.valor_venda_unitario).replace('R$', '').trim()}</td>
+                            <td className="p-1 border-r border-gray-200 text-right text-[7px]">{formatCurrency(item.valor_total).replace('R$', '').trim()}</td>
+                            <td className="p-1 border-r border-gray-200 text-right text-[7px]">0,00</td>
+                            <td className="p-1 border-r border-gray-200 text-right text-[7px]">0,00</td>
+                            <td className="p-1 text-right text-[7px]">0</td>
+                         </tr>
+                      ))}
+                   </tbody>
                </table>
             </div>
 
@@ -616,12 +752,13 @@ const DetalhesOrcamento: React.FC = () => {
                <div className="col-span-7 p-1 border-r border-gray-800">
                   <div className="text-[8px] font-bold">INFORMAÇÕES COMPLEMENTARES</div>
                   <div className="text-[8px]">
-                     Orçamento válido por 7 dias. Documento sem valor fiscal. 
-                     {/* Espaço para mais obs */}
+                     Orçamento válido por 7 dias. Documento sem valor fiscal — rascunho para validação em homologação (Fiscal Contora).
+                     A DANFE verdadeira será disponibilizada após autorização da NF-e.
                   </div>
                </div>
                <div className="col-span-5 p-1">
                   <div className="text-[8px] font-bold">RESERVADO AO FISCO</div>
+                  <div className="text-[7px] text-gray-500">Sem protocolo — nenhum documento transmitido à SEFAZ.</div>
                </div>
             </div>
 

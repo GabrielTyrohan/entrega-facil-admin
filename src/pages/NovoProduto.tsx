@@ -74,6 +74,7 @@ interface DadosProduto {
   fornecedor_principal?: string;
   estoque_minimo?: number;
   estoque_maximo?: number;
+  origem_mercadoria?: number;
 }
 
 // =====================================================
@@ -114,7 +115,8 @@ const NovoProduto: React.FC = () => {
     cst_cofins: '',
     aliquota_cofins: 0,
     cst_icms: '',
-    aliquota_icms: 0
+    aliquota_icms: 0,
+    origem_mercadoria: 0
   });
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
@@ -287,6 +289,8 @@ const NovoProduto: React.FC = () => {
     if (type === 'checkbox') {
       const checked = (e.target as HTMLInputElement).checked;
       setFormData(prev => ({ ...prev, [name]: checked }));
+    } else if (name === 'origem_mercadoria') {
+      setFormData(prev => ({ ...prev, origem_mercadoria: Number(value) }));
     } else if ([
       'qtd_estoque', 'preco_unt', 'custo_compra', 'margem_lucro',
       'estoque_minimo', 'estoque_maximo', 'aliquota_pis',
@@ -362,7 +366,8 @@ const NovoProduto: React.FC = () => {
         ativo: formData.ativo !== undefined ? formData.ativo : true,
         fornecedor_principal: formData.fornecedor_principal || undefined,
         estoque_minimo: formData.estoque_minimo || 0,
-        estoque_maximo: formData.estoque_maximo || 0
+        estoque_maximo: formData.estoque_maximo || 0,
+        origem_mercadoria: formData.origem_mercadoria ?? 0
       };
 
       // Chamar Edge Function que faz TUDO
@@ -677,6 +682,30 @@ const NovoProduto: React.FC = () => {
               </div>
             </div>
             
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Origem da Mercadoria
+                </label>
+                <select
+                  name="origem_mercadoria"
+                  value={formData.origem_mercadoria}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value={0}>0 - Nacional</option>
+                  <option value={1}>1 - Estrangeira (importação direta)</option>
+                  <option value={2}>2 - Estrangeira (mercado interno)</option>
+                  <option value={3}>3 - Nacional (conteúdo importado &gt; 40%)</option>
+                  <option value={4}>4 - Nacional (processos básicos)</option>
+                  <option value={5}>5 - Nacional (conteúdo importado &lt; 40%)</option>
+                  <option value={6}>6 - Estrangeira (importação direta, sem similar)</option>
+                  <option value={7}>7 - Estrangeira (mercado interno, sem similar)</option>
+                  <option value={8}>8 - Nacional (conteúdo importado &gt; 70%)</option>
+                </select>
+              </div>
+            </div>
+
             <div className="mt-4 bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
               <p className="text-sm text-yellow-800 dark:text-yellow-200 flex items-start gap-2">
                 <span className="text-lg">💡</span>

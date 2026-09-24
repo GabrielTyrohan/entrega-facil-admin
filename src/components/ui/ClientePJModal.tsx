@@ -83,6 +83,13 @@ const ClientePJModal: React.FC<ClientePJModalProps> = ({ cliente, isOpen, onClos
   const nomeFantasia = cliente.nome_fantasia || cliente.sobrenome;
   const cnpj = cliente.cnpj || cliente.cpf; // Fallback se cnpj vazio mas cpf tiver valor (workaround antigo)
 
+  const indicadorIeLabel = (valor?: number) => {
+    if (valor === 1) return '1 - Contribuinte ICMS';
+    if (valor === 2) return '2 - Contribuinte isento';
+    if (valor === 9) return '9 - Não contribuinte';
+    return 'Não informado';
+  };
+
   return (
     <div 
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4"
@@ -173,6 +180,28 @@ const ClientePJModal: React.FC<ClientePJModalProps> = ({ cliente, isOpen, onClos
                     <div className="min-w-0 flex-1">
                       <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Inscrição Municipal</p>
                       <p className="text-sm sm:text-base text-gray-900 dark:text-white font-medium break-all">{cliente.inscricao_municipal}</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-start space-x-3">
+                  <div className="p-2 bg-purple-100 dark:bg-purple-900/20 rounded-lg flex-shrink-0">
+                    <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Indicador IE</p>
+                    <p className="text-sm sm:text-base text-gray-900 dark:text-white font-medium break-all">{indicadorIeLabel((cliente as any).indicador_ie)}</p>
+                  </div>
+                </div>
+
+                {(cliente as any).codigo_municipio && (
+                  <div className="flex items-start space-x-3">
+                    <div className="p-2 bg-indigo-100 dark:bg-indigo-900/20 rounded-lg flex-shrink-0">
+                      <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600 dark:text-indigo-400" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Código Município (IBGE)</p>
+                      <p className="text-sm sm:text-base text-gray-900 dark:text-white font-medium break-all">{(cliente as any).codigo_municipio}</p>
                     </div>
                   </div>
                 )}

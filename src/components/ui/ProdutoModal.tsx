@@ -31,6 +31,18 @@ const unidadesMedida = [
   'PCT'
 ];
 
+export const ORIGEM_MERCADORIA_OPTIONS = [
+  { value: 0, label: '0 - Nacional' },
+  { value: 1, label: '1 - Estrangeira (importação direta)' },
+  { value: 2, label: '2 - Estrangeira (mercado interno)' },
+  { value: 3, label: '3 - Nacional (conteúdo importado > 40%)' },
+  { value: 4, label: '4 - Nacional (processos básicos)' },
+  { value: 5, label: '5 - Nacional (conteúdo importado < 40%)' },
+  { value: 6, label: '6 - Estrangeira (importação direta, sem similar)' },
+  { value: 7, label: '7 - Estrangeira (mercado interno, sem similar)' },
+  { value: 8, label: '8 - Nacional (conteúdo importado > 70%)' },
+] as const;
+
 const gerarSKU = (categoria: string): string => {
   const categoriaMap: { [key: string]: string } = {
     'Bebidas': 'BEB',
@@ -76,7 +88,8 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
     cst_cofins: '',
     aliquota_cofins: 0,
     cst_icms: '',
-    aliquota_icms: 0
+    aliquota_icms: 0,
+    origem_mercadoria: 0
   });
 
   const [precoDisplay, setPrecoDisplay] = useState<string>('');
@@ -114,7 +127,8 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
            cst_cofins: '',
            aliquota_cofins: 0,
            cst_icms: '',
-           aliquota_icms: 0
+           aliquota_icms: 0,
+           origem_mercadoria: 0
          });
         setPrecoDisplay('');
         setActiveTab('basico');
@@ -148,6 +162,8 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
       setPrecoDisplay(maskedValue);
       const numericValue = currencyMaskToNumber(maskedValue);
       setFormData(prev => ({ ...prev, [name]: numericValue }));
+    } else if (name === 'origem_mercadoria') {
+      setFormData(prev => ({ ...prev, origem_mercadoria: Number(value) }));
     } else if (type === 'checkbox') {
       const checked = (e.target as HTMLInputElement).checked;
       setFormData(prev => ({ ...prev, [name]: checked }));
@@ -201,7 +217,8 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
           cst_cofins: formData.cst_cofins,
           aliquota_cofins: formData.aliquota_cofins,
           cst_icms: formData.cst_icms,
-          aliquota_icms: formData.aliquota_icms
+          aliquota_icms: formData.aliquota_icms,
+          origem_mercadoria: formData.origem_mercadoria ?? 0
         };
 
         const newProduct = await ProdutoService.createProduto(createData);
@@ -238,7 +255,8 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
           cst_cofins: formData.cst_cofins,
           aliquota_cofins: formData.aliquota_cofins,
           cst_icms: formData.cst_icms,
-          aliquota_icms: formData.aliquota_icms
+          aliquota_icms: formData.aliquota_icms,
+          origem_mercadoria: formData.origem_mercadoria ?? 0
         });
 
         if (onSave) onSave(produtoAtualizado);
@@ -563,6 +581,20 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
                   disabled={mode === 'view'}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Origem da Mercadoria</label>
+                <select
+                  name="origem_mercadoria"
+                  value={String(formData.origem_mercadoria ?? 0)}
+                  onChange={handleInputChange}
+                  disabled={mode === 'view'}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                >
+                  {ORIGEM_MERCADORIA_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
               </div>
             </div>
           )}
