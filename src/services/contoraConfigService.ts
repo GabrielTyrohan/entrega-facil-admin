@@ -54,6 +54,7 @@ export interface CertificadoContoraResponse {
 }
 
 export interface DadosFiscaisEmpresa {
+  id: string;
   razao_social: string | null;
   nome_fantasia: string | null;
   nome_empresa: string | null;
@@ -70,13 +71,23 @@ export interface DadosFiscaisEmpresa {
   cidade: string | null;
   estado: string | null;
   codigo_municipio: string | null;
+  nfe_provedor: string | null;
+  nfe_ambiente: string | null;
   nfe_contora_company_id: string | null;
   nfe_integracao_status: string | null;
   nfe_contora_has_certificate: boolean | null;
-  nfe_certificado_validade: string | null;
   nfe_contora_ultima_sincronizacao: string | null;
-  [key: string]: unknown;
+  nfe_certificado_configurado: boolean | null;
+  nfe_certificado_validade: string | null;
+  nfe_certificado_nome: string | null;
+  nfe_certificado_documento: string | null;
 }
+
+// Seleção explícita dos campos fiscais/empresariais usados pela tela fiscal.
+// Não usar '*' para evitar expor senha_hash, tokens do Mercado Pago e
+// outros campos administrativos no frontend.
+export const DADOS_FISCAIS_SELECT =
+  'id, razao_social, nome_fantasia, nome_empresa, cpf_cnpj, inscricao_estadual, nfe_indicador_ie, nfe_regime_tributario, telefone, cep, endereco, numero, complemento, bairro, cidade, estado, codigo_municipio, nfe_provedor, nfe_ambiente, nfe_contora_company_id, nfe_integracao_status, nfe_contora_has_certificate, nfe_contora_ultima_sincronizacao, nfe_certificado_configurado, nfe_certificado_validade, nfe_certificado_nome, nfe_certificado_documento';
 
 function somenteDigitos(valor: string | null | undefined): string {
   return (valor ?? '').replace(/\D/g, '');
@@ -297,8 +308,8 @@ export async function enviarCertificadoContora(
 
 /**
  * Carrega os dados fiscais atuais da empresa (tabela `administradores`).
- * Usa `select('*')` para não quebrar se o cache do PostgREST ainda não
- * expuser alguma coluna nova.
+ * Busca somente as colunas fiscais/empresariais declaradas em
+ * `DADOS_FISCAIS_SELECT` — nunca a linha inteira.
  */
 export async function carregarDadosFiscaisEmpresa(): Promise<DadosFiscaisEmpresa | null> {
   const {
@@ -308,7 +319,7 @@ export async function carregarDadosFiscaisEmpresa(): Promise<DadosFiscaisEmpresa
 
   const { data, error } = await supabase
     .from('administradores')
-    .select('*')
+    .select(DADOS_FISCAIS_SELECT)
     .eq('id', user.id)
     .single();
 

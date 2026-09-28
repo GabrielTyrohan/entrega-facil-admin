@@ -15,6 +15,8 @@ vi.mock('@/lib/supabase', () => ({
 }));
 
 import {
+  carregarDadosFiscaisEmpresa,
+  DADOS_FISCAIS_SELECT,
   enviarCertificadoContora,
   isArquivoCertificadoValido,
   mapearTextoStatusIntegracao,
@@ -210,5 +212,107 @@ describe('contoraConfigService - chamadas às Edge Functions', () => {
     vi.stubGlobal('fetch', fetchMock);
     await expect(sincronizarEmpresaContora(EMPRESA_VALIDA)).rejects.toThrow('CNPJ inválido');
     vi.unstubAllGlobals();
+  });
+});
+
+describe('contoraConfigService - carregarDadosFiscaisEmpresa (seleção explícita)', () => {
+  const CAMPOS_ESPERADOS = [
+    'id',
+    'razao_social',
+    'nome_fantasia',
+    'nome_empresa',
+    'cpf_cnpj',
+    'inscricao_estadual',
+    'nfe_indicador_ie',
+    'nfe_regime_tributario',
+    'telefone',
+    'cep',
+    'endereco',
+    'numero',
+    'complemento',
+    'bairro',
+    'cidade',
+    'estado',
+    'codigo_municipio',
+    'nfe_provedor',
+    'nfe_ambiente',
+    'nfe_contora_company_id',
+    'nfe_integracao_status',
+    'nfe_contora_has_certificate',
+    'nfe_contora_ultima_sincronizacao',
+    'nfe_certificado_configurado',
+    'nfe_certificado_validade',
+    'nfe_certificado_nome',
+    'nfe_certificado_documento',
+  ];
+
+  const CAMPOS_SENSIVEIS = [
+    'senha_hash',
+    'mp_access_token',
+    'mp_refresh_token',
+    'mp_preapproval_id',
+    'mp_payer_email',
+  ];
+
+  function montarCadeiaSupabase(retorno: { data: unknown; error: { message: string } | null }) {
+    const singleMock = vi.fn().mockResolvedValue(retorno);
+    const eqMock = vi.fn().mockReturnValue({ single: singleMock });
+    const selectMock = vi.fn().mockReturnValue({ eq: eqMock });
+    mockFrom.mockReturnValue({ select: selectMock });
+    return { selectMock, eqMock, singleMock };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('constante de seleção não usa * nem campos sensíveis', () => {
+    expect(DADOS_FISCAIS_SELECT).not.toContain('*');
+    for (const campo of CAMPOS_SENSIVEIS) {
+      expect(DADOS_FISCAIS_SELECT).not.toContain(campo);
+    }
+    expect(DADOS_FISCAIS_SELECT).not.toMatch(/mp_/i);
+    const colunas = DADOS_FISCAIS_SELECT.split(',').map((c) => c.trim());
+    for (const campo of CAMPOS_ESPERADOS) {
+      expect(colunas).toContain(campo);
+    }
+  });
+
+  it('consulta administradores com colunas explícitas, filtro por id e single()', async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: 'user-123' } },
+      error: null,
+    });
+    const { selectMock, eqMock, singleMock } = montarCadeiaSupabase({
+      data: { id: 'user-123', razao_social: 'Empresa Teste LTDA' },
+      error: null,
+    });
+
+    const resultado = await carregarDadosFiscaisEmpresa();
+
+    expect(mockFrom).toHaveBeenCalledWith('administradores');
+    expect(selectMock).toHaveBeenCalledTimes(1);
+    const colunasSelecionadas = selectMock.mock.calls[0][0] as string;
+    expect(colunasSelecionadas).not.toContain('*');
+    for (const campo of CAMPOS_SENSIVEIS) {
+      expect(colunasSelecionadas).not.toContain(campo);
+    }
+    expect(colunasSelecionadas).not.toMatch(/mp_/i);
+    const colunas = colunasSelecionadas.split(',').map((c) => c.trim());
+    for (const campo of CAMPOS_ESPERADOS) {
+      expect(colunas).toContain(campo);
+    }
+    expect(eqMock).toHaveBeenCalledWith('id', 'user-123');
+    expect(singleMock).toHaveBeenCalledTimes(1);
+    expect(resultado).toMatchObject({ id: 'user-123' });
+  });
+
+  it('mantém erro "Não autenticado" sem usuário', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null }, error: null });
+    // Garante que a cadeia nem chega a ser montada sem usuário.
+    mockFrom.mockReturnValue({ select: vi.fn() });
+
+    await expect(carregarDadosFiscaisEmpresa()).rejects.toThrow('Não autenticado');
+    expect(mockFrom).not.toHaveBeenCalled();
   });
 });
