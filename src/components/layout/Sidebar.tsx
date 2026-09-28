@@ -122,8 +122,12 @@ function useVisibleMenu(userType: UserType, permissions: Permissoes, isAdmin: bo
       if (item.funcionarioOnly && userType !== 'funcionario') return false;
 
       switch (item.group) {
-        case 'Estoque':
-          return !!permissions?.caixa;
+        case 'Estoque': {
+          // Autoridade é a permissão explícita do item (produtos) —
+          // caixa NÃO libera estoque administrativo.
+          if (item.permission) return !!permissions[item.permission];
+          return !!permissions?.produtos;
+        }
 
         case 'Financeiro': {
           const hasFinanceiroAcc = permissions?.caixa || permissions?.acertos || permissions?.relatorios;
@@ -196,6 +200,7 @@ const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed }: Side
       path: '/produtos',
       label: 'Produtos',
       icon: <Package className="w-5 h-5" />,
+      permission: 'produtos',
       group: 'Catálogo'
     },
     {
@@ -208,6 +213,7 @@ const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed }: Side
       path: '/produtos/cestas-base',
       label: 'Cadastrar Cestas',
       icon: <PackagePlus className="w-5 h-5" />,
+      permission: 'produtos',
       group: 'Catálogo'
     },
     {
@@ -222,14 +228,14 @@ const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed }: Side
       path: '/estoque/movimentacoes',
       label: 'Movimentações',
       icon: <ArrowUpDown className="w-5 h-5" />,
-      permission: 'caixa',
+      permission: 'produtos',
       group: 'Estoque'
     },
     {
       path: '/estoque/relatorio',
       label: 'Relatório',
       icon: <ClipboardList className="w-5 h-5" />,
-      permission: 'caixa',
+      permission: 'produtos',
       group: 'Estoque'
     },
 

@@ -61,6 +61,7 @@ const PERMISSOES = {
   acertos: false,
   relatorios: false,
   vendedores: true,
+  produtos: false,
   expedicao: false,
 };
 

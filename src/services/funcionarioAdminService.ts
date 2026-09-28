@@ -24,6 +24,7 @@ export interface FuncionarioPermissions {
   acertos: boolean;
   relatorios: boolean;
   vendedores: boolean;
+  produtos: boolean;
   expedicao?: boolean;
 }
 

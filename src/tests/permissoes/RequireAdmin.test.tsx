@@ -21,6 +21,7 @@ const TODAS_FALSE: Permissoes = {
   relatorios: false,
   funcionarios: false,
   vendedores: false,
+  produtos: false,
   configuracoes: false,
   configuracoes_fiscais: false,
 };

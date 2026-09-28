@@ -23,6 +23,7 @@ const TODAS_FALSE: Permissoes = {
   relatorios: false,
   funcionarios: false,
   vendedores: false,
+  produtos: false,
   configuracoes: false,
   configuracoes_fiscais: false,
 };
@@ -36,6 +37,7 @@ const TODAS_TRUE: Permissoes = {
   relatorios: true,
   funcionarios: true,
   vendedores: true,
+  produtos: true,
   configuracoes: true,
   configuracoes_fiscais: true,
 };

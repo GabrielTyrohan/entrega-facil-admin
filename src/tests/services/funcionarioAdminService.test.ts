@@ -27,6 +27,7 @@ const PERMISSOES = {
   acertos: false,
   relatorios: false,
   vendedores: false,
+  produtos: true,
   expedicao: false,
 };
 
@@ -83,7 +84,7 @@ describe('funcionarioAdminService', () => {
       telefone: '11999999999',
       cargo: 'Vendedor',
     });
-    expect(body.permissoes).toMatchObject({ vendedores: false });
+    expect(body.permissoes).toMatchObject({ vendedores: false, produtos: true });
   });
 
   it('2. usa Authorization Bearer da sessão atual', async () => {

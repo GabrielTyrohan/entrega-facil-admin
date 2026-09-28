@@ -17,7 +17,8 @@ const DEFAULT_PERMISSIONS = {
   caixa: false,
   acertos: false,
   relatorios: false,
-  vendedores: false
+  vendedores: false,
+  produtos: false
 } satisfies Omit<FuncionarioPermissions, 'expedicao'>;
 
 type PermissaoNormal = keyof typeof DEFAULT_PERMISSIONS;

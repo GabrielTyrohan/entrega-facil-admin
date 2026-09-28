@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 export type PermissaoKey =
   | 'orcamentos_pj' | 'vendas_atacado' | 'notas_fiscais'
   | 'caixa' | 'acertos' | 'relatorios' | 'funcionarios'
-  | 'vendedores' | 'configuracoes' | 'configuracoes_fiscais'
+  | 'vendedores' | 'produtos' | 'configuracoes' | 'configuracoes_fiscais'
   | 'expedicao';
 
 export const ROTAS_EXPEDICAO = [

@@ -18,6 +18,7 @@ export interface Permissoes {
   relatorios: boolean;
   funcionarios: boolean;
   vendedores: boolean;
+  produtos: boolean;
   configuracoes: boolean;
   configuracoes_fiscais: boolean;
   expedicao?: boolean;
@@ -87,6 +88,7 @@ const ADMIN_PERMISSIONS: Permissoes = {
   relatorios: true,
   funcionarios: true,
   vendedores: true,
+  produtos: true,
   configuracoes: true,
   configuracoes_fiscais: true,
 };

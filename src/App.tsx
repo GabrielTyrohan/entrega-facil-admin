@@ -144,12 +144,12 @@ function App() {
                           <Route path="/clientes" element={<ExpedicaoGuard><Clientes /></ExpedicaoGuard>} />
                           <Route path="/devedores" element={<ExpedicaoGuard><Devedores /></ExpedicaoGuard>} />
 
-                          <Route path="/produtos" element={<ExpedicaoGuard><Produtos /></ExpedicaoGuard>} />
-                          <Route path="/produtos/novo" element={<ExpedicaoGuard><NovoProduto /></ExpedicaoGuard>} />
+                          <Route path="/produtos" element={<ExpedicaoGuard><RequirePermission permission="produtos"><Produtos /></RequirePermission></ExpedicaoGuard>} />
+                          <Route path="/produtos/novo" element={<ExpedicaoGuard><RequirePermission permission="produtos"><NovoProduto /></RequirePermission></ExpedicaoGuard>} />
 
-                          <Route path="/produtos/cestas-base" element={<ExpedicaoGuard><CestasBase /></ExpedicaoGuard>} />
-                          <Route path="/produtos/cestas-base/nova" element={<ExpedicaoGuard><NovaCestaBase /></ExpedicaoGuard>} />
-                          <Route path="/produtos/cestas-base/editar/:id" element={<ExpedicaoGuard><EditarCestaBase /></ExpedicaoGuard>} />
+                          <Route path="/produtos/cestas-base" element={<ExpedicaoGuard><RequirePermission permission="produtos"><CestasBase /></RequirePermission></ExpedicaoGuard>} />
+                          <Route path="/produtos/cestas-base/nova" element={<ExpedicaoGuard><RequirePermission permission="produtos"><NovaCestaBase /></RequirePermission></ExpedicaoGuard>} />
+                          <Route path="/produtos/cestas-base/editar/:id" element={<ExpedicaoGuard><RequirePermission permission="produtos"><EditarCestaBase /></RequirePermission></ExpedicaoGuard>} />
 
                           <Route path="/entregas" element={<ExpedicaoGuard><Entregas /></ExpedicaoGuard>} />
                           <Route path="/entregas/nova" element={<ExpedicaoGuard><NovaEntrega /></ExpedicaoGuard>} />
@@ -266,14 +266,14 @@ function App() {
 
                           <Route path="/estoque/movimentacoes" element={
                             <ExpedicaoGuard>
-                              <RequirePermission permission="caixa">
+                              <RequirePermission permission="produtos">
                                 <MovimentacoesEstoque />
                               </RequirePermission>
                             </ExpedicaoGuard>
                           } />
                           <Route path="/estoque/relatorio" element={
                             <ExpedicaoGuard>
-                              <RequirePermission permission="caixa">
+                              <RequirePermission permission="produtos">
                                 <RelatorioEstoque />
                               </RequirePermission>
                             </ExpedicaoGuard>
