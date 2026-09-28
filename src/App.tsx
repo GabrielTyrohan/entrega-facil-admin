@@ -36,6 +36,7 @@ import Suporte from './pages/Suporte';
 import Vendedores from './pages/Vendedores';
 
 import { Toaster } from 'sonner';
+import RequireAdmin from './components/Permissoes/RequireAdmin';
 import RequirePermission, { isRotaExpedicaoPermitida } from './components/Permissoes/RequirePermission';
 import ListaAcertos from './pages/AcertosDiarios/ListaAcertos';
 import NovoAcerto from './pages/AcertosDiarios/NovoAcerto';
@@ -54,7 +55,7 @@ import NovaVendaAtacado from './pages/VendasAtacado/NovaVendaAtacado';
 import OfflinePage from './pages/OfflinePage';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 
-function ExpedicaoGuard({ children }: { children: React.ReactNode }) {
+export function ExpedicaoGuard({ children }: { children: React.ReactNode }) {
   const { userType, permissions } = useAuth();
   const location = useLocation();
   if (userType !== 'admin' && permissions?.expedicao) {
@@ -131,14 +132,14 @@ function App() {
                           <Route path="/produtos/cestas/nova" element={<NovaCesta />} />
                           <Route path="/produtos/cestas/editar/:id" element={<EditarCesta />} />
                           <Route path="/entregas/avulsas" element={<EntregaAvulsa />} />
-                          <Route path="/historico-pdfs" element={<HistoricoPdfs />} />
+                          <Route path="/historico-pdfs" element={<ExpedicaoGuard><RequireAdmin><HistoricoPdfs /></RequireAdmin></ExpedicaoGuard>} />
 
                           {/* Rotas com <ExpedicaoGuard> */}
                           <Route path="/dashboard" element={<ExpedicaoGuard><Dashboard /></ExpedicaoGuard>} />
 
-                          <Route path="/vendedores" element={<ExpedicaoGuard><Vendedores /></ExpedicaoGuard>} />
-                          <Route path="/vendedores/novo" element={<ExpedicaoGuard><NovoVendedor /></ExpedicaoGuard>} />
-                          <Route path="/vendedores/editar/:id" element={<ExpedicaoGuard><EditarVendedor /></ExpedicaoGuard>} />
+                          <Route path="/vendedores" element={<ExpedicaoGuard><RequirePermission permission="vendedores"><Vendedores /></RequirePermission></ExpedicaoGuard>} />
+                          <Route path="/vendedores/novo" element={<ExpedicaoGuard><RequirePermission permission="vendedores"><NovoVendedor /></RequirePermission></ExpedicaoGuard>} />
+                          <Route path="/vendedores/editar/:id" element={<ExpedicaoGuard><RequirePermission permission="vendedores"><EditarVendedor /></RequirePermission></ExpedicaoGuard>} />
 
                           <Route path="/clientes" element={<ExpedicaoGuard><Clientes /></ExpedicaoGuard>} />
                           <Route path="/devedores" element={<ExpedicaoGuard><Devedores /></ExpedicaoGuard>} />
@@ -154,15 +155,15 @@ function App() {
                           <Route path="/entregas/nova" element={<ExpedicaoGuard><NovaEntrega /></ExpedicaoGuard>} />
 
                           <Route path="/pagamentos" element={<ExpedicaoGuard><Pagamentos /></ExpedicaoGuard>} />
-                          <Route path="/configuracoes" element={<ExpedicaoGuard><Configuracoes /></ExpedicaoGuard>} />
-                          <Route path="/funcionarios" element={<ExpedicaoGuard><Funcionarios /></ExpedicaoGuard>} />
+                          <Route path="/configuracoes" element={<ExpedicaoGuard><RequireAdmin><Configuracoes /></RequireAdmin></ExpedicaoGuard>} />
+                          <Route path="/funcionarios" element={<ExpedicaoGuard><RequireAdmin><Funcionarios /></RequireAdmin></ExpedicaoGuard>} />
 
                           {/* Rotas com <ExpedicaoGuard> + <RequirePermission> */}
                           <Route path="/configuracoes-fiscais" element={
                             <ExpedicaoGuard>
-                              <RequirePermission permission="configuracoes_fiscais">
+                              <RequireAdmin>
                                 <ConfiguracoesFiscais />
-                              </RequirePermission>
+                              </RequireAdmin>
                             </ExpedicaoGuard>
                           } />
 

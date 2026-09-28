@@ -173,6 +173,7 @@ const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed }: Side
       path: '/vendedores',
       label: 'Vendedores',
       icon: <Users className="w-5 h-5" />,
+      permission: 'vendedores',
       group: 'Pessoas'
     },
     {
