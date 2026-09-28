@@ -150,12 +150,15 @@ export class CestaBaseService {
     }
   }
 
-  static async distribuirParaVendedor(cestaBaseId: string, vendedorId: string, adminId: string): Promise<string> {
+  // Distribui cesta ao vendedor. O frontend informa só cesta/vendedor/quantidade;
+  // administrador, tenant e permissão são validados no servidor (RPC).
+  // Não enviar p_administrador_id.
+  static async distribuirParaVendedor(cestaBaseId: string, vendedorId: string, quantidade = 1): Promise<string> {
     try {
       const { data, error } = await supabase.rpc('distribuir_cesta_para_vendedor', {
         p_cesta_base_id: cestaBaseId,
         p_vendedor_id: vendedorId,
-        p_administrador_id: adminId
+        p_quantidade: quantidade
       });
 
       if (error) throw error;

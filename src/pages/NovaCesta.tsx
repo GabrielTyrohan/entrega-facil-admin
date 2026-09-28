@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useVendedoresByAdmin } from '../hooks/useVendedores';
 import { supabase } from '../lib/supabase';
+import { CestaBaseService } from '../services/cestaBaseService';
 import { formatCurrency } from '../utils/currencyUtils';
 import { toast } from '../utils/toast';
 
@@ -226,14 +227,13 @@ const NovaCesta: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.rpc('distribuir_cesta_para_vendedor', {
-        p_cesta_base_id: cestaSelecionadaId,
-        p_vendedor_id: vendedorSelecionado,
-        p_quantidade: quantidadeParaVendedor,
-        p_administrador_id: targetId
-      });
-
-      if (error) throw error;
+      // Distribuição centralizada no service: sem p_administrador_id —
+      // administrador/tenant/permissão são validados no servidor.
+      await CestaBaseService.distribuirParaVendedor(
+        cestaSelecionadaId,
+        vendedorSelecionado,
+        quantidadeParaVendedor
+      );
 
       const vendedor = vendedores.find(v => v.id === vendedorSelecionado);
       toast.success(
