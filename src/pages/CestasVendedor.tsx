@@ -274,14 +274,12 @@ const CestasVendedor: React.FC = () => {
 
     try {
       for (const cestaLote of cestasComQtd) {
+        // Só dados de negócio — admin/usuário/tenant são autoridade do servidor.
         const result = await entregarCestasMutation.mutateAsync({
-          administrador_id: adminId!,
-          vendedor_id: vendedorIdSnapshot,
-          cesta_id: cestaLote.cestaId,
+          vendedorId: vendedorIdSnapshot,
+          cestaId: cestaLote.cestaId,
           quantidade: cestaLote.qtd,
-          usuario_id: user?.id,
-          usuario_nome: (userProfile as any)?.nome || user?.email,
-          observacao: obsEntrega || undefined,
+          observacao: obsEntrega,
         });
         if (result?.id) ultimoId = result.id.slice(0, 8).toUpperCase();
       }

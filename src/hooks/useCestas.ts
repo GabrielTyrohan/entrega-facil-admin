@@ -2,6 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { CACHE_KEYS, CACHE_TIMES } from '../lib/supabaseCache';
+import {
+  registrarEntregaCesta,
+  type RegistrarEntregaCestaInput,
+} from '../services/entregaCestaService';
 
 export interface CestaData {
   id: string;
@@ -263,38 +267,11 @@ export const useCestaDetalhes = (cestaId: string, options?: { enabled?: boolean 
 export const useEntregarCestas = () => {
   const queryClient = useQueryClient();
 
+  // Delega ao service central: só dados de negócio (vendedor/cesta/
+  // quantidade/observação). Autoridade (admin/tenant/usuário) é do servidor.
   return useMutation({
-    mutationFn: async ({
-      administrador_id,
-      vendedor_id,
-      cesta_id,
-      quantidade,
-      usuario_id,
-      usuario_nome,
-      observacao,
-    }: {
-      administrador_id: string;
-      vendedor_id: string;
-      cesta_id: string;
-      quantidade: number;
-      usuario_id?: string;
-      usuario_nome?: string;
-      observacao?: string;
-    }) => {
-      const { data, error } = await supabase.rpc('registrar_entrega_cestas', {
-        p_administrador_id: administrador_id,
-        p_vendedor_id: vendedor_id,
-        p_cesta_id: cesta_id,
-        p_quantidade: quantidade,
-        p_usuario_id: usuario_id || null,
-        p_usuario_nome: usuario_nome || null,
-        p_observacao: observacao || null,
-      });
-
-      if (error) throw error;
-      if (!data.success) throw new Error(data.erro);
-
-      return data;
+    mutationFn: async (input: RegistrarEntregaCestaInput) => {
+      return registrarEntregaCesta(input);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CESTAS] });

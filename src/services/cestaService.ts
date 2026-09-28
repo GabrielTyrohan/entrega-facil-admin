@@ -121,7 +121,7 @@ export class CestaService {
       throw new Error('Erro ao adicionar produtos à cesta: ' + itensError.message);
     }
 
-    // Estoque debitado SOMENTE na entrega via RPC registrar_entrega_cestas
+    // Estoque debitado SOMENTE na entrega via RPC registrar_entrega_cestas_seguro
     return novaCesta;
   }
 
@@ -207,7 +207,7 @@ export class CestaService {
       }
 
       // Substitui itens sem movimentar estoque
-      // Estoque debitado SOMENTE na entrega via RPC registrar_entrega_cestas
+      // Estoque debitado SOMENTE na entrega via RPC registrar_entrega_cestas_seguro
       await supabase.from('produtos_na_cesta').delete().eq('cesta_id', cestaId);
 
       const { error: insertError } = await supabase
