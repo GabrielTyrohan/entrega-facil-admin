@@ -121,6 +121,18 @@ const Clientes: React.FC = () => {
       : `${cliente.nome}${cliente.sobrenome ? ' ' + cliente.sobrenome : ''}`;
   };
 
+  const getClienteInicial = (cliente: Cliente) => {
+    const nome =
+      cliente.tipo_pessoa === 'PJ'
+        ? cliente.razao_social ||
+          cliente.nome_fantasia ||
+          cliente.responsavel_pj_nome ||
+          cliente.nome
+        : cliente.nome;
+
+    return nome?.trim().charAt(0).toUpperCase() || '?';
+  };
+
   const formatPhoneNumber = (phone: string | null | undefined) => {
     if (!phone) return 'N/A';
     
@@ -357,8 +369,15 @@ const Clientes: React.FC = () => {
                   >
                     <td className="px-3 sm:px-6 py-3 sm:py-4">
                       <div className="flex items-center">
-                        <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
-                          {cliente.nome.charAt(0).toUpperCase()}
+                        <div
+                          title={cliente.tipo_pessoa === 'PJ' ? 'Pessoa Jurídica' : 'Pessoa Física'}
+                          className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0 ${
+                            cliente.tipo_pessoa === 'PJ'
+                              ? 'bg-blue-600 dark:bg-blue-500'
+                              : 'bg-green-600 dark:bg-green-500'
+                          }`}
+                        >
+                          {getClienteInicial(cliente)}
                         </div>
                         <div className="ml-3 min-w-0 flex-1">
                           <div className="text-sm font-medium text-gray-900 dark:text-white truncate" title={getClienteNome(cliente) || undefined}>

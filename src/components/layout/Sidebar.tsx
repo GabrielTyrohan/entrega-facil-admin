@@ -38,7 +38,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { toast } from '@/utils/toast';
 import packageJson from '../../../package.json';
 
-export const MAINTENANCE_ROUTES = ['/vendas-atacado', '/orcamentos-pj'];
+export const MAINTENANCE_ROUTES: string[] = [];
 const MAINTENANCE_MSG = 'Esta área está temporariamente indisponível por estar em manutenção. Em breve retornaremos com uma nova solução de emissão fiscal.';
 
 interface MenuItem {
@@ -282,8 +282,6 @@ const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed }: Side
       icon: <ShoppingCart className="w-5 h-5" />,
       permission: 'vendas_atacado',
       group: 'Comercial',
-      disabled: true,
-      maintenanceMessage: MAINTENANCE_MSG,
     },
     {
       path: '/orcamentos-pj',
@@ -291,8 +289,6 @@ const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed }: Side
       icon: <FileText className="w-5 h-5" />,
       permission: 'orcamentos_pj',
       group: 'Comercial',
-      disabled: true,
-      maintenanceMessage: MAINTENANCE_MSG,
     },
     {
       path: '/tabela-precos',

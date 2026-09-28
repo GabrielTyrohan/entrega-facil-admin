@@ -37,8 +37,6 @@ import Vendedores from './pages/Vendedores';
 
 import { Toaster } from 'sonner';
 import RequirePermission, { isRotaExpedicaoPermitida } from './components/Permissoes/RequirePermission';
-import { MAINTENANCE_ROUTES } from './components/layout/Sidebar';
-import { toast } from './utils/toast';
 import ListaAcertos from './pages/AcertosDiarios/ListaAcertos';
 import NovoAcerto from './pages/AcertosDiarios/NovoAcerto';
 import FluxoCaixa from './pages/Caixa/FluxoCaixa';
@@ -69,15 +67,6 @@ function ExpedicaoGuard({ children }: { children: React.ReactNode }) {
 function OnlineGuard({ children }: { children: React.ReactNode }) {
   const isOnline = useOnlineStatus();
   if (!isOnline) return <OfflinePage />;
-  return <>{children}</>;
-}
-
-function MaintenanceGuard({ children }: { children: React.ReactNode }) {
-  const location = useLocation();
-  if (MAINTENANCE_ROUTES.some(route => location.pathname === route || location.pathname.startsWith(route + '/'))) {
-    toast.info('Esta área está temporariamente indisponível por estar em manutenção. Em breve retornaremos com uma nova solução de emissão fiscal.', { duration: 5000 });
-    return <Navigate to="/dashboard" replace />;
-  }
   return <>{children}</>;
 }
 
@@ -187,57 +176,45 @@ function App() {
 
                           <Route path="/orcamentos-pj" element={
                             <ExpedicaoGuard>
-                              <MaintenanceGuard>
-                                <RequirePermission permission="orcamentos_pj">
-                                  <ListaOrcamentos />
-                                </RequirePermission>
-                              </MaintenanceGuard>
+                              <RequirePermission permission="orcamentos_pj">
+                                <ListaOrcamentos />
+                              </RequirePermission>
                             </ExpedicaoGuard>
                           } />
                           <Route path="/orcamentos-pj/novo" element={
                             <ExpedicaoGuard>
-                              <MaintenanceGuard>
-                                <RequirePermission permission="orcamentos_pj">
-                                  <NovoOrcamento />
-                                </RequirePermission>
-                              </MaintenanceGuard>
+                              <RequirePermission permission="orcamentos_pj">
+                                <NovoOrcamento />
+                              </RequirePermission>
                             </ExpedicaoGuard>
                           } />
                           <Route path="/orcamentos-pj/:id" element={
                             <ExpedicaoGuard>
-                              <MaintenanceGuard>
-                                <RequirePermission permission="orcamentos_pj">
-                                  <DetalhesOrcamento />
-                                </RequirePermission>
-                              </MaintenanceGuard>
+                              <RequirePermission permission="orcamentos_pj">
+                                <DetalhesOrcamento />
+                              </RequirePermission>
                             </ExpedicaoGuard>
                           } />
 
                           <Route path="/vendas-atacado" element={
                             <ExpedicaoGuard>
-                              <MaintenanceGuard>
-                                <RequirePermission permission="vendas_atacado">
-                                  <ListaVendas />
-                                </RequirePermission>
-                              </MaintenanceGuard>
+                              <RequirePermission permission="vendas_atacado">
+                                <ListaVendas />
+                              </RequirePermission>
                             </ExpedicaoGuard>
                           } />
                           <Route path="/vendas-atacado/nova" element={
                             <ExpedicaoGuard>
-                              <MaintenanceGuard>
-                                <RequirePermission permission="vendas_atacado">
-                                  <NovaVendaAtacado />
-                                </RequirePermission>
-                              </MaintenanceGuard>
+                              <RequirePermission permission="vendas_atacado">
+                                <NovaVendaAtacado />
+                              </RequirePermission>
                             </ExpedicaoGuard>
                           } />
                           <Route path="/vendas-atacado/:id" element={
                             <ExpedicaoGuard>
-                              <MaintenanceGuard>
-                                <RequirePermission permission="vendas_atacado">
-                                  <DetalhesVendaAtacado />
-                                </RequirePermission>
-                              </MaintenanceGuard>
+                              <RequirePermission permission="vendas_atacado">
+                                <DetalhesVendaAtacado />
+                              </RequirePermission>
                             </ExpedicaoGuard>
                           } />
 
