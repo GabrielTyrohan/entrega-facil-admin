@@ -1,9 +1,8 @@
 import { Briefcase, Eye, EyeOff, Lock, Mail, Phone, User, X } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
 import { Funcionario, useCreateFuncionario, useUpdateFuncionario } from '../hooks/useFuncionarios';
+import type { FuncionarioPermissions } from '../services/funcionarioAdminService';
 import { toast } from '../utils/toast';
-import { supabase } from '../lib/supabase';
 
 interface FuncionarioModalProps {
   isOpen: boolean;
@@ -17,11 +16,13 @@ const DEFAULT_PERMISSIONS = {
   notas_fiscais: false,
   caixa: false,
   acertos: false,
-  relatorios: false
-};
+  relatorios: false,
+  vendedores: false
+} satisfies Omit<FuncionarioPermissions, 'expedicao'>;
+
+type PermissaoNormal = keyof typeof DEFAULT_PERMISSIONS;
 
 const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, funcionarioToEdit }) => {
-  const { user, userProfile, adminId } = useAuth();
   const createMutation = useCreateFuncionario();
   const updateMutation = useUpdateFuncionario();
   
@@ -31,7 +32,7 @@ const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, fu
   const [cargo, setCargo] = useState('');
   const [senha, setSenha] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [permissions, setPermissions] = useState<any>({ ...DEFAULT_PERMISSIONS, expedicao: false });
+  const [permissions, setPermissions] = useState<FuncionarioPermissions>({ ...DEFAULT_PERMISSIONS, expedicao: false });
 
   // Função para formatar telefone
   const formatTelefone = (value: string) => {
@@ -81,6 +82,7 @@ const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, fu
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && isOpen) {
+        setSenha('');
         onClose();
       }
     };
@@ -92,30 +94,39 @@ const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, fu
     };
   }, [isOpen, onClose]);
 
+  // Fecha o modal descartando a senha da memória/estado.
+  const handleClose = () => {
+    setSenha('');
+    onClose();
+  };
+
   const handleExpedicaoToggle = (checked: boolean) => {
+    const chaves = Object.keys(DEFAULT_PERMISSIONS) as PermissaoNormal[];
     if (checked) {
-      const allFalse = Object.keys(DEFAULT_PERMISSIONS).reduce((acc, key) => {
-        acc[key] = false;
-        return acc;
-      }, {} as Record<string, boolean>);
-      setPermissions({ ...allFalse, expedicao: true });
+      // Expedição restringe tudo: permissões normais (inclui vendedores) ficam false.
+      const zeradas = Object.fromEntries(chaves.map((key) => [key, false])) as Omit<
+        FuncionarioPermissions,
+        'expedicao'
+      >;
+      setPermissions({ ...zeradas, expedicao: true });
     } else {
-      const allTrue = Object.keys(DEFAULT_PERMISSIONS).reduce((acc, key) => {
-        acc[key] = true;
-        return acc;
-      }, {} as Record<string, boolean>);
-      setPermissions({ ...allTrue, expedicao: false });
+      const todas = Object.fromEntries(chaves.map((key) => [key, true])) as Omit<
+        FuncionarioPermissions,
+        'expedicao'
+      >;
+      setPermissions({ ...todas, expedicao: false });
     }
   };
 
   const handlePermissionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = e.target;
-    setPermissions((prev: any) => ({ ...prev, [name]: checked }));
+    const campo = name as keyof FuncionarioPermissions;
+    setPermissions((prev) => ({ ...prev, [campo]: checked }) as FuncionarioPermissions);
   };
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
-      onClose();
+      handleClose();
     }
   };
 
@@ -133,37 +144,27 @@ const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, fu
           id: funcionarioToEdit.id,
           nome,
           email,
-          telefone: telefone.replace(/\D/g, ''), // Remove máscara para salvar
-          cargo,
+          telefone: telefone.replace(/\D/g, '') || null, // Remove máscara para salvar
+          cargo: cargo || null,
           permissoes: permissions
         });
         toast.success('Funcionário atualizado com sucesso!');
       } else {
-        const adminIdToUse = adminId || user?.id;
-        
-        // Busca o nome_empresa do administrador antes de salvar
-        const { data: adminData } = await supabase
-          .from('administradores')
-          .select('nome_empresa')
-          .eq('id', adminIdToUse)
-          .single();
-
+        // O backend deriva administrador_id/nome_empresa — enviar só dados do funcionário.
         await createMutation.mutateAsync({
-          administrador_id: adminIdToUse,
-          nome_empresa: adminData?.nome_empresa || (userProfile as any)?.nome_empresa || null,
           nome,
           email,
           senha,
-          telefone: telefone.replace(/\D/g, ''), // Remove máscara para salvar
-          cargo,
+          telefone: telefone.replace(/\D/g, '') || null, // Remove máscara para salvar
+          cargo: cargo || null,
           permissoes: permissions
         });
         toast.success(`Funcionário criado! Senha: ${senha}`, { duration: 10000 });
       }
-      onClose();
-    } catch (error: any) {
-      console.error(error);
-      toast.error(error.message || 'Erro ao salvar funcionário');
+      handleClose();
+    } catch (error: unknown) {
+      const mensagem = error instanceof Error ? error.message : 'Erro ao salvar funcionário';
+      toast.error(mensagem);
     }
   };
 
@@ -180,7 +181,7 @@ const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, fu
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">
             {funcionarioToEdit ? 'Editar Funcionário' : 'Novo Funcionário'}
           </h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+          <button onClick={handleClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
             <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           </button>
         </div>
@@ -320,7 +321,7 @@ const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, fu
             <div className="flex justify-end gap-3 mt-6">
                 <button
                     type="button"
-                    onClick={onClose}
+                    onClick={handleClose}
                     className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600"
                 >
                     Cancelar
