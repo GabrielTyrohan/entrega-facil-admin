@@ -28,7 +28,11 @@ import type { NotaPedidoProps } from '../components/NotaPedidoAutonomo';
 import { useProdutos } from '../hooks/useProdutos';
 import { useVendedoresByAdmin } from '../hooks/useVendedores';
 import { supabase } from '../lib/supabase';
-import { movimentarEstoque } from '../utils/movimentarEstoque';
+import {
+  atualizarEntregaAvulsaSegura,
+  criarEntregaAvulsaSegura,
+  excluirEntregaAvulsaSegura,
+} from '../services/entregaAvulsaService';
 import { salvarESalvarPdf } from '../utils/pdfStorage';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -246,32 +250,18 @@ const EntregaAvulsa: React.FC = () => {
     }
     setIsConfirmando(true);
     try {
-      const { data: entrega, error: e1 } = await supabase
-        .from('entregas_avulsas')
-        .insert({ administrador_id: adminId || user?.id, vendedor_id: vendedorSelecionado.id, usuario_id: user?.id, usuario_nome: user?.email, observacao: observacao.trim() || null, sincronizado: false })
-        .select('id').single();
-      if (e1) throw new Error(e1.message);
-
-      const { error: e2 } = await supabase.from('entregas_avulsas_itens').insert(
-        itens.map(item => ({ entrega_avulsa_id: entrega.id, produto_cadastrado_id: item.produto.id, quantidade: item.quantidade, preco_unitario: item.produto.preco_unt, sincronizado: false }))
-      );
-      if (e2) throw new Error(e2.message);
-
-      for (const item of itens) {
-        await movimentarEstoque({
-          adminId: adminId || user?.id || '',
+      // Criação em transação única no servidor: sem inserts diretos,
+      // sem preço/tenant/usuário vindos do navegador.
+      const { id: entregaId } = await criarEntregaAvulsaSegura({
+        vendedorId: vendedorSelecionado.id,
+        itens: itens.map(item => ({
           produtoId: item.produto.id,
           quantidade: item.quantidade,
-          tipoMovimentacao: 'saida_venda',
-          referenciaTipo: 'entrega_avulsa',
-          referenciaId: entrega.id,
-          usuarioId: user?.id || '',
-          usuarioTipo: 'admin',
-          usuarioNome: user?.email || 'Sistema',
-        });
-      }
+        })),
+        observacao: observacao.trim() || null,
+      });
 
-      const novoId = entrega.id.slice(0, 8).toUpperCase();
+      const novoId = entregaId.slice(0, 8).toUpperCase();
 
       toast.success(`Entrega confirmada! ${itens.length} produto(s) para ${vendedorSelecionado.nome}.`);
 
@@ -377,27 +367,9 @@ const EntregaAvulsa: React.FC = () => {
     if (!deletando) return;
     setIsDeletando(true);
     try {
-      // Devolver estoque via movimentação de entrada
-      for (const item of deletando.entregas_avulsas_itens) {
-        const pid = item.produto_cadastrado_id ?? item.produtos_cadastrado?.id;
-        if (pid) {
-          await movimentarEstoque({
-            adminId: adminId || '',
-            produtoId: pid,
-            quantidade: item.quantidade,
-            tipoMovimentacao: 'entrada_devolucao',
-            referenciaTipo: 'entrega_avulsa',
-            referenciaId: deletando.id,
-            usuarioId: user?.id || '',
-            usuarioTipo: 'admin',
-            usuarioNome: user?.email || 'Sistema',
-          });
-        }
-      }
-      // Deletar itens e entrega
-      await supabase.from('entregas_avulsas_itens').delete().eq('entrega_avulsa_id', deletando.id);
-      const { error } = await supabase.from('entregas_avulsas').delete().eq('id', deletando.id);
-      if (error) throw new Error(error.message);
+      // Exclusão em cascata no servidor (devolve estoque e registra
+      // movimentações na mesma transação).
+      await excluirEntregaAvulsaSegura(deletando.id);
 
       toast.success('Entrega excluída e estoque devolvido.');
       setDeletando(null);
@@ -459,75 +431,16 @@ const EntregaAvulsa: React.FC = () => {
     if (itensAtivos.length === 0) { toast.error('A entrega precisa ter pelo menos 1 produto.'); return; }
     setIsSalvandoEdit(true);
     try {
-      // Ajustar estoque via movimentações
-      for (const it of editItens) {
-        const diff = it.quantidade - it.quantidadeOriginal;
-        if (diff === 0 && !it.removido) continue;
-        if (!it.produto_cadastrado_id) continue;
-
-        if (it.removido) {
-          // Devolver tudo que foi debitado originalmente
-          if (it.quantidadeOriginal > 0) {
-            await movimentarEstoque({
-              adminId: adminId || '',
-              produtoId: it.produto_cadastrado_id,
-              quantidade: it.quantidadeOriginal,
-              tipoMovimentacao: 'entrada_devolucao',
-              referenciaTipo: 'entrega_avulsa',
-              referenciaId: editando.id,
-              usuarioId: user?.id || '',
-              usuarioTipo: 'admin',
-              usuarioNome: user?.email || 'Sistema',
-            });
-          }
-        } else if (diff > 0) {
-          // Mais debitado — saída
-          await movimentarEstoque({
-            adminId: adminId || '',
-            produtoId: it.produto_cadastrado_id,
-            quantidade: diff,
-            tipoMovimentacao: 'saida_venda',
-            referenciaTipo: 'entrega_avulsa',
-            referenciaId: editando.id,
-            usuarioId: user?.id || '',
-            usuarioTipo: 'admin',
-            usuarioNome: user?.email || 'Sistema',
-          });
-        } else if (diff < 0) {
-          // Devolvido parte — entrada
-          await movimentarEstoque({
-            adminId: adminId || '',
-            produtoId: it.produto_cadastrado_id,
-            quantidade: Math.abs(diff),
-            tipoMovimentacao: 'entrada_devolucao',
-            referenciaTipo: 'entrega_avulsa',
-            referenciaId: editando.id,
-            usuarioId: user?.id || '',
-            usuarioTipo: 'admin',
-            usuarioNome: user?.email || 'Sistema',
-          });
-        }
-
-        // Deletar item removido
-        if (it.removido && it.id) {
-          await supabase.from('entregas_avulsas_itens').delete().eq('id', it.id);
-        }
-      }
-
-      // Atualizar/inserir itens ativos
-      for (const it of itensAtivos) {
-        if (it.isNovo) {
-          await supabase.from('entregas_avulsas_itens').insert({
-            entrega_avulsa_id: editando.id, produto_cadastrado_id: it.produto_cadastrado_id,
-            quantidade: it.quantidade, preco_unitario: it.preco_unitario, sincronizado: false,
-          });
-        } else if (it.id) {
-          await supabase.from('entregas_avulsas_itens').update({ quantidade: it.quantidade }).eq('id', it.id);
-        }
-      }
-
-      // Atualizar observação
-      await supabase.from('entregas_avulsas').update({ observacao: editObs.trim() || null, updated_at: new Date().toISOString() }).eq('id', editando.id);
+      // Estado final dos itens — o servidor calcula diffs, preserva preços
+      // históricos e movimenta o estoque atomicamente.
+      await atualizarEntregaAvulsaSegura({
+        entregaId: editando.id,
+        itens: itensAtivos.map(it => ({
+          produtoId: it.produto_cadastrado_id,
+          quantidade: it.quantidade,
+        })),
+        observacao: editObs,
+      });
 
       toast.success('Entrega atualizada com sucesso!');
       setEditando(null);

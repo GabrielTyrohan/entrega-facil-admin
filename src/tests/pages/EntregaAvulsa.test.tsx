@@ -48,10 +48,6 @@ vi.mock('../../hooks/useProdutos', () => ({
   useProdutos: () => ({ data: mockProdutos, isLoading: false }),
 }));
 
-vi.mock('../../utils/movimentarEstoque', () => ({
-  movimentarEstoque: vi.fn().mockResolvedValue(undefined),
-}));
-
 vi.mock('../../components/NotaPedidoAutonomo', () => ({
   default: (props: any) => (
     <div data-testid="nota-pedido-avulsa">
