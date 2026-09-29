@@ -1,8 +1,11 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { CACHE_KEYS, CACHE_TIMES } from '@/lib/constants/queryKeys';
 import { supabase } from '@/lib/supabase';
-import type { MovimentacaoEstoque, RegistrarMovimentacaoParams } from '@/types/estoque';
-import { movimentarEstoque } from '@/utils/movimentarEstoque';
+import {
+  registrarAjusteEstoqueSeguro,
+  type TipoAjusteManual,
+} from '@/services/ajusteEstoqueService';
+import type { MovimentacaoEstoque } from '@/types/estoque';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 // Tipo estendido que inclui o join com produto
@@ -60,21 +63,21 @@ export function useMovimentacoesEstoque(produtoId?: string) {
   });
 
   const registrarMovimentacao = useMutation({
-    mutationFn: async (params: RegistrarMovimentacaoParams) => {
-      if (!adminId) throw new Error('Admin ID não encontrado');
-      if (!userProfile) throw new Error('Usuário não autenticado');
-
-      // Usa função centralizada — apenas INSERT em movimentacoes_estoque
-      // A TRIGGER no Supabase atualiza qtd_estoque automaticamente
-      await movimentarEstoque({
-        adminId,
+    // Ajuste manual via RPC segura — só dados de negócio. Autoridade
+    // (admin/usuário/quantidades) é derivada no servidor. Sem INSERT direto.
+    mutationFn: async (params: {
+      produto_id: string;
+      tipo_movimentacao: TipoAjusteManual;
+      quantidade: number;
+      motivo: string;
+      observacoes?: string | null;
+      lote?: string | null;
+      fornecedor?: string | null;
+    }) => {
+      return registrarAjusteEstoqueSeguro({
         produtoId: params.produto_id,
-        quantidade: params.quantidade,
         tipoMovimentacao: params.tipo_movimentacao,
-        referenciaTipo: 'ajuste_manual',
-        usuarioId: userProfile.id,
-        usuarioTipo: (userProfile as any).tipo || 'admin',
-        usuarioNome: userProfile.nome,
+        quantidade: params.quantidade,
         motivo: params.motivo,
         observacoes: params.observacoes,
         lote: params.lote,

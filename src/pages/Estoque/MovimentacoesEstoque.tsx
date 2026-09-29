@@ -8,6 +8,7 @@ import { Pagination } from '@/components/ui/pagination';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useMovimentacoesEstoque } from '@/hooks/useMovimentacoesEstoque';
 import { useProdutos } from '@/hooks/useProdutos';
+import type { TipoAjusteManual } from '@/services/ajusteEstoqueService';
 import { toast } from '@/utils/toast';
 
 const MOVEMENT_TYPES: Record<string, string> = {
@@ -188,7 +189,7 @@ export default function MovimentacoesEstoque() {
 
       await registrarMovimentacao({
         produto_id: ajusteData.produtoId,
-        tipo_movimentacao: ajusteData.tipo as any,
+        tipo_movimentacao: ajusteData.tipo as TipoAjusteManual,
         quantidade: Number(ajusteData.quantidade),
         motivo: ajusteData.motivo,
         observacoes: ajusteData.observacoes,
