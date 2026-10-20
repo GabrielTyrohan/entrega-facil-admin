@@ -18,6 +18,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import { montarPayloadCadastroProduto } from '../services/produtoService';
 
 // =====================================================
 // CONSTANTES
@@ -75,6 +76,15 @@ interface DadosProduto {
   estoque_minimo?: number;
   estoque_maximo?: number;
   origem_mercadoria?: number;
+  cest?: string;
+  cfop_padrao?: string;
+  categoria_fiscal?: string;
+  cst_icms?: string;
+  aliquota_icms?: number;
+  cst_pis?: string;
+  aliquota_pis?: number;
+  cst_cofins?: string;
+  aliquota_cofins?: number;
 }
 
 // =====================================================
@@ -353,22 +363,10 @@ const NovoProduto: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const produtoPayload: DadosProduto = {
-        codigo_barras: formData.codigo_barras || undefined,
-        produto_nome: formData.produto_nome,
-        categoria: formData.categoria,
-        ncm: formData.ncm,
-        custo_compra: formData.custo_compra || undefined,
-        preco_unt: formData.preco_unt,
-        qtd_estoque: formData.qtd_estoque,
-        unidade_medida: formData.unidade_medida || 'UN',
-        kit: formData.kit || false,
-        ativo: formData.ativo !== undefined ? formData.ativo : true,
-        fornecedor_principal: formData.fornecedor_principal || undefined,
-        estoque_minimo: formData.estoque_minimo || 0,
-        estoque_maximo: formData.estoque_maximo || 0,
-        origem_mercadoria: formData.origem_mercadoria ?? 0
-      };
+      // Preserva TODOS os campos preenchidos, incluindo os fiscais
+      // (cest, cfop, categoria fiscal, CSTs e alíquotas). Nunca define
+      // fiscal_status — o backend decide o status inicial.
+      const produtoPayload: DadosProduto = montarPayloadCadastroProduto(formData);
 
       // Chamar Edge Function que faz TUDO
       const { data, error } = await supabase.functions.invoke('cadastrar-produto', {

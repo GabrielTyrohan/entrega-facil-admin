@@ -7,14 +7,21 @@ import {
 import { Pagination } from "@/components/ui/pagination";
 import ProdutoModal from '@/components/ui/ProdutoModal';
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Edit, Eye, Filter, MoreHorizontal, Package, Plus, Search, Trash2 } from 'lucide-react';
+import { Edit, Eye, Filter, MoreHorizontal, Package, Plus, Search, ShieldCheck, Trash2 } from 'lucide-react';
 import React, { useState } from 'react';
+import FiscalStatusBadge from '../components/FiscalStatusBadge';
+import RevisaoFiscalModal from '../components/RevisaoFiscalModal';
 import { useAuth } from '../contexts/AuthContext';
 import {
   useDeleteProduto,
   useProdutos,
   type Produto
 } from '../hooks/useProdutos';
+import {
+  FISCAL_STATUS_LABEL,
+  filtrarProdutosPorStatusFiscal,
+  type FiscalStatus,
+} from '../services/produtoFiscalService';
 
 const categorias = [
   'Todas',
@@ -34,7 +41,9 @@ const Produtos: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todas');
+  const [selectedFiscalStatus, setSelectedFiscalStatus] = useState<FiscalStatus | 'todos'>('todos');
   const [selectedProduto, setSelectedProduto] = useState<Produto | null>(null);
+  const [produtoRevisao, setProdutoRevisao] = useState<Produto | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'view' | 'edit' | 'create'>('view');
   const [currentPage, setCurrentPage] = useState(1);
@@ -76,17 +85,19 @@ const Produtos: React.FC = () => {
   const produtos = produtosData as Produto[];
 
   // Filtro local complementar para multi-palavras (ex: "arroz 5kg")
+  // + filtro por status fiscal (lido do campo `fiscal_status`, sem presumir).
   const produtosFiltrados = React.useMemo(() => {
-    if (!searchTerm.trim()) return produtos;
+    const porStatus = filtrarProdutosPorStatusFiscal(produtos, selectedFiscalStatus);
+    if (!searchTerm.trim()) return porStatus;
     const termos = normalizar(searchTerm.trim()).split(/\s+/);
-    return produtos.filter(p => {
+    return porStatus.filter(p => {
       const campos =
         normalizar(p.produto_nome) + ' ' +
         normalizar(p.produto_cod) + ' ' +
         normalizar(p.categoria || '');
       return termos.every(termo => campos.includes(termo));
     });
-  }, [produtos, searchTerm]);
+  }, [produtos, searchTerm, selectedFiscalStatus]);
 
   // Função para calcular itens por página baseado no tamanho da tela
   const calculateItemsPerPage = () => {
@@ -140,7 +151,7 @@ const Produtos: React.FC = () => {
   // Reset página quando filtro mudar
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedCategory]);
+  }, [searchTerm, selectedCategory, selectedFiscalStatus]);
 
   // Renderização de Debug para caso de lista vazia
   if (!isLoading && produtos.length === 0 && userType === 'funcionario') {
@@ -375,11 +386,24 @@ const Produtos: React.FC = () => {
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
+              aria-label="Filtrar por categoria"
               className="px-3 py-2.5 sm:py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white touch-manipulation"
             >
               {categorias.map(categoria => (
                 <option key={categoria} value={categoria}>{categoria}</option>
               ))}
+            </select>
+            <select
+              value={selectedFiscalStatus}
+              onChange={(e) => setSelectedFiscalStatus(e.target.value as FiscalStatus | 'todos')}
+              aria-label="Filtrar por status fiscal"
+              className="px-3 py-2.5 sm:py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white touch-manipulation"
+            >
+              <option value="todos">Fiscal: todos</option>
+              <option value="pendente_revisao">Fiscal: {FISCAL_STATUS_LABEL.pendente_revisao}</option>
+              <option value="em_revisao">Fiscal: {FISCAL_STATUS_LABEL.em_revisao}</option>
+              <option value="validado">Fiscal: {FISCAL_STATUS_LABEL.validado}</option>
+              <option value="bloqueado">Fiscal: {FISCAL_STATUS_LABEL.bloqueado}</option>
             </select>
           </div>
         </div>
@@ -427,6 +451,9 @@ const Produtos: React.FC = () => {
                   <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden xl:table-cell">
                     Status
                   </th>
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden lg:table-cell">
+                    Fiscal
+                  </th>
                   <th className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Ações
                   </th>
@@ -467,6 +494,9 @@ const Produtos: React.FC = () => {
                               {getStatusText(produto.qtd_estoque || 0)}
                             </span>
                           </div>
+                          <div className="lg:hidden mt-1">
+                            <FiscalStatusBadge status={produto.fiscal_status} />
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -489,6 +519,9 @@ const Produtos: React.FC = () => {
                         {getStatusText(produto.qtd_estoque || 0)}
                       </span>
                     </td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden lg:table-cell">
+                      <FiscalStatusBadge status={produto.fiscal_status} />
+                    </td>
                     <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-right text-sm font-medium">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -504,6 +537,10 @@ const Produtos: React.FC = () => {
                           <DropdownMenuItem onClick={() => handleEditProduto(produto)}>
                             <Edit className="w-4 h-4 mr-2" />
                             Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setProdutoRevisao(produto)}>
+                            <ShieldCheck className="w-4 h-4 mr-2" />
+                            Revisão fiscal
                           </DropdownMenuItem>
                           <DropdownMenuItem 
                             onClick={() => setProdutoParaExcluir(produto)}
@@ -529,12 +566,12 @@ const Produtos: React.FC = () => {
             </div>
             <h3 className="text-base sm:text-lg font-medium text-gray-900 dark:text-white mb-2">Nenhum produto encontrado</h3>
             <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400 mb-6">
-              {searchTerm || selectedCategory !== 'Todas' 
-                ? 'Tente ajustar os filtros de busca.' 
+              {searchTerm || selectedCategory !== 'Todas' || selectedFiscalStatus !== 'todos'
+                ? 'Tente ajustar os filtros de busca.'
                 : 'Comece cadastrando seu primeiro produto.'
               }
             </p>
-            {!searchTerm && selectedCategory === 'Todas' && (
+            {!searchTerm && selectedCategory === 'Todas' && selectedFiscalStatus === 'todos' && (
               <button 
                 onClick={handleCreateProduto}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 sm:py-2 rounded-lg font-medium flex items-center justify-center space-x-2 transition-colors mx-auto touch-manipulation"
@@ -554,6 +591,14 @@ const Produtos: React.FC = () => {
         onClose={() => setIsModalOpen(false)}
         mode={modalMode}
         onSave={handleSaveProduto}
+      />
+
+      {/* Revisão fiscal */}
+      <RevisaoFiscalModal
+        produto={produtoRevisao}
+        isOpen={produtoRevisao !== null}
+        onClose={() => setProdutoRevisao(null)}
+        onStatusChange={() => refetch()}
       />
 
       {/* Paginação */}
