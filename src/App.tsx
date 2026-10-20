@@ -43,6 +43,8 @@ import NovoAcerto from './pages/AcertosDiarios/NovoAcerto';
 import FluxoCaixa from './pages/Caixa/FluxoCaixa';
 import NovoLancamento from './pages/Caixa/NovoLancamento';
 import ConfiguracoesFiscais from './pages/ConfiguracoesFiscais';
+import ImportacaoFiscalReferencia from './pages/ImportacaoFiscalReferencia';
+import PrevisaoSincronizacaoFiscal from './pages/SincronizacaoFiscal';
 import FuncionarioConfig from './pages/FuncionarioConfig';
 import Funcionarios from './pages/Funcionarios';
 import DetalhesOrcamento from './pages/orcamentos/DetalhesOrcamento';
@@ -163,6 +165,20 @@ function App() {
                             <ExpedicaoGuard>
                               <RequireAdmin>
                                 <ConfiguracoesFiscais />
+                              </RequireAdmin>
+                            </ExpedicaoGuard>
+                          } />
+                          <Route path="/configuracoes-fiscais/importacao" element={
+                            <ExpedicaoGuard>
+                              <RequireAdmin>
+                                <ImportacaoFiscalReferencia />
+                              </RequireAdmin>
+                            </ExpedicaoGuard>
+                          } />
+                          <Route path="/configuracoes-fiscais/sincronizacao" element={
+                            <ExpedicaoGuard>
+                              <RequireAdmin>
+                                <PrevisaoSincronizacaoFiscal />
                               </RequireAdmin>
                             </ExpedicaoGuard>
                           } />

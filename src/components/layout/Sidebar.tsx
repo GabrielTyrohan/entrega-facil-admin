@@ -24,10 +24,12 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Receipt,
+  RefreshCw,
   Settings,
   ShoppingBasket,
   ShoppingCart,
   Truck,
+  Upload,
   UserCircle,
   UserCog,
   Users,
@@ -83,6 +85,7 @@ const PATH_TO_SECTION: Record<string, string> = {
   '/orcamentos-pj': 'Comercial',
   '/tabela-precos': 'Comercial',
   '/configuracoes-fiscais': 'Comercial',
+  '/configuracoes-fiscais/importacao': 'Comercial',
   '/relatorios': 'Relatórios',
   '/suporte': 'Sistema',
   '/configuracoes': 'Sistema',
@@ -308,6 +311,22 @@ const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed }: Side
       path: '/configuracoes-fiscais',
       label: 'Configuração Fiscal',
       icon: <FileKey className="w-5 h-5" />,
+      permission: 'configuracoes_fiscais',
+      adminOnly: true,
+      group: 'Comercial'
+    },
+    {
+      path: '/configuracoes-fiscais/importacao',
+      label: 'Importação Fiscal',
+      icon: <Upload className="w-5 h-5" />,
+      permission: 'configuracoes_fiscais',
+      adminOnly: true,
+      group: 'Comercial'
+    },
+    {
+      path: '/configuracoes-fiscais/sincronizacao',
+      label: 'Sincronização Fiscal',
+      icon: <RefreshCw className="w-5 h-5" />,
       permission: 'configuracoes_fiscais',
       adminOnly: true,
       group: 'Comercial'

@@ -28,6 +28,12 @@ export interface ProdutoCadastrado {
   aliquota_icms?: number;
   // Origem da mercadoria (0-8). Default 0. Não alterar NCM/CEST/CFOP/etc. automaticamente.
   origem_mercadoria?: number;
+  categoria_fiscal?: string;
+  // Status da revisão fiscal — lido do Supabase, nunca calculado no frontend.
+  // Alterações de status passam SEMPRE pela RPC `definir_status_fiscal_produto`.
+  fiscal_status?: 'pendente_revisao' | 'em_revisao' | 'validado' | 'bloqueado';
+  fiscal_validado_em?: string | null;
+  fiscal_validado_por?: string | null;
   // Campos de gestão
   fornecedor_principal?: string;
   ultima_compra?: string; // ISO date
@@ -62,10 +68,69 @@ export interface CreateProdutoData {
   cst_icms?: string;
   aliquota_icms?: number;
   origem_mercadoria?: number;
+  categoria_fiscal?: string;
   fornecedor_principal?: string;
   ultima_compra?: string;
   estoque_minimo?: number;
   estoque_maximo?: number;
+}
+
+// Monta o payload de cadastro preservando TODOS os campos preenchidos,
+// incluindo os fiscais (cest, cfop, CSTs, alíquotas, origem, categoria
+// fiscal). Usado pelo formulário de novo produto antes do envio à Edge
+// `cadastrar-produto`. Nunca define fiscal_status (o backend decide).
+export interface FormCadastroProduto {
+  produto_nome: string;
+  categoria: string;
+  qtd_estoque?: number;
+  preco_unt?: number;
+  codigo_barras?: string;
+  kit?: boolean;
+  ativo?: boolean;
+  unidade_medida?: string;
+  custo_compra?: number;
+  ncm?: string;
+  cest?: string;
+  cfop_padrao?: string;
+  categoria_fiscal?: string;
+  fornecedor_principal?: string;
+  estoque_minimo?: number;
+  estoque_maximo?: number;
+  cst_pis?: string;
+  aliquota_pis?: number;
+  cst_cofins?: string;
+  aliquota_cofins?: number;
+  cst_icms?: string;
+  aliquota_icms?: number;
+  origem_mercadoria?: number;
+}
+
+export function montarPayloadCadastroProduto(form: FormCadastroProduto): CreateProdutoData {
+  return {
+    codigo_barras: form.codigo_barras || undefined,
+    produto_nome: form.produto_nome,
+    categoria: form.categoria,
+    ncm: form.ncm,
+    custo_compra: form.custo_compra || undefined,
+    preco_unt: form.preco_unt,
+    qtd_estoque: form.qtd_estoque,
+    unidade_medida: form.unidade_medida || 'UN',
+    kit: form.kit || false,
+    ativo: form.ativo !== undefined ? form.ativo : true,
+    fornecedor_principal: form.fornecedor_principal || undefined,
+    estoque_minimo: form.estoque_minimo || 0,
+    estoque_maximo: form.estoque_maximo || 0,
+    origem_mercadoria: form.origem_mercadoria ?? 0,
+    cest: form.cest || undefined,
+    cfop_padrao: form.cfop_padrao || undefined,
+    categoria_fiscal: form.categoria_fiscal || undefined,
+    cst_icms: form.cst_icms || undefined,
+    aliquota_icms: form.aliquota_icms ?? undefined,
+    cst_pis: form.cst_pis || undefined,
+    aliquota_pis: form.aliquota_pis ?? undefined,
+    cst_cofins: form.cst_cofins || undefined,
+    aliquota_cofins: form.aliquota_cofins ?? undefined,
+  } as CreateProdutoData;
 }
 
 export type TipoMovimentacao = 
