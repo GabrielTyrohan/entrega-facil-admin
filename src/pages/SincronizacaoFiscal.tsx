@@ -12,44 +12,35 @@ import {
   type ResumoSincronizacao,
   type ReferenciaFiscalItem,
 } from '../services/sincronizacaoFiscalService';
-import FiscalStatusBadge from '../components/FiscalStatusBadge';
 import {
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   Download,
   FileText,
   Loader2,
   Package,
+  Plus,
   ShieldAlert,
-  Upload,
 } from 'lucide-react';
 
-const ACEITA_SOMENTE_ODS = '.ods';
-
 type Aba = 'resumo' | 'correspondencias' | 'novos' | 'pendentes' | 'comparacao';
-
-const LABEL_ABA: Record<Aba, string> = {
-  resumo: 'Resumo',
-  correspondencias: 'Correspondências',
-  novos: 'Novos produtos',
-  pendentes: 'Pendências',
-  comparacao: 'Comparação fiscal',
-};
 
 export default function SincronizacaoFiscal() {
   const { userProfile } = useAuth();
   const adminId = userProfile?.id;
 
   const [aba, setAba] = useState<Aba>('resumo');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filtroSituacao, setFiltroSituacao] = useState<
+  const [searchTerm] = useState('');
+  const [filtroSituacao] = useState<
     'todos' | 'correspondidas' | 'nao_correspondidas' | 'pendentes' | 'ambiguas'
   >('todos');
 
-  const [referencias, setReferencias] = useState<ReferenciaFiscalItem[]>([]);
-  const [produtos, setProdutos] = useState<any[]>([]);
+  const [, setReferencias] = useState<ReferenciaFiscalItem[]>([]);
+  const [, setProdutos] = useState<any[]>([]);
   const [comparacao, setComparacao] = useState<ComparacaoFiscalItem[]>([]);
   const [resumo, setResumo] = useState<ResumoSincronizacao | null>(null);
+  const [avisos, setAvisos] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,6 +54,7 @@ export default function SincronizacaoFiscal() {
       setProdutos(resultado.produtos);
       setComparacao(resultado.comparacao);
       setResumo(resultado.resumo);
+      setAvisos(resultado.avisos ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar a prévia da sincronização.');
       toast.error('Erro ao carregar a prévia da sincronização.');
@@ -120,25 +112,9 @@ export default function SincronizacaoFiscal() {
 
   const [paginaAtual, setPaginaAtual] = useState(1);
   const ITENS_POR_PAGINA = 20;
-  const paginaInicial = (paginaAtual - 1) * ITENS_POR_PAGINA;
-  const paginaFinal = paginaInicial + ITENS_POR_PAGINA;
-  const paginaAtualData = comparacaoFiltrada.slice(paginaInicial, paginaFinal);
   const totalPaginas = Math.max(1, Math.ceil(comparacaoFiltrada.length / ITENS_POR_PAGINA));
 
-  const podeExportar = Boolean(resumo) && resumo.total_referencias > 0;
-
-  const formatarNumero = (v: number | null | undefined): string => {
-    if (v === null || v === undefined) return '-';
-    return Number(v).toLocaleString('pt-BR');
-  };
-
-  const badgeStatus = (tipo: 'encontrada' | 'nao_encontrada' | 'ambigua') => {
-    if (tipo === 'encontrada')
-      return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400';
-    if (tipo === 'ambigua')
-      return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400';
-    return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
-  };
+  const podeExportar = resumo !== null && resumo.total_referencias > 0;
 
   const textoSituacao = (c: ComparacaoFiscalItem): string => {
     if (c.tipo === 'nao_encontrada') return 'Não encontrada';
@@ -146,16 +122,6 @@ export default function SincronizacaoFiscal() {
     if (c.estoque_invalido) return 'Estoque inválido';
     if (c.diferencas_fiscais.length > 0) return 'Divergência fiscal';
     return 'Conforme';
-  };
-
-  const classeCampoStatus = (c: ComparacaoFiscalItem): string => {
-    if (c.tipo === 'encontrada' && c.estoque_invalido === false && c.diferencas_fiscais.length === 0) {
-      return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400';
-    }
-    if (c.tipo === 'nao_encontrada') return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400';
-    if (c.tipo === 'ambigua') return 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400';
-    if (c.estoque_invalido) return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
-    return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400';
   };
 
   if (isLoading) {
@@ -219,13 +185,12 @@ export default function SincronizacaoFiscal() {
             onClick={() => {
               if (!podeExportar) return;
               const linhas: string[] = [
-                'Tipo;Código;Código de barras;Descrição;NCM;CEST;CFOP;CST ICMS;Alíquota ICMS;CST PIS;Alíquota PIS;CST COFINS;Alíquota COFINS;Estoque atual;Qtd planilha;Estoque proposto;Situação',
+                'Tipo;Critério;Código;Código de barras;Descrição;NCM;CEST;CFOP;CST ICMS;Alíquota ICMS;CST PIS;Alíquota PIS;CST COFINS;Alíquota COFINS;Estoque atual;Qtd referência;Estoque proposto;Situação;Motivo',
               ];
               for (const c of comparacaoFiltrada) {
-                const ref = c.referencia;
-                const p = c.produto;
                 linhas.push([
                   c.tipo,
+                  c.criterio_correspondencia ?? '',
                   c.referencia.codigo ?? '',
                   c.referencia.codigo_barras ?? '',
                   c.referencia.descricao ?? '',
@@ -238,10 +203,11 @@ export default function SincronizacaoFiscal() {
                   c.referencia.aliquota_pis ?? '',
                   c.referencia.cst_cofins ?? '',
                   c.referencia.aliquota_cofins ?? '',
-                  c.estoque_atual,
-                  c.quantidade_planilha,
-                  c.estoque_proposto,
+                  c.estoque_atual ?? '',
+                  c.quantidade_planilha ?? '',
+                  c.estoque_proposto ?? '',
                   textoSituacao(c),
+                  c.motivo ?? '',
                 ].join(';'));
               }
               const blob = new Blob([linhas.join('\n')], { type: 'text/csv;charset=utf-8;' });
@@ -276,6 +242,21 @@ export default function SincronizacaoFiscal() {
           </p>
         </div>
       </div>
+
+      {/* Avisos de integridade da leitura (paginação e colisões) */}
+      {avisos.length > 0 && (
+        <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-4 text-sm text-amber-900 dark:text-amber-200 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="w-full">
+            <p className="font-medium">A leitura encontrou inconsistências</p>
+            <ul className="mt-1 list-disc pl-5 space-y-0.5 text-[12px] leading-relaxed">
+              {avisos.map((aviso, indice) => (
+                <li key={`${indice}-${aviso}`}>{aviso}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
 
       {/* Indicadores superiores */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
@@ -329,7 +310,7 @@ export default function SincronizacaoFiscal() {
         <button
           key="correspondencias"
           onClick={() => setAba('correspondencias')}
-          className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${aba === 'correspondidas' ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+          className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${aba === 'correspondencias' ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
         >
           Correspondências
         </button>
@@ -405,8 +386,6 @@ export default function SincronizacaoFiscal() {
             itens={comparacaoFiltrada.filter((c) => c.tipo === 'encontrada')}
             paginaAtual={paginaAtual}
             itensPorPagina={ITENS_POR_PAGINA}
-            totalPaginas={Math.max(1, Math.ceil(comparacaoFiltrada.filter((c) => c.tipo === 'encontrada').length / ITENS_POR_PAGINA))}
-            onPaginaMudar={setPaginaAtual}
           />
         )}
         {aba === 'novos' && (
@@ -414,8 +393,6 @@ export default function SincronizacaoFiscal() {
             itens={comparacaoFiltrada.filter((c) => c.tipo === 'nao_encontrada')}
             paginaAtual={paginaAtual}
             itensPorPagina={ITENS_POR_PAGINA}
-            totalPaginas={Math.max(1, Math.ceil(comparacaoFiltrada.filter((c) => c.tipo === 'nao_encontrada').length / ITENS_POR_PAGINA))}
-            onPaginaMudar={setPaginaAtual}
           />
         )}
         {aba === 'pendentes' && (
@@ -423,8 +400,6 @@ export default function SincronizacaoFiscal() {
             itens={comparacaoFiltrada.filter((c) => c.tipo === 'encontrada' && (c.estoque_invalido || c.diferencas_fiscais.length > 0))}
             paginaAtual={paginaAtual}
             itensPorPagina={ITENS_POR_PAGINA}
-            totalPaginas={Math.max(1, Math.ceil(comparacaoFiltrada.filter((c) => c.tipo === 'encontrada' && (c.estoque_invalido || c.diferencas_fiscais.length > 0)).length / ITENS_POR_PAGINA))}
-            onPaginaMudar={setPaginaAtual}
           />
         )}
         {aba === 'comparacao' && (
@@ -432,8 +407,6 @@ export default function SincronizacaoFiscal() {
             itens={comparacaoFiltrada}
             paginaAtual={paginaAtual}
             itensPorPagina={ITENS_POR_PAGINA}
-            totalPaginas={totalPaginas}
-            onPaginaMudar={setPaginaAtual}
           />
         )}
       </div>
@@ -493,16 +466,12 @@ interface TabelaComparacaoProps {
   itens: ComparacaoFiscalItem[];
   paginaAtual: number;
   itensPorPagina: number;
-  totalPaginas: number;
-  onPaginaMudar: (pagina: number) => void;
 }
 
 function TabelaComparacao({
   itens,
   paginaAtual,
   itensPorPagina,
-  totalPaginas,
-  onPaginaMudar,
 }: TabelaComparacaoProps) {
   const paginaInicial = (paginaAtual - 1) * itensPorPagina;
   const paginaFinal = paginaInicial + itensPorPagina;
@@ -558,7 +527,7 @@ function TabelaComparacao({
               Estoque atual
             </th>
             <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hidden lg:table-cell">
-              Qtd planilha
+              Qtd referência
             </th>
             <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase hidden xl:table-cell">
               Estoque proposto
@@ -571,8 +540,20 @@ function TabelaComparacao({
         <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
           {itensPagina.map((c) => (
             <tr key={c.referencia.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-              <td className="px-3 py-3 text-left text-sm text-gray-900 dark:text-white truncate max-w-[200px]">
-                {c.referencia.descricao || 'Sem descrição'}
+              <td className="px-3 py-3 text-left text-sm text-gray-900 dark:text-white">
+                <div className="truncate max-w-[200px]">
+                  {c.referencia.descricao || 'Sem descrição'}
+                </div>
+                {c.tipo === 'nao_encontrada' && (
+                  <div className="text-xs text-blue-600 dark:text-blue-400">
+                    Produto não encontrado
+                  </div>
+                )}
+                {c.tipo === 'ambigua' && (
+                  <div className="text-xs text-orange-600 dark:text-orange-400">
+                    {c.motivo || 'Correspondência ambígua'}
+                  </div>
+                )}
               </td>
               <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white hidden sm:table-cell">
                 {c.referencia.codigo_barras || '—'}
@@ -587,13 +568,13 @@ function TabelaComparacao({
                 {c.referencia.cfop_padrao || '—'}
               </td>
               <td className="px-3 py-3 whitespace-nowrap text-right text-sm text-gray-900 dark:text-white hidden lg:table-cell">
-                {c.estoque_atual}
+                {formatarNumero(c.estoque_atual)}
               </td>
               <td className="px-3 py-3 whitespace-nowrap text-right text-sm text-gray-900 dark:text-white hidden lg:table-cell">
-                {c.quantidade_planilha}
+                {formatarNumero(c.quantidade_planilha)}
               </td>
               <td className="px-3 py-3 whitespace-nowrap text-right text-sm font-medium text-gray-900 dark:text-white hidden xl:table-cell">
-                {c.estoque_proposto}
+                {formatarNumero(c.estoque_proposto)}
               </td>
               <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-white hidden xl:table-cell">
                 <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${badgeSituacao(c)}`}>
@@ -609,6 +590,6 @@ function TabelaComparacao({
 }
 
 function formatarNumero(v: number | null | undefined): string {
-  if (v === null || v === undefined) return '-';
+  if (v === null || v === undefined) return '—';
   return Number(v).toLocaleString('pt-BR');
 }
