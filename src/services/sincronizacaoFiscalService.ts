@@ -22,10 +22,18 @@ export interface ReferenciaFiscalItem {
   icms?: number | null;
   cst_pis: string | null;
   aliquota_pis: number | null;
+  cst_pis_saida?: string | null;
+  aliquota_pis_saida?: number | null;
   cst_cofins: string | null;
   aliquota_cofins: number | null;
+  cst_cofins_saida?: string | null;
+  aliquota_cofins_saida?: number | null;
   nfe_cfop?: string | null;
+  cfop_descricao?: string | null;
   origem_mercadoria?: number | null;
+  kit?: boolean | null;
+  custo_compra?: number | null;
+  custo?: number | null;
   estoque: number | null;
   valor_estoque: number | null;
   preco1: number | null;

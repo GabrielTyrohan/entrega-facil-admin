@@ -9,6 +9,7 @@ import { useVendasAtacado, useVendasPorVendedor } from '../../hooks/useVendasAta
 import { useVendedoresByAdmin } from '../../hooks/useVendedores';
 import { supabase } from '../../lib/supabase';
 import { formatCurrency } from '../../utils/currencyUtils';
+import { calcularSituacaoPagamento } from '../../utils/calcularSituacaoPagamento';
 
 interface VendedorStats {
   vendedor_id: string;
@@ -33,6 +34,7 @@ interface Venda {
   id: string;
   data_entrega: string;
   valor_total: number;
+  valor_pago?: number;
   forma_pagamento: string;
   status_pagamento: string;
   clientes?: ClienteJoin;
@@ -210,24 +212,74 @@ const ListaVendas = () => {
     yPos += 6;
     doc.text(filtrosTexto, 14, yPos);
 
-    const tableData = (vendas as Venda[]).map(v => [
-      format(parseISO(v.data_entrega), 'dd/MM/yyyy'),
-      getClienteNome(v.clientes),
-      formatCurrency(v.valor_total),
-      v.forma_pagamento,
-      v.status_pagamento.toUpperCase()
-    ]);
+    const tableData = (vendas as Venda[]).map(v => {
+      const valorTotal = Number(v.valor_total || 0);
+      const valorPago = Number(v.valor_pago || 0);
+      const saldoRestante = valorTotal - valorPago;
+      const situacao = calcularSituacaoPagamento(valorTotal, valorPago, v.status_pagamento);
 
-    const valorTotal = (vendas as Venda[]).reduce((acc, curr) => acc + (Number(curr.valor_total) || 0), 0);
+      return [
+        format(parseISO(v.data_entrega), 'dd/MM/yyyy'),
+        getClienteNome(v.clientes),
+        formatCurrency(valorTotal),
+        formatCurrency(valorPago),
+        formatCurrency(saldoRestante),
+        v.forma_pagamento,
+        situacao.texto,
+      ];
+    });
+
+    const valorTotalGeral = (vendas as Venda[]).reduce(
+      (acc, curr) => acc + (Number(curr.valor_total) || 0),
+      0,
+    );
+    const valorPagoTotalGeral = (vendas as Venda[]).reduce(
+      (acc, curr) => acc + (Number(curr.valor_pago) || 0),
+      0,
+    );
+    const saldoRestanteTotalGeral = valorTotalGeral - valorPagoTotalGeral;
 
     autoTable(doc, {
       startY: yPos + 8,
-      head: [['Data Entrega', 'Cliente', 'Valor', 'Forma Pagto', 'Status']],
+      head: [
+        [
+          'Data Entrega',
+          'Cliente',
+          'Valor Total',
+          'Total Pago',
+          'Saldo Restante',
+          'Forma Pagto',
+          'Situação',
+        ],
+      ],
       body: tableData,
-      styles: { fontSize: 9 },
+      styles: { fontSize: 8 },
       headStyles: { fillColor: [41, 128, 185] },
-      foot: [['', 'TOTAL', formatCurrency(valorTotal), '', '']],
-      footStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' }
+      foot: [
+        [
+          '',
+          'TOTAIS',
+          formatCurrency(valorTotalGeral),
+          formatCurrency(valorPagoTotalGeral),
+          formatCurrency(saldoRestanteTotalGeral),
+          '',
+          '',
+        ],
+      ],
+      footStyles: {
+        fillColor: [240, 240, 240],
+        textColor: [0, 0, 0],
+        fontStyle: 'bold',
+      },
+      columnStyles: {
+        0: { cellWidth: 25 },
+        1: { cellWidth: 45 },
+        2: { cellWidth: 22, halign: 'right' },
+        3: { cellWidth: 22, halign: 'right' },
+        4: { cellWidth: 22, halign: 'right' },
+        5: { cellWidth: 22 },
+        6: { cellWidth: 28 },
+      },
     });
 
     doc.save('relatorio_vendas_atacado.pdf');

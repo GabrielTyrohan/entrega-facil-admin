@@ -2,6 +2,13 @@ import { DollarSign, Hash, Package, Save, Tag, X } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { type Produto } from '../../hooks/useProdutos';
+import {
+  buscarHistoricoFiscalProduto,
+  produtoVeioDeImportacao,
+  mapearSnapshotParaCamposFiscais,
+  preencherCamposFiscaisDoHistorico,
+  type ItemImportacaoFiscalHistorico,
+} from '../../services/produtoFiscalReferenciaHistoricaService';
 import { CreateProdutoData, ProdutoService } from '../../services/produtoService';
 import { applyCurrencyMask, currencyMaskToNumber } from '../../utils/currencyUtils';
 import { toast } from '@/utils/toast';
@@ -58,7 +65,13 @@ const gerarSKU = (categoria: string): string => {
 };
 
 const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, mode, onSave }) => {
-  const { user } = useAuth();
+  const [historicoFiscal, setHistoricoFiscal] = useState<ItemImportacaoFiscalHistorico | null>(null);
+  const [carregandoHistorico, setCarregandoHistorico] = useState(false);
+  const [erroHistorico, setErroHistorico] = useState<string | null>(null);
+  // Campos fiscais preenchidos a partir da referência histórica (para exibir como somente leitura no modo view)
+  const [camposFiscaisHistorico, setCamposFiscaisHistorico] = useState<Record<string, boolean>>({});
+
+  const { user, adminId } = useAuth();
   
   const [formData, setFormData] = useState<Produto>({
     id: '',
@@ -144,6 +157,61 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
     }
   }, [produto, mode, isOpen, user?.id]);
 
+  // Carregar histórico fiscal para produtos importados (modo view e edit)
+  useEffect(() => {
+    if (!isOpen || (mode !== 'view' && mode !== 'edit') || !produto || !produtoVeioDeImportacao(produto) || !adminId) {
+      setHistoricoFiscal(null);
+      setErroHistorico(null);
+      setCamposFiscaisHistorico({});
+      return;
+    }
+
+    setCarregandoHistorico(true);
+    setErroHistorico(null);
+    buscarHistoricoFiscalProduto(produto.id, adminId)
+      .then((hist) => {
+        setHistoricoFiscal(hist);
+      })
+      .catch((err) => {
+        setErroHistorico(
+          err instanceof Error ? err.message : 'Erro ao carregar histórico fiscal.',
+        );
+      })
+      .finally(() => {
+        setCarregandoHistorico(false);
+      });
+  }, [isOpen, mode, produto, adminId]);
+
+  // No modo view, mesclar valores históricos nos campos fiscais quando o
+  // campo do cadastro estiver nulo/vazio. Isso é automático (somente leitura).
+  useEffect(() => {
+    if (mode !== 'view' || !produto || !historicoFiscal?.snapshot_referencia) return;
+
+    const snap = historicoFiscal.snapshot_referencia;
+    const campos = mapearSnapshotParaCamposFiscais(snap);
+    if (Object.keys(campos).length === 0) return;
+
+    const novosCampos: Record<string, boolean> = {};
+    setFormData((prev) => {
+      const atualizado = { ...prev };
+      let mudou = false;
+
+      for (const [chave, valor] of Object.entries(campos) as [string, string | number][]) {
+        const atual = (atualizado as Record<string, unknown>)[chave];
+        const vazio = atual === null || atual === undefined || atual === '';
+        if (vazio && valor !== undefined && valor !== null) {
+          (atualizado as Record<string, unknown>)[chave] = valor;
+          novosCampos[chave] = true;
+          mudou = true;
+        }
+      }
+
+      return mudou ? atualizado : prev;
+    });
+
+    setCamposFiscaisHistorico(novosCampos);
+  }, [mode, produto, historicoFiscal]);
+
   // useEffect para gerar SKU quando categoria mudar no modo 'create'
   useEffect(() => {
     if (mode === 'create' && formData.categoria) {
@@ -182,7 +250,10 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
     try {
       if (!formData.produto_nome.trim()) { toast.error('Nome do produto é obrigatório'); return; }
       if (!formData.produto_cod.trim()) { toast.error('Código do produto é obrigatório'); return; }
-      if (formData.produto_cod.length !== 10) { toast.error('O código SKU deve ter 10 caracteres (XXX-######).'); return; }
+      if (formData.produto_cod.length < 1 || formData.produto_cod.length > 64) {
+        toast.error('O código SKU deve ter entre 1 e 64 caracteres.');
+        return;
+      }
       if (!formData.categoria.trim()) { toast.error('Categoria é obrigatória'); return; }
       if (formData.preco_unt < 0) { toast.error('Preço não pode ser negativo'); return; }
       if (formData.qtd_estoque < 0) { toast.error('Quantidade não pode ser negativa'); return; }
@@ -268,6 +339,57 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
     }
   };
 
+  function formatarValorHistorico(valor: unknown): string {
+    if (valor === null || valor === undefined) return 'Não informado na referência';
+    if (typeof valor === 'boolean') return valor ? 'Sim' : 'Não';
+    if (typeof valor === 'number') return String(valor);
+    if (typeof valor === 'string') return valor.trim() || 'Não informado na referência';
+    return String(valor);
+  }
+
+  // Preenche campos fiscais vazios com valores da referência histórica (modo edit).
+  // Não sobrescreve valores já preenchidos nem altera origem_mercadoria.
+  function aplicarPreenchimentoHistorico() {
+    if (!historicoFiscal?.snapshot_referencia) return;
+
+    const preenchido = preencherCamposFiscaisDoHistorico(formData, historicoFiscal.snapshot_referencia);
+    if (JSON.stringify(preenchido) !== JSON.stringify(formData)) {
+      setFormData(preenchido);
+      toast.success('Campos fiscais preenchidos com valores da referência histórica. Revise e salve.');
+    } else {
+      toast.info('Não há novos campos fiscais para preencher a partir da referência.');
+    }
+  }
+
+  // Retorna o valor a exibir no input: valor do cadastro se preenchido, senão
+  // o valor histórico (somente leitura) se disponível.
+  function valorInputFiscal(campo: keyof typeof formData): string {
+    const valorAtual = formData[campo];
+    if (valorAtual !== null && valorAtual !== undefined && valorAtual !== '') {
+      return String(valorAtual);
+    }
+    // Modo view: tentar histórico
+    if (mode === 'view' && historicoFiscal?.snapshot_referencia) {
+      const campos = mapearSnapshotParaCamposFiscais(historicoFiscal.snapshot_referencia);
+      const valorHistorico = (campos as Record<string, string | number | undefined>)[campo];
+      if (valorHistorico !== undefined && valorHistorico !== null) {
+        return String(valorHistorico);
+      }
+    }
+    return '';
+  }
+
+  // Retorna true se o campo fiscal está sendo exibido com valor histórico (somente leitura).
+  const ehValorHistorico = (campo: keyof typeof formData): boolean => {
+    const valorAtual = formData[campo];
+    if (valorAtual !== null && valorAtual !== undefined && valorAtual !== '') return false;
+    return (
+      mode === 'view' &&
+      camposFiscaisHistorico[campo] === true &&
+      historicoFiscal?.snapshot_referencia !== null
+    );
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -333,8 +455,12 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
                     type="text"
                     name="produto_cod"
                     value={formData.produto_cod}
-                    readOnly
-                    className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 cursor-not-allowed font-mono"
+                    readOnly={mode === 'view'}
+                    onChange={handleInputChange}
+                    className={mode === 'view'
+                      ? "w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 cursor-not-allowed font-mono disabled:opacity-50"
+                      : "w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white font-mono"
+                    }
                   />
                 </div>
               </div>
@@ -511,79 +637,180 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
           {activeTab === 'fiscal' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">NCM</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  NCM
+                  {ehValorHistorico('ncm') && (
+                    <span className="text-[10px] text-blue-600 dark:text-blue-400 ml-1">Referência histórica — ainda não gravada no cadastro</span>
+                  )}
+                </label>
                 <input
                   type="text"
                   name="ncm"
-                  value={formData.ncm || ''}
+                  value={valorInputFiscal('ncm')}
                   onChange={handleInputChange}
-                  disabled={mode === 'view'}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                  disabled={mode === 'view' || ehValorHistorico('ncm')}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:bg-gray-100 dark:disabled:bg-gray-800"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CEST</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  CEST
+                  {ehValorHistorico('cest') && (
+                    <span className="text-[10px] text-blue-600 dark:text-blue-400 ml-1">Referência histórica — ainda não gravada no cadastro</span>
+                  )}
+                </label>
                 <input
                   type="text"
                   name="cest"
-                  value={formData.cest || ''}
+                  value={valorInputFiscal('cest')}
                   onChange={handleInputChange}
-                  disabled={mode === 'view'}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                  disabled={mode === 'view' || ehValorHistorico('cest')}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:bg-gray-100 dark:disabled:bg-gray-800"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CFOP Padrão</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  CFOP Padrão
+                  {ehValorHistorico('cfop_padrao') && (
+                    <span className="text-[10px] text-blue-600 dark:text-blue-400 ml-1">Referência histórica — ainda não gravada no cadastro</span>
+                  )}
+                </label>
                 <input
                   type="text"
                   name="cfop_padrao"
-                  value={formData.cfop_padrao || ''}
+                  value={valorInputFiscal('cfop_padrao')}
                   onChange={handleInputChange}
-                  disabled={mode === 'view'}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                  disabled={mode === 'view' || ehValorHistorico('cfop_padrao')}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:bg-gray-100 dark:disabled:bg-gray-800"
                 />
               </div>
-              
+
               {/* Espaço vazio para alinhar */}
               <div className="hidden md:block"></div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CST PIS</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  CST PIS
+                  {ehValorHistorico('cst_pis') && (
+                    <span className="text-[10px] text-blue-600 dark:text-blue-400 ml-1">Referência histórica — ainda não gravada no cadastro</span>
+                  )}
+                </label>
                 <input
                   type="text"
                   name="cst_pis"
-                  value={formData.cst_pis || ''}
+                  value={valorInputFiscal('cst_pis')}
                   onChange={handleInputChange}
-                  disabled={mode === 'view'}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                  disabled={mode === 'view' || ehValorHistorico('cst_pis')}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:bg-gray-100 dark:disabled:bg-gray-800"
                 />
               </div>
-               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CST COFINS</label>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  CST COFINS
+                  {ehValorHistorico('cst_cofins') && (
+                    <span className="text-[10px] text-blue-600 dark:text-blue-400 ml-1">Referência histórica — ainda não gravada no cadastro</span>
+                  )}
+                </label>
                 <input
                   type="text"
                   name="cst_cofins"
-                  value={formData.cst_cofins || ''}
+                  value={valorInputFiscal('cst_cofins')}
                   onChange={handleInputChange}
-                  disabled={mode === 'view'}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                  disabled={mode === 'view' || ehValorHistorico('cst_cofins')}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:bg-gray-100 dark:disabled:bg-gray-800"
                 />
               </div>
-               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">CST ICMS</label>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  CST ICMS
+                  {ehValorHistorico('cst_icms') && (
+                    <span className="text-[10px] text-blue-600 dark:text-blue-400 ml-1">Referência histórica — ainda não gravada no cadastro</span>
+                  )}
+                </label>
                 <input
                   type="text"
                   name="cst_icms"
-                  value={formData.cst_icms || ''}
+                  value={valorInputFiscal('cst_icms')}
                   onChange={handleInputChange}
-                  disabled={mode === 'view'}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                  disabled={mode === 'view' || ehValorHistorico('cst_icms')}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:bg-gray-100 dark:disabled:bg-gray-800"
                 />
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Origem da Mercadoria</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Alíquota ICMS (%)
+                  {ehValorHistorico('aliquota_icms') && (
+                    <span className="text-[10px] text-blue-600 dark:text-blue-400 ml-1">Referência histórica — ainda não gravada no cadastro</span>
+                  )}
+                </label>
+                <input
+                  type="number"
+                  name="aliquota_icms"
+                  value={
+                    formData.aliquota_icms === null || formData.aliquota_icms === undefined
+                      ? valorInputFiscal('aliquota_icms')
+                      : String(formData.aliquota_icms)
+                  }
+                  onChange={handleInputChange}
+                  disabled={mode === 'view' || ehValorHistorico('aliquota_icms')}
+                  step="0.01"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:bg-gray-100 dark:disabled:bg-gray-800"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Alíquota PIS (%)
+                  {ehValorHistorico('aliquota_pis') && (
+                    <span className="text-[10px] text-blue-600 dark:text-blue-400 ml-1">Referência histórica — ainda não gravada no cadastro</span>
+                  )}
+                </label>
+                <input
+                  type="number"
+                  name="aliquota_pis"
+                  value={
+                    formData.aliquota_pis === null || formData.aliquota_pis === undefined
+                      ? valorInputFiscal('aliquota_pis')
+                      : String(formData.aliquota_pis)
+                  }
+                  onChange={handleInputChange}
+                  disabled={mode === 'view' || ehValorHistorico('aliquota_pis')}
+                  step="0.01"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:bg-gray-100 dark:disabled:bg-gray-800"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Alíquota COFINS (%)
+                  {ehValorHistorico('aliquota_cofins') && (
+                    <span className="text-[10px] text-blue-600 dark:text-blue-400 ml-1">Referência histórica — ainda não gravada no cadastro</span>
+                  )}
+                </label>
+                <input
+                  type="number"
+                  name="aliquota_cofins"
+                  value={
+                    formData.aliquota_cofins === null || formData.aliquota_cofins === undefined
+                      ? valorInputFiscal('aliquota_cofins')
+                      : String(formData.aliquota_cofins)
+                  }
+                  onChange={handleInputChange}
+                  disabled={mode === 'view' || ehValorHistorico('aliquota_cofins')}
+                  step="0.01"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white disabled:opacity-50 disabled:bg-gray-100 dark:disabled:bg-gray-800"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Origem da Mercadoria
+                </label>
                 <select
                   name="origem_mercadoria"
                   value={String(formData.origem_mercadoria ?? 0)}
@@ -596,6 +823,132 @@ const ProdutoModal: React.FC<ProdutoModalProps> = ({ produto, isOpen, onClose, m
                   ))}
                 </select>
               </div>
+
+              {mode === 'edit' && produto && produtoVeioDeImportacao(produto) && (
+                <div className="md:col-span-2">
+                  <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-3 space-y-2">
+                    <button
+                      type="button"
+                      onClick={aplicarPreenchimentoHistorico}
+                      disabled={carregandoHistorico}
+                      className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40 disabled:opacity-50"
+                    >
+                      <Package className="w-4 h-4" />
+                      {carregandoHistorico ? 'Carregando...' : 'Preencher campos fiscais a partir da referência'}
+                    </button>
+                    <p className="text-[10px] text-blue-600 dark:text-blue-400">
+                      Preenche apenas campos vazios com valores da referência histórica.
+                      Não grava no banco automaticamente.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Dados fiscais históricos da referência (somente visualização) */}
+          {mode === 'view' && produto && produtoVeioDeImportacao(produto) && (
+            <div className="mt-4 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                Dados fiscais da referência (histórico de importação)
+              </h3>
+              <p className="text-xs text-blue-700 dark:text-blue-300">
+                Estes valores foram importados da base de referência fiscal e são
+                somente leitura. Quando o campo do cadastro está vazio, o valor
+                histórico é exibido dentro do campo acima.
+              </p>
+
+              {carregandoHistorico && (
+                <p className="text-xs text-blue-600 dark:text-blue-400">
+                  Carregando dados históricos...
+                </p>
+              )}
+
+              {erroHistorico && (
+                <p className="text-xs text-red-600 dark:text-red-400">
+                  Erro ao carregar histórico: {erroHistorico}
+                </p>
+              )}
+
+              {historicoFiscal && historicoFiscal.snapshot_referencia && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                  <div>
+                    <dt className="font-medium text-blue-800 dark:text-blue-300">NCM</dt>
+                    <dd className="text-blue-900 dark:text-blue-100">
+                      {formatarValorHistorico(historicoFiscal.snapshot_referencia.ncm)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-blue-800 dark:text-blue-300">CEST</dt>
+                    <dd className="text-blue-900 dark:text-blue-100">
+                      {formatarValorHistorico(historicoFiscal.snapshot_referencia.cest)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-blue-800 dark:text-blue-300">CFOP</dt>
+                    <dd className="text-blue-900 dark:text-blue-100">
+                      {formatarValorHistorico(
+                        historicoFiscal.snapshot_referencia.cfop_padrao ??
+                          historicoFiscal.snapshot_referencia.nfe_cfop,
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-blue-800 dark:text-blue-300">Origem</dt>
+                    <dd className="text-blue-900 dark:text-blue-100">
+                      {formatarValorHistorico(historicoFiscal.snapshot_referencia.origem_mercadoria)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-blue-800 dark:text-blue-300">CST ICMS</dt>
+                    <dd className="text-blue-900 dark:text-blue-100">
+                      {formatarValorHistorico(historicoFiscal.snapshot_referencia.cst_icms)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-blue-800 dark:text-blue-300">Alíq. ICMS</dt>
+                    <dd className="text-blue-900 dark:text-blue-100">
+                      {formatarValorHistorico(historicoFiscal.snapshot_referencia.aliquota_icms)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-blue-800 dark:text-blue-300">CST PIS</dt>
+                    <dd className="text-blue-900 dark:text-blue-100">
+                      {formatarValorHistorico(historicoFiscal.snapshot_referencia.cst_pis)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-blue-800 dark:text-blue-300">Alíq. PIS</dt>
+                    <dd className="text-blue-900 dark:text-blue-100">
+                      {formatarValorHistorico(historicoFiscal.snapshot_referencia.aliquota_pis)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-blue-800 dark:text-blue-300">CST COFINS</dt>
+                    <dd className="text-blue-900 dark:text-blue-100">
+                      {formatarValorHistorico(historicoFiscal.snapshot_referencia.cst_cofins)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-blue-800 dark:text-blue-300">Alíq. COFINS</dt>
+                    <dd className="text-blue-900 dark:text-blue-100">
+                      {formatarValorHistorico(historicoFiscal.snapshot_referencia.aliquota_cofins)}
+                    </dd>
+                  </div>
+                </div>
+              )}
+
+              {historicoFiscal && !historicoFiscal.snapshot_referencia && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  O item de importação foi encontrado, mas não contém snapshot de referência.
+                </p>
+              )}
+
+              {!carregandoHistorico && !erroHistorico && !historicoFiscal && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  Nenhum dado histórico encontrado para este produto.
+                </p>
+              )}
             </div>
           )}
         </div>

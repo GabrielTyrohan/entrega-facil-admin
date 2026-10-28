@@ -34,5 +34,6 @@ electron/*.zip
 *.sln
 *.sw?
 .env
+.env.fiscal-test.local
 
 documentacao/

@@ -49,6 +49,11 @@ const Produtos: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [produtoParaExcluir, setProdutoParaExcluir] = useState<Produto | null>(null);
+  // Ref para distinguir a carga inicial da página de refetques subsequentes
+  // (ex.: debounce da busca). O esqueleto sem o campo de pesquisa só deve
+  // aparecer na primeira carga. Durante uma atualização de resultados o
+  // input de pesquisa deve permanecer montado para o usuário não perder o foco.
+  const hasLoadedRef = React.useRef(false);
 
   React.useEffect(() => {
     const timer = setTimeout(() => {
@@ -64,7 +69,7 @@ const Produtos: React.FC = () => {
     count: totalCount,
     isLoading: productsLoading,
     error,
-    refetch
+    refetch,
   } = useProdutos({
     page: currentPage,
     pageSize: itemsPerPage,
@@ -74,6 +79,14 @@ const Produtos: React.FC = () => {
 
   // isLoading considera carregamento da auth, dos produtos E se temos usuário mas ainda sem adminId
   const isLoading = authLoading || productsLoading || (!!user && !adminId);
+
+  // Marcar que a primeira carga terminou. Usamos a transição de isLoading
+  // de true para false, que é mais robusto que depender de isSuccess.
+  React.useEffect(() => {
+    if (!isLoading) {
+      hasLoadedRef.current = true;
+    }
+  }, [isLoading]);
 
   // Buscar categorias disponíveis (removido - não utilizado)
   // const { data: categoriasDisponiveis = [] } = useProdutoCategories();
@@ -220,8 +233,12 @@ const Produtos: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  // Mostrar loading
-  if (isLoading) {
+  // Mostrar esqueleto apenas na carga inicial.
+  // Durante refetch (digitação na busca), o input de pesquisa permanece
+  // montado e apenas a lista é atualizada, para o usuário não perder o foco.
+  const isInitialLoad = !hasLoadedRef.current && isLoading && (!produtosData || produtosData.length === 0);
+
+  if (isInitialLoad) {
     return (
       <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
         {/* Header Skeleton */}

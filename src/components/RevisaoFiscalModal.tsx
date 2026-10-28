@@ -12,6 +12,12 @@ import {
   verificarRequisitosValidacao,
   type FiscalStatus,
 } from '../services/produtoFiscalService';
+import {
+  buscarHistoricoFiscalProduto,
+  produtoVeioDeImportacao,
+  preencherCamposFiscaisDoHistorico,
+  type ItemImportacaoFiscalHistorico,
+} from '../services/produtoFiscalReferenciaHistoricaService';
 
 interface RevisaoFiscalModalProps {
   produto: Produto | null;
@@ -58,7 +64,7 @@ const RevisaoFiscalModal: React.FC<RevisaoFiscalModalProps> = ({
   onClose,
   onStatusChange,
 }) => {
-  const { userType, permissions } = useAuth();
+  const { userType, permissions, adminId } = useAuth();
   const updateMutation = useUpdateProduto();
   const autorizado = userType === 'admin' || !!permissions?.produtos;
 
@@ -70,14 +76,38 @@ const RevisaoFiscalModal: React.FC<RevisaoFiscalModalProps> = ({
   const [confirmando, setConfirmando] = useState<FiscalStatus | null>(null);
   const [executando, setExecutando] = useState(false);
 
+  // Dados fiscais históricos (snapshot da referência de importação)
+  const [historicoFiscal, setHistoricoFiscal] = useState<ItemImportacaoFiscalHistorico | null>(null);
+  const [carregandoHistorico, setCarregandoHistorico] = useState(false);
+  const [erroHistorico, setErroHistorico] = useState<string | null>(null);
+
   useEffect(() => {
     if (isOpen && produto) {
       const inicial = extrairFormFiscal(produto);
       setForm(inicial);
       setSnapshot(inicial);
       setConfirmando(null);
+      setHistoricoFiscal(null);
+      setErroHistorico(null);
+
+      // Carregar histórico fiscal se o produto veio de importação
+      if (produtoVeioDeImportacao(produto) && adminId) {
+        setCarregandoHistorico(true);
+        buscarHistoricoFiscalProduto(produto.id, adminId)
+          .then((hist) => {
+            setHistoricoFiscal(hist);
+          })
+          .catch((err) => {
+            setErroHistorico(
+              err instanceof Error ? err.message : 'Erro ao carregar histórico fiscal.',
+            );
+          })
+          .finally(() => {
+            setCarregandoHistorico(false);
+          });
+      }
     }
-  }, [isOpen, produto]);
+  }, [isOpen, produto, adminId]);
 
   if (!isOpen || !produto || !form) return null;
 
@@ -99,7 +129,29 @@ const RevisaoFiscalModal: React.FC<RevisaoFiscalModalProps> = ({
     setForm((prev) => (prev ? { ...prev, [campo]: valor } : prev));
   }
 
+  // Preenche o formulário com valores do snapshot histórico (ação explícita)
+  function preencherDoHistorico() {
+    if (!historicoFiscal?.snapshot_referencia || !form) return;
+
+    const preenchido = preencherCamposFiscaisDoHistorico(form, historicoFiscal.snapshot_referencia);
+    if (JSON.stringify(preenchido) !== JSON.stringify(form)) {
+      setForm(preenchido);
+      toast.success('Campos preenchidos com valores da referência histórica. Revise e salve.');
+    } else {
+      toast.info('Não há novos campos fiscais para preencher a partir da referência.');
+    }
+  }
+
+  function formatarValorHistorico(valor: unknown): string {
+    if (valor === null || valor === undefined) return 'Não informado na referência';
+    if (typeof valor === 'boolean') return valor ? 'Sim' : 'Não';
+    if (typeof valor === 'number') return String(valor);
+    if (typeof valor === 'string') return valor.trim() || 'Não informado na referência';
+    return String(valor);
+  }
+
   async function handleSalvarCampos() {
+    if (!produto || !form) return;
     try {
       setSalvando(true);
       // Somente campos fiscais editáveis — NUNCA fiscal_status por aqui.
@@ -129,7 +181,7 @@ const RevisaoFiscalModal: React.FC<RevisaoFiscalModalProps> = ({
   }
 
   async function handleConfirmarStatus() {
-    if (!confirmando) return;
+    if (!confirmando || !produto) return;
     try {
       setExecutando(true);
       await alterarStatusFiscalProduto(produto.id, confirmando);
@@ -208,6 +260,129 @@ const RevisaoFiscalModal: React.FC<RevisaoFiscalModalProps> = ({
             <div className="rounded-lg border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 p-3 text-sm text-yellow-800 dark:text-yellow-200 flex items-start gap-2">
               <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
               <span>Você não tem permissão para revisar ou validar a classificação fiscal.</span>
+            </div>
+          )}
+
+          {/* Dados fiscais históricos da referência (somente leitura) */}
+          {produtoVeioDeImportacao(produto) && (
+            <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                Dados fiscais da referência (histórico de importação)
+              </h3>
+              <p className="text-xs text-blue-700 dark:text-blue-300">
+                Estes valores foram importados da base de referência fiscal e são
+                somente leitura. O cadastro atual pode ter campos nulos; os
+                valores históricos são exibidos separadamente.
+              </p>
+
+              {carregandoHistorico && (
+                <p className="text-xs text-blue-600 dark:text-blue-400">
+                  Carregando dados históricos...
+                </p>
+              )}
+
+              {erroHistorico && (
+                <p className="text-xs text-red-600 dark:text-red-400">
+                  Erro ao carregar histórico: {erroHistorico}
+                </p>
+              )}
+
+              {historicoFiscal && historicoFiscal.snapshot_referencia && (
+                <>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                    <div>
+                      <dt className="font-medium text-blue-800 dark:text-blue-300">NCM</dt>
+                      <dd className="text-blue-900 dark:text-blue-100">
+                        {formatarValorHistorico(historicoFiscal.snapshot_referencia.ncm)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium text-blue-800 dark:text-blue-300">CEST</dt>
+                      <dd className="text-blue-900 dark:text-blue-100">
+                        {formatarValorHistorico(historicoFiscal.snapshot_referencia.cest)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium text-blue-800 dark:text-blue-300">CFOP</dt>
+                      <dd className="text-blue-900 dark:text-blue-100">
+                        {formatarValorHistorico(
+                          historicoFiscal.snapshot_referencia.cfop_padrao ??
+                            historicoFiscal.snapshot_referencia.nfe_cfop,
+                        )}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium text-blue-800 dark:text-blue-300">Origem</dt>
+                      <dd className="text-blue-900 dark:text-blue-100">
+                        {formatarValorHistorico(historicoFiscal.snapshot_referencia.origem_mercadoria)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium text-blue-800 dark:text-blue-300">CST ICMS</dt>
+                      <dd className="text-blue-900 dark:text-blue-100">
+                        {formatarValorHistorico(historicoFiscal.snapshot_referencia.cst_icms)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium text-blue-800 dark:text-blue-300">Alíq. ICMS</dt>
+                      <dd className="text-blue-900 dark:text-blue-100">
+                        {formatarValorHistorico(historicoFiscal.snapshot_referencia.aliquota_icms)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium text-blue-800 dark:text-blue-300">CST PIS</dt>
+                      <dd className="text-blue-900 dark:text-blue-100">
+                        {formatarValorHistorico(historicoFiscal.snapshot_referencia.cst_pis)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium text-blue-800 dark:text-blue-300">Alíq. PIS</dt>
+                      <dd className="text-blue-900 dark:text-blue-100">
+                        {formatarValorHistorico(historicoFiscal.snapshot_referencia.aliquota_pis)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium text-blue-800 dark:text-blue-300">CST COFINS</dt>
+                      <dd className="text-blue-900 dark:text-blue-100">
+                        {formatarValorHistorico(historicoFiscal.snapshot_referencia.cst_cofins)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium text-blue-800 dark:text-blue-300">Alíq. COFINS</dt>
+                      <dd className="text-blue-900 dark:text-blue-100">
+                        {formatarValorHistorico(historicoFiscal.snapshot_referencia.aliquota_cofins)}
+                      </dd>
+                    </div>
+                  </div>
+
+                  {autorizado && (
+                    <button
+                      type="button"
+                      onClick={preencherDoHistorico}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40"
+                    >
+                      Preencher campos a partir da referência
+                    </button>
+                  )}
+                  <p className="text-[10px] text-blue-600 dark:text-blue-400">
+                    O preenchimento é manual — revise os valores antes de salvar.
+                    Nenhum dado é gravado automaticamente.
+                  </p>
+                </>
+              )}
+
+              {historicoFiscal && !historicoFiscal.snapshot_referencia && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  O item de importação foi encontrado, mas não contém snapshot de
+                  referência.
+                </p>
+              )}
+
+              {!carregandoHistorico && !erroHistorico && !historicoFiscal && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  Nenhum dado histórico encontrado para este produto.
+                </p>
+              )}
             </div>
           )}
 

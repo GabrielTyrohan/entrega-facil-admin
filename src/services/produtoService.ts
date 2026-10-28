@@ -34,6 +34,8 @@ export interface ProdutoCadastrado {
   fiscal_status?: 'pendente_revisao' | 'em_revisao' | 'validado' | 'bloqueado';
   fiscal_validado_em?: string | null;
   fiscal_validado_por?: string | null;
+  // ID do lote de importação fiscal (null quando o produto não veio de importação).
+  importacao_id?: string | null;
   // Campos de gestão
   fornecedor_principal?: string;
   ultima_compra?: string; // ISO date
