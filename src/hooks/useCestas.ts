@@ -182,12 +182,13 @@ export const useCestas = () => {
 };
 
 export const useListaCestas = () => {
-  const { user } = useAuth();
+  // adminId = empresa do usuário (o próprio dono ou o dono da funcionária).
+  const { adminId } = useAuth();
 
   return useQuery({
-    queryKey: ['lista-cestas-simples', user?.id],
+    queryKey: ['lista-cestas-simples', adminId],
     queryFn: async () => {
-      if (!user?.id) throw new Error('Usuário não autenticado');
+      if (!adminId) throw new Error('Usuário não autenticado');
 
       const { data, error } = await supabase
         .from('produtos')
@@ -199,19 +200,19 @@ export const useListaCestas = () => {
             administrador_id
           )
         `)
-        .eq('vendedores.administrador_id', user.id)
+        .eq('vendedores.administrador_id', adminId)
         .eq('ativo', true)
         .order('nome');
 
       if (error) throw error;
-      
+
       return data.map(item => ({
         id: item.id,
         nome: item.nome,
         preco: item.preco
       }));
     },
-    enabled: !!user?.id
+    enabled: !!adminId
   });
 };
 

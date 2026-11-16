@@ -140,44 +140,36 @@ export const useCreateVendaAtacado = () => {
 
   return useMutation({
     mutationFn: async (payload: CreateVendaAtacadoPayload) => {
-      const { itens, ...resto } = payload;
+      // Venda + itens + baixa do estoque geral numa única transação no banco.
+      // A empresa (administrador) e o total são definidos no servidor; se faltar
+      // estoque de algum item, nada é gravado e a mensagem do banco é exibida.
+      const { itens, ...venda } = payload;
 
-
-      const { data: novaVenda, error: vendaError } = await supabase
-        .from('vendas_atacado')
-        .insert({ ...resto, itens })
-        .select('id, numero_pedido')
-        .single();
-
-
-      if (vendaError) throw vendaError;
-      if (!novaVenda) throw new Error('Venda não retornou dados.');
-
-
-      if (itens && itens.length > 0) {
-        const itensPayload = itens.map(item => ({
-          venda_atacado_id: novaVenda.id,
-          produto_cadastrado_id: item.produto_cadastrado_id || null,
+      const { data, error } = await supabase.rpc('criar_venda_atacado_segura', {
+        p_venda: {
+          cliente_id: venda.cliente_id,
+          vendedor_id: venda.vendedor_id,
+          data_entrega: venda.data_entrega,
+          data_pagamento: venda.data_pagamento || null,
+          forma_pagamento: venda.forma_pagamento,
+          valor_pago: (venda as { valor_pago?: number }).valor_pago ?? 0,
+          status_pagamento: venda.status_pagamento,
+          pago: venda.pago,
+          nome_cliente_cache: venda.nome_cliente_cache ?? null,
+          observacoes: venda.observacoes ?? null,
+        },
+        p_itens: (itens || []).map(item => ({
+          produto_cadastrado_id: item.produto_cadastrado_id,
           descricao: item.descricao,
           quantidade: item.quantidade,
           preco_unitario: item.preco_unitario,
-          subtotal: item.subtotal,
-          sincronizado: false,
-        }));
+        })),
+      });
 
+      if (error) throw error;
+      if (!data?.id) throw new Error('Venda não retornou dados.');
 
-        const { error: itensError } = await supabase
-          .from('vendas_atacado_itens')
-          .insert(itensPayload);
-
-
-        if (itensError) {
-          console.error('Erro ao inserir itens na tabela filha:', itensError);
-        }
-      }
-
-
-      return novaVenda;
+      return data as { id: string; numero_pedido: number; valor_total: number };
     },
 
     // ✅ CORRIGIDO — três invalidações agrupadas em Promise.all — um único ciclo de re-render

@@ -48,7 +48,16 @@ const NovaEntrega: React.FC = () => {
   const [selectedVendedor, setSelectedVendedor] = useState<string>('');
   const [cestaVendedor, setCestaVendedor] = useState<any | null>(null);
   const [itensOriginais, setItensOriginais] = useState<CartItem[]>([]);
+  const [dataRetorno, setDataRetorno] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // O cliente pertence a um vendedor: a entrega é feita por esse vendedor.
+  const clienteVendedorId: string | undefined = selectedCliente?.vendedor_id;
+  React.useEffect(() => {
+    if (currentStep === 3 && clienteVendedorId && !selectedVendedor) {
+      setSelectedVendedor(clienteVendedorId);
+    }
+  }, [currentStep, clienteVendedorId, selectedVendedor]);
 
   // Data Hooks
   // Usando useClientesByAdmin para busca avançada de clientes
@@ -250,56 +259,35 @@ const NovaEntrega: React.FC = () => {
       toast.error('Por favor, preencha todos os campos obrigatórios.');
       return;
     }
+    if (!dataRetorno) {
+      toast.error('Informe a data de retorno (quando o cliente vai pagar).');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
-      // 1. Create Entrega
-      const entregaData = {
-        cliente_id: selectedCliente.id,
-        vendedor_id: selectedVendedor,
-        produto_id: cestaVendedor.id, // ID da cesta do vendedor na tabela produtos
-        valor: totalValue,
-        data_entrega: new Date().toISOString(),
-        status_entrega: 'Pendente',
-        status_pagamento: 'Pendente',
-        pago: false,
-        sincronizado: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
+      // Entrega + itens numa única transação. Baixa 1 cesta do estoque do
+      // vendedor (os itens já saíram do estoque geral quando a cesta foi liberada).
+      const { error } = await supabase.rpc('criar_entrega_cliente_segura', {
+        p_vendedor_id: selectedVendedor,
+        p_cliente_id: selectedCliente.id,
+        p_cesta_id: cestaVendedor.id, // cesta do vendedor (tabela produtos)
+        p_itens: cartItems.map(item => ({
+          produto_cadastrado_id: item.produtoId,
+          quantidade: item.quantidade,
+          preco_unitario: item.precoUnitario,
+        })),
+        p_valor: Math.round(totalValue * 100) / 100,
+        p_data_entrega: new Date().toISOString(),
+        p_data_retorno: dataRetorno,
+      });
 
-      const { data: entrega, error: entregaError } = await supabase
-        .from('entregas')
-        .insert(entregaData)
-        .select()
-        .single();
+      if (error) throw error;
 
-      if (entregaError) throw entregaError;
-
-      // 2. Create Itens Entrega
-      const itensData = cartItems.map(item => ({
-        entrega_id: entrega.id,
-        produto_id: item.produtoId,
-        quantidade: item.quantidade,
-        preco_unitario: item.precoUnitario
-      }));
-
-      const { error: itensError } = await supabase
-        .from('itens_entrega')
-        .insert(itensData);
-
-      if (itensError) {
-        console.error('Error creating items:', itensError);
-        toast.error('Entrega criada, mas houve erro ao salvar os itens.');
-      } else {
-        toast.success('Entrega criada com sucesso!');
-        
-        // Invalidate queries
-        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
-        queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CLIENTES] });
-        
-        navigate('/entregas');
-      }
+      toast.success('Entrega criada com sucesso!');
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.ENTREGAS] });
+      queryClient.invalidateQueries({ queryKey: [CACHE_KEYS.CLIENTES] });
+      navigate('/entregas');
     } catch (error: any) {
       console.error('Error creating entrega:', error);
       toast.error('Erro ao criar entrega: ' + (error.message || 'Erro desconhecido'));
@@ -598,6 +586,26 @@ const NovaEntrega: React.FC = () => {
               </p>
             </div>
           )}
+
+          {selectedVendedor && clienteVendedorId && selectedVendedor !== clienteVendedorId && (
+            <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+              <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                Este cliente é atendido por outro vendedor. A entrega precisa ser do vendedor do cliente.
+              </p>
+            </div>
+          )}
+
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Data de retorno (pagamento)
+            </label>
+            <input
+              type="date"
+              value={dataRetorno}
+              onChange={(e) => setDataRetorno(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
         </div>
       </div>
 
@@ -612,7 +620,13 @@ const NovaEntrega: React.FC = () => {
         
         <button
           onClick={handleFinalize}
-          disabled={isSubmitting || !selectedVendedor || !cestaVendedor}
+          disabled={
+            isSubmitting ||
+            !selectedVendedor ||
+            !cestaVendedor ||
+            !dataRetorno ||
+            (!!clienteVendedorId && selectedVendedor !== clienteVendedorId)
+          }
           className="px-8 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 shadow-lg"
         >
           {isSubmitting ? (
