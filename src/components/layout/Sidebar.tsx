@@ -31,6 +31,7 @@ import {
   BadgePercent,
   ShoppingCart,
   Undo2,
+  ListChecks,
   Truck,
   Upload,
   UserCircle,
@@ -98,6 +99,7 @@ const PATH_TO_SECTION: Record<string, string> = {
   '/tabela-precos': 'Comercial',
   '/configuracoes-fiscais': 'Comercial',
   '/configuracoes-fiscais/importacao': 'Comercial',
+  '/configuracoes-fiscais/revisao': 'Comercial',
   '/relatorios': 'Relatórios',
   '/suporte': 'Sistema',
   '/configuracoes': 'Sistema',
@@ -369,6 +371,14 @@ const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed, badges
       path: '/configuracoes-fiscais/importacao',
       label: 'Importação Fiscal',
       icon: <Upload className="w-5 h-5" />,
+      permission: 'configuracoes_fiscais',
+      adminOnly: true,
+      group: 'Comercial'
+    },
+    {
+      path: '/configuracoes-fiscais/revisao',
+      label: 'Revisão Fiscal',
+      icon: <ListChecks className="w-5 h-5" />,
       permission: 'configuracoes_fiscais',
       adminOnly: true,
       group: 'Comercial'

@@ -47,6 +47,7 @@ import NovoLancamento from './pages/Caixa/NovoLancamento';
 import ConfiguracoesFiscais from './pages/ConfiguracoesFiscais';
 import ImportacaoFiscalReferencia from './pages/ImportacaoFiscalReferencia';
 import PrevisaoSincronizacaoFiscal from './pages/SincronizacaoFiscal';
+import RevisaoFiscalLote from './pages/RevisaoFiscalLote';
 import FuncionarioConfig from './pages/FuncionarioConfig';
 import Funcionarios from './pages/Funcionarios';
 import DetalhesOrcamento from './pages/orcamentos/DetalhesOrcamento';
@@ -181,6 +182,13 @@ function App() {
                             <ExpedicaoGuard>
                               <RequireAdmin>
                                 <ImportacaoFiscalReferencia />
+                              </RequireAdmin>
+                            </ExpedicaoGuard>
+                          } />
+                          <Route path="/configuracoes-fiscais/revisao" element={
+                            <ExpedicaoGuard>
+                              <RequireAdmin>
+                                <RevisaoFiscalLote />
                               </RequireAdmin>
                             </ExpedicaoGuard>
                           } />
