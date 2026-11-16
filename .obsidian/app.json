@@ -1,0 +1,19 @@
+{
+  "useMarkdownLinks": true,
+  "newLinkFormat": "relative",
+  "alwaysUpdateLinks": true,
+  "showUnsupportedFiles": false,
+  "userIgnoreFilters": [
+    "dist/",
+    "node_modules/",
+    "release/",
+    "src/",
+    "supabase/",
+    "electron/",
+    "public/",
+    "scripts/",
+    ".expo/",
+    "src-tauri/",
+    "coverage/"
+  ]
+}
