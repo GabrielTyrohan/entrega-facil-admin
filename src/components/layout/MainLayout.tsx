@@ -2,9 +2,18 @@ import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Header from './Header';
 import Sidebar from './Sidebar';
+import { useAuth } from '@/contexts/AuthContext';
+import { usePedidosPendentesCount, usePedidosRealtime } from '@/hooks/usePedidosVendedor';
 
 const MainLayout: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Pedidos dos vendedores: contador no menu + aviso em tempo real para quem atende.
+  const { isAdmin, permissions } = useAuth();
+  const podeAtenderPedidos =
+    isAdmin || !!permissions?.cestas_vendedor || !!permissions?.produtos || !!permissions?.expedicao;
+  const { data: pedidosPendentes = 0 } = usePedidosPendentesCount(podeAtenderPedidos);
+  usePedidosRealtime(podeAtenderPedidos);
   // Preferência de sidebar recolhida (somente desktop) persistida em localStorage
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     try {
@@ -46,6 +55,7 @@ const MainLayout: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
         onClose={() => setSidebarOpen(false)}
         collapsed={sidebarCollapsed}
         onToggleCollapsed={toggleSidebarCollapsed}
+        badges={pedidosPendentes ? { '/pedidos-vendedores': pedidosPendentes } : undefined}
       />
 
       {/* Conteúdo Principal */} 

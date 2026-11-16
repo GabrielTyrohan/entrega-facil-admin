@@ -11,7 +11,7 @@ export type PermissaoKey =
 export const ROTAS_EXPEDICAO = [
   '/dashboard',
   '/produtos/cestas', '/produtos/cestas/nova',
-  '/entregas/avulsas', '/funcionario-config',
+  '/entregas/avulsas', '/pedidos-vendedores', '/funcionario-config',
 ];
 
 export function isRotaExpedicaoPermitida(pathname: string): boolean {

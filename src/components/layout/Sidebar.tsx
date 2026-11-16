@@ -27,6 +27,7 @@ import {
   RefreshCw,
   Settings,
   ShoppingBasket,
+  Inbox,
   ShoppingCart,
   Truck,
   Upload,
@@ -62,6 +63,8 @@ interface SidebarProps {
   onClose?: () => void;
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
+  /** Contadores exibidos ao lado do item (ex.: { '/pedidos-vendedores': 3 }). */
+  badges?: Record<string, number>;
 }
 
 // ===== AGRUPAMENTO VISUAL (apresentação) =====
@@ -78,6 +81,7 @@ const PATH_TO_SECTION: Record<string, string> = {
   '/entregas': 'Operação',
   '/produtos/cestas': 'Operação',
   '/entregas/avulsas': 'Operação',
+  '/pedidos-vendedores': 'Operação',
   '/historico-pdfs': 'Operação',
   '/pagamentos': 'Financeiro',
   '/devedores': 'Financeiro',
@@ -115,7 +119,7 @@ function useVisibleMenu(userType: UserType, permissions: Permissoes, isAdmin: bo
       const expedicaoPaths = [
         '/dashboard',
         '/vendedores', '/clientes',
-        '/produtos', '/produtos/cestas-base', '/produtos/cestas', '/entregas/avulsas',
+        '/produtos', '/produtos/cestas-base', '/produtos/cestas', '/entregas/avulsas', '/pedidos-vendedores',
         '/configuracoes', '/suporte'
       ];
       return menuItems.filter(item => expedicaoPaths.includes(item.path));
@@ -164,7 +168,7 @@ function useVisibleMenu(userType: UserType, permissions: Permissoes, isAdmin: bo
   }, [userType, permissions, isAdmin, menuItems]);
 }
 
-const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed }: SidebarProps) => {
+const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed, badges }: SidebarProps) => {
   const location = useLocation();
   const { permissions, isAdmin, userType, signOut } = useAuth();
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
@@ -231,6 +235,13 @@ const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed }: Side
       path: '/entregas/avulsas',
       label: 'Entregas Avulsas',
       icon: <Truck className="w-5 h-5" />,
+      permissionAny: ['cestas_vendedor', 'produtos'],
+      group: 'Catálogo'
+    },
+    {
+      path: '/pedidos-vendedores',
+      label: 'Pedidos dos Vendedores',
+      icon: <Inbox className="w-5 h-5" />,
       permissionAny: ['cestas_vendedor', 'produtos'],
       group: 'Catálogo'
     },
@@ -466,6 +477,14 @@ const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed }: Side
         )}
         <span className="shrink-0">{item.icon}</span>
         <span className={`truncate whitespace-nowrap transition-opacity duration-200 ${collapsed ? 'lg:hidden' : ''}`}>{item.label}</span>
+        {!!badges?.[item.path] && (
+          <span
+            aria-label={`${badges[item.path]} aguardando`}
+            className={`ml-auto shrink-0 min-w-5 h-5 px-1.5 rounded-full bg-red-600 text-white text-xs font-semibold inline-flex items-center justify-center tabular-nums ${collapsed ? 'lg:hidden' : ''}`}
+          >
+            {badges[item.path]}
+          </span>
+        )}
       </Link>
     );
   };

@@ -300,6 +300,25 @@ Deno.serve(async (req) => {
         p_vendedor_id: vendedor.id,
         p_percentual: percentual,
       })
+    } else if (action === 'criar_pedido') {
+      // Pedido de cestas/avulsos para a funcionária atender (Fase 4).
+      const itens = Array.isArray(body?.itens) ? body.itens : []
+      data = await rpc('criar_pedido_vendedor', {
+        p_vendedor_id: vendedor.id,
+        p_itens: itens.map((i: any) => ({
+          tipo: String(i?.tipo || ''),
+          id: String(i?.id || ''),
+          quantidade: Number(i?.quantidade ?? 0),
+        })),
+        p_observacao: typeof body?.observacao === 'string' ? body.observacao : null,
+      })
+    } else if (action === 'listar_pedidos') {
+      data = { pedidos: await rpc('listar_pedidos_vendedor', { p_vendedor_id: vendedor.id, p_limite: 20 }) }
+    } else if (action === 'cancelar_pedido') {
+      data = await rpc('cancelar_pedido_vendedor', {
+        p_vendedor_id: vendedor.id,
+        p_pedido_id: String(body?.pedidoId || ''),
+      })
     } else if (action === 'ping') {
       data = {
         vendedor: {

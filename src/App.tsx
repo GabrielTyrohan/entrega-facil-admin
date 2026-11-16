@@ -55,6 +55,7 @@ import DetalhesVendaAtacado from './pages/VendasAtacado/DetalhesVendaAtacado';
 import ListaVendas from './pages/VendasAtacado/ListaVendas';
 import NovaVendaAtacado from './pages/VendasAtacado/NovaVendaAtacado';
 import OfflinePage from './pages/OfflinePage';
+import PedidosVendedores from './pages/PedidosVendedores';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 
 export function ExpedicaoGuard({ children }: { children: React.ReactNode }) {
@@ -135,6 +136,7 @@ function App() {
                           <Route path="/produtos/cestas/nova" element={<RequirePermission permission={['cestas_vendedor', 'produtos']}><NovaCesta /></RequirePermission>} />
                           <Route path="/produtos/cestas/editar/:id" element={<RequirePermission permission={['cestas_vendedor', 'produtos']}><EditarCesta /></RequirePermission>} />
                           <Route path="/entregas/avulsas" element={<RequirePermission permission={['cestas_vendedor', 'produtos']}><EntregaAvulsa /></RequirePermission>} />
+                          <Route path="/pedidos-vendedores" element={<RequirePermission permission={['cestas_vendedor', 'produtos']}><PedidosVendedores /></RequirePermission>} />
                           <Route path="/historico-pdfs" element={<ExpedicaoGuard><RequireAdmin><HistoricoPdfs /></RequireAdmin></ExpedicaoGuard>} />
 
                           {/* Rotas com <ExpedicaoGuard> */}
