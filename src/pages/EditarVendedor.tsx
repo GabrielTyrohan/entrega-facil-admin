@@ -19,7 +19,7 @@ interface DadosBancarios {
 const EditarVendedor: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const { user, adminId } = useAuth();
+  const { user, adminId, isAdmin } = useAuth();
   const targetId = adminId || user?.id; // Usa adminId se for funcionário, ou user.id se for admin
   const queryClient = useQueryClient();
 
@@ -35,6 +35,8 @@ const EditarVendedor: React.FC = () => {
     ativo: true,
     status: true,
     diaFechamento: 1,
+    comissaoPercentual: 0,
+    tipoContrato: '' as '' | 'efetivado' | 'autonomo',
   });
 
   const [dadosBancarios, setDadosBancarios] = useState<DadosBancarios>({
@@ -100,6 +102,10 @@ const EditarVendedor: React.FC = () => {
           ativo: vendedor.ativo ?? false,
           status: vendedor.ativo ?? false, // Usando ativo como status
           diaFechamento: vendedor.dia_fechamento ?? 1,
+          comissaoPercentual: Number(vendedor.comissao_percentual ?? 0),
+          tipoContrato: (vendedor.tipo_contrato === 'efetivado' || vendedor.tipo_contrato === 'autonomo')
+            ? vendedor.tipo_contrato
+            : '',
         });
         
         // Carregar dados bancários se existirem
@@ -126,7 +132,7 @@ const EditarVendedor: React.FC = () => {
     if (type === 'checkbox') {
       const checked = (e.target as HTMLInputElement).checked;
       setFormData(prev => ({ ...prev, [name]: checked }));
-    } else if (name === 'percentualMinimo') {
+    } else if (name === 'percentualMinimo' || name === 'comissaoPercentual') {
       setFormData(prev => ({ ...prev, [name]: parseFloat(value) || 0 }));
     } else if (name === 'telefone') {
       const formatted = formatTelefone(value);
@@ -241,6 +247,13 @@ const EditarVendedor: React.FC = () => {
             percentual_minimo: formData.percentualMinimo,
             dia_fechamento: Number(formData.diaFechamento),
             tipo_vinculo: formData.tipoVinculo,    // 'representado' | 'autonomo'
+            // Comissão e contrato: só o dono altera (o servidor ignora se vier de funcionária)
+            ...(isAdmin
+              ? {
+                  comissao_percentual: Number(formData.comissaoPercentual) || 0,
+                  tipo_contrato: formData.tipoContrato || null,
+                }
+              : {}),
           })
         }
       );
@@ -457,9 +470,51 @@ const EditarVendedor: React.FC = () => {
                   <option key={dia} value={dia}>Dia {dia}</option>
                 ))}
               </select>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Janela de cobrança: do dia {formData.diaFechamento} até o dia anterior do mês seguinte.
+              </p>
             </div>
+
+            {isAdmin && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Comissão (%)
+                  </label>
+                  <input
+                    type="number"
+                    name="comissaoPercentual"
+                    value={formData.comissaoPercentual}
+                    onChange={handleInputChange}
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Sobre o total que o vendedor recebeu dos clientes na janela.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Tipo de contrato
+                  </label>
+                  <select
+                    name="tipoContrato"
+                    value={formData.tipoContrato}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                  >
+                    <option value="">Não informado</option>
+                    <option value="efetivado">Efetivado</option>
+                    <option value="autonomo">Autônomo</option>
+                  </select>
+                </div>
+              </>
+            )}
           </div>
-          
+
           <div className="mt-4">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Observações do Contrato

@@ -60,6 +60,10 @@ export interface Vendedor {
   status?: boolean
   dados_bancarios?: any
   dia_fechamento?: number | null
+  /** % de comissão sobre o recebido na janela (só o dono define). */
+  comissao_percentual?: number | null
+  /** efetivado | autonomo — vínculo de trabalho (informativo). */
+  tipo_contrato?: string | null
 }
 
 export interface Cliente {

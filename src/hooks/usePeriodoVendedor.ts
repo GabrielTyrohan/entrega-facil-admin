@@ -52,10 +52,13 @@ export function usePeriodoVendedor(vendedorId: string | null | undefined): Perio
 
       const diaFechamento = vendedor?.dia_fechamento ?? 1;
       const { inicio, fim } = getPeriodoAtual(diaFechamento);
+      // getPeriodoAtual devolve o fim EXCLUSIVO (dia de fechamento do mês seguinte).
+      // As telas usam o fim inclusivo, igual à view v_periodos_ativos (dia anterior).
+      const fimInclusivo = new Date(fim.getFullYear(), fim.getMonth(), fim.getDate() - 1);
 
       return {
         inicioStr: formatDateSQL(inicio),
-        fimStr: formatDateSQL(fim),
+        fimStr: formatDateSQL(fimInclusivo),
       };
     },
   });

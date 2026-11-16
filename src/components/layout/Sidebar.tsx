@@ -28,6 +28,7 @@ import {
   Settings,
   ShoppingBasket,
   Inbox,
+  BadgePercent,
   ShoppingCart,
   Truck,
   Upload,
@@ -85,6 +86,7 @@ const PATH_TO_SECTION: Record<string, string> = {
   '/historico-pdfs': 'Operação',
   '/pagamentos': 'Financeiro',
   '/devedores': 'Financeiro',
+  '/comissoes': 'Financeiro',
   '/caixa': 'Financeiro',
   '/acertos-diarios': 'Financeiro',
   '/vendas-atacado': 'Comercial',
@@ -291,6 +293,13 @@ const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed, badges
       label: 'Devedores',
       icon: <AlertCircle className="w-5 h-5" />,
       permission: 'cobranca',
+      group: 'Financeiro'
+    },
+    {
+      path: '/comissoes',
+      label: 'Comissões',
+      icon: <BadgePercent className="w-5 h-5" />,
+      adminOnly: true,
       group: 'Financeiro'
     },
     {

@@ -319,6 +319,9 @@ Deno.serve(async (req) => {
         p_vendedor_id: vendedor.id,
         p_pedido_id: String(body?.pedidoId || ''),
       })
+    } else if (action === 'comissao') {
+      // Extrato de comissão do vendedor (Fase 5), somente leitura.
+      data = await rpc('extrato_comissao_vendedor', { p_vendedor_id: vendedor.id })
     } else if (action === 'ping') {
       data = {
         vendedor: {

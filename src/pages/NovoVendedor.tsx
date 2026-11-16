@@ -17,7 +17,7 @@ interface DadosBancarios {
 
 const NovoVendedor: React.FC = () => {
   const navigate = useNavigate();
-  const { user, adminId } = useAuth();
+  const { user, adminId, isAdmin } = useAuth();
   const targetAdminId = adminId || user?.id;
   const queryClient = useQueryClient();
 
@@ -45,6 +45,8 @@ const NovoVendedor: React.FC = () => {
     ativo: true,
     status: true,
     diaFechamento: 1,
+    comissaoPercentual: 0,
+    tipoContrato: '' as '' | 'efetivado' | 'autonomo',
   });
 
   const [dadosBancarios, setDadosBancarios] = useState<DadosBancarios>({
@@ -106,7 +108,7 @@ const NovoVendedor: React.FC = () => {
     if (type === 'checkbox') {
       const checked = (e.target as HTMLInputElement).checked;
       setFormData(prev => ({ ...prev, [name]: checked }));
-    } else if (name === 'percentualMinimo') {
+    } else if (name === 'percentualMinimo' || name === 'comissaoPercentual') {
       setFormData(prev => ({ ...prev, [name]: parseFloat(value) || 0 }));
     } else if (name === 'telefone') {
       const formatted = formatTelefone(value);
@@ -160,7 +162,8 @@ const NovoVendedor: React.FC = () => {
       p_data_inicio: formData.dataInicio || null,
       p_tipo_vinculo: formData.tipoVinculo || null,
       p_percentual_minimo: formData.percentualMinimo || 0,
-      p_tipo_cobranca: 'pago_admin',
+      // Representado: o dono paga a assinatura; autônomo: o próprio vendedor paga.
+      p_tipo_cobranca: formData.tipoVinculo === 'autonomo' ? 'pago_vendedor' : 'pago_admin',
       p_valor_assinatura: 100,
       p_dia_fechamento: formData.diaFechamento,
     });
@@ -175,6 +178,22 @@ const NovoVendedor: React.FC = () => {
 
     if (!resultado.success) {
       throw new Error(resultado.erro || 'Erro desconhecido ao criar vendedor');
+    }
+
+    // Comissão e tipo de contrato (só o dono define)
+    if (isAdmin && (formData.comissaoPercentual > 0 || formData.tipoContrato)) {
+      const { error: comissaoError } = await supabase
+        .from('vendedores')
+        .update({
+          comissao_percentual: Number(formData.comissaoPercentual) || 0,
+          tipo_contrato: formData.tipoContrato || null,
+        })
+        .eq('id', resultado.vendedor_id);
+
+      if (comissaoError) {
+        console.warn('Erro ao salvar comissão:', comissaoError);
+        toast.warning('Vendedor criado, mas a comissão não foi salva. Ajuste na edição do vendedor.');
+      }
     }
 
     // Se tiver dados bancários, atualiza o vendedor
@@ -419,9 +438,48 @@ const NovoVendedor: React.FC = () => {
                 ))}
               </select>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Dia do mês em que fecha o período de cobrança
+                Janela de cobrança: do dia {formData.diaFechamento} até o dia anterior do mês seguinte.
               </p>
             </div>
+
+            {isAdmin && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Comissão (%)
+                  </label>
+                  <input
+                    type="number"
+                    name="comissaoPercentual"
+                    value={formData.comissaoPercentual}
+                    onChange={handleInputChange}
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Sobre o total que o vendedor recebeu dos clientes na janela.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Tipo de contrato
+                  </label>
+                  <select
+                    name="tipoContrato"
+                    value={formData.tipoContrato}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Não informado</option>
+                    <option value="efetivado">Efetivado</option>
+                    <option value="autonomo">Autônomo</option>
+                  </select>
+                </div>
+              </>
+            )}
 
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
