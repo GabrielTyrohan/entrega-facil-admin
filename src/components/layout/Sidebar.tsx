@@ -48,6 +48,8 @@ interface MenuItem {
   label: string;
   icon: React.ReactNode;
   permission?: keyof Permissoes;
+  /** Basta ter qualquer uma destas permissões. */
+  permissionAny?: (keyof Permissoes)[];
   adminOnly?: boolean;
   funcionarioOnly?: boolean;
   group?: string;
@@ -124,6 +126,10 @@ function useVisibleMenu(userType: UserType, permissions: Permissoes, isAdmin: bo
       if (item.adminOnly) return false;
       if (item.funcionarioOnly && userType !== 'funcionario') return false;
 
+      // Itens com permissão própria decidem sozinhos (cobrança, cestas do vendedor).
+      if (item.permissionAny) return item.permissionAny.some(p => !!permissions?.[p]);
+      if (item.permission === 'cobranca') return !!permissions?.cobranca;
+
       switch (item.group) {
         case 'Estoque': {
           // Autoridade é a permissão explícita do item (produtos) —
@@ -195,6 +201,7 @@ const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed }: Side
       path: '/clientes',
       label: 'Clientes',
       icon: <UserCircle className="w-5 h-5" />,
+      permission: 'cobranca',
       group: 'Pessoas'
     },
 
@@ -210,6 +217,7 @@ const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed }: Side
       path: '/produtos/cestas',
       label: 'Entregar Cesta',
       icon: <ShoppingBasket className="w-5 h-5" />,
+      permissionAny: ['cestas_vendedor', 'produtos'],
       group: 'Catálogo'
     },
     {
@@ -223,6 +231,7 @@ const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed }: Side
       path: '/entregas/avulsas',
       label: 'Entregas Avulsas',
       icon: <Truck className="w-5 h-5" />,
+      permissionAny: ['cestas_vendedor', 'produtos'],
       group: 'Catálogo'
     },
 
@@ -247,6 +256,7 @@ const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed }: Side
       path: '/entregas',
       label: 'Entregas',
       icon: <Truck className="w-5 h-5" />,
+      permission: 'cobranca',
       group: 'Operacional'
     },
     {
@@ -262,12 +272,14 @@ const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed }: Side
       path: '/pagamentos',
       label: 'Pagamentos',
       icon: <CreditCard className="w-5 h-5" />,
+      permission: 'cobranca',
       group: 'Financeiro'
     },
     {
       path: '/devedores',
       label: 'Devedores',
       icon: <AlertCircle className="w-5 h-5" />,
+      permission: 'cobranca',
       group: 'Financeiro'
     },
     {

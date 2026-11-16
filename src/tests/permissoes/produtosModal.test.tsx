@@ -66,13 +66,13 @@ describe('permissão produtos — tipos e modal', () => {
 
   it('3. checkbox Produtos aparece', () => {
     renderModalCriacao();
-    expect(screen.getByText('produtos')).toBeInTheDocument();
+    expect(screen.getByText('Produtos e estoque')).toBeInTheDocument();
   });
 
   it('4. produtos=true é enviado no create', async () => {
     renderModalCriacao();
     preencherObrigatorios();
-    fireEvent.click(screen.getByRole('checkbox', { name: 'produtos' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Produtos e estoque' }));
     fireEvent.click(screen.getByRole('button', { name: 'Criar Funcionário' }));
     await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(1));
     const payload = mockCreate.mock.calls[0][0] as {
@@ -84,7 +84,7 @@ describe('permissão produtos — tipos e modal', () => {
   it('5. expedicao=true força produtos=false', async () => {
     renderModalCriacao();
     preencherObrigatorios();
-    fireEvent.click(screen.getByRole('checkbox', { name: 'produtos' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Produtos e estoque' }));
     const caixas = screen.getAllByRole('checkbox');
     fireEvent.click(caixas[0]); // toggle de expedição (primeiro checkbox do card)
     fireEvent.click(screen.getByRole('button', { name: 'Criar Funcionário' }));

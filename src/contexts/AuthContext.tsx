@@ -21,6 +21,10 @@ export interface Permissoes {
   produtos: boolean;
   configuracoes: boolean;
   configuracoes_fiscais: boolean;
+  /** Clientes, entregas, pagamentos e devedores. */
+  cobranca?: boolean;
+  /** Liberar cestas e produtos avulsos aos vendedores. */
+  cestas_vendedor?: boolean;
   expedicao?: boolean;
 }
 
@@ -91,6 +95,8 @@ const ADMIN_PERMISSIONS: Permissoes = {
   produtos: true,
   configuracoes: true,
   configuracoes_fiscais: true,
+  cobranca: true,
+  cestas_vendedor: true,
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);

@@ -75,7 +75,7 @@ async function getSession(req: Request) {
 
   const { data: vendedor, error: vendError } = await supabaseAdmin
     .from('vendedores')
-    .select('id, administrador_id, ativo, bloqueado, tipo_vinculo, status_pagamento_vendedor, data_vencimento_vendedor, assinatura_ativa, dia_fechamento')
+    .select('id, administrador_id, ativo, bloqueado, tipo_vinculo, status_pagamento_vendedor, data_vencimento_vendedor, assinatura_ativa, dia_fechamento, percentual_minimo')
     .eq('id', sessao.vendedor_id)
     .single()
 
@@ -139,6 +139,7 @@ async function downloadCore(vendedor: any) {
       data_vencimento_vendedor: vendedor.data_vencimento_vendedor,
       assinatura_ativa: vendedor.assinatura_ativa,
       dia_fechamento: vendedor.dia_fechamento,
+      percentual_minimo: vendedor.percentual_minimo,
     },
     clientes: clientes || [],
     produtos: produtos || [],
@@ -288,6 +289,17 @@ Deno.serve(async (req) => {
       data = await downloadEstoque(vendedor)
     } else if (action === 'upload') {
       data = await uploadAll(vendedor, body)
+    } else if (action === 'atualizar_percentual') {
+      // Percentual mínimo que o cliente precisa ter pago para liberar nova
+      // entrega. O vendedor pode alterar (cliente de confiança).
+      const percentual = Number(body?.percentual)
+      if (!Number.isFinite(percentual) || percentual < 0 || percentual > 100) {
+        throw new Error('Percentual inválido: deve ser entre 0 e 100')
+      }
+      data = await rpc('atualizar_percentual_minimo_vendedor', {
+        p_vendedor_id: vendedor.id,
+        p_percentual: percentual,
+      })
     } else if (action === 'ping') {
       data = {
         vendedor: {

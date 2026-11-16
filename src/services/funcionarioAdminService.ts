@@ -25,6 +25,10 @@ export interface FuncionarioPermissions {
   relatorios: boolean;
   vendedores: boolean;
   produtos: boolean;
+  /** Clientes, entregas, pagamentos e devedores. Ausente = sem acesso. */
+  cobranca?: boolean;
+  /** Liberar cestas e produtos avulsos aos vendedores. Ausente = sem acesso. */
+  cestas_vendedor?: boolean;
   expedicao?: boolean;
 }
 

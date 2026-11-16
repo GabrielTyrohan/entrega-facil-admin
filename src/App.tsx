@@ -130,10 +130,11 @@ function App() {
                           <Route path="/funcionario-config" element={<FuncionarioConfig />} />
                           <Route path="/change-password" element={<ChangePasswordPage />} />
                           <Route path="/suporte" element={<Suporte />} />
-                          <Route path="/produtos/cestas" element={<CestasVendedor />} />
-                          <Route path="/produtos/cestas/nova" element={<NovaCesta />} />
-                          <Route path="/produtos/cestas/editar/:id" element={<EditarCesta />} />
-                          <Route path="/entregas/avulsas" element={<EntregaAvulsa />} />
+                          {/* Liberar cestas/avulsos: cestas_vendedor, produtos ou expedição */}
+                          <Route path="/produtos/cestas" element={<RequirePermission permission={['cestas_vendedor', 'produtos']}><CestasVendedor /></RequirePermission>} />
+                          <Route path="/produtos/cestas/nova" element={<RequirePermission permission={['cestas_vendedor', 'produtos']}><NovaCesta /></RequirePermission>} />
+                          <Route path="/produtos/cestas/editar/:id" element={<RequirePermission permission={['cestas_vendedor', 'produtos']}><EditarCesta /></RequirePermission>} />
+                          <Route path="/entregas/avulsas" element={<RequirePermission permission={['cestas_vendedor', 'produtos']}><EntregaAvulsa /></RequirePermission>} />
                           <Route path="/historico-pdfs" element={<ExpedicaoGuard><RequireAdmin><HistoricoPdfs /></RequireAdmin></ExpedicaoGuard>} />
 
                           {/* Rotas com <ExpedicaoGuard> */}
@@ -143,8 +144,8 @@ function App() {
                           <Route path="/vendedores/novo" element={<ExpedicaoGuard><RequirePermission permission="vendedores"><NovoVendedor /></RequirePermission></ExpedicaoGuard>} />
                           <Route path="/vendedores/editar/:id" element={<ExpedicaoGuard><RequirePermission permission="vendedores"><EditarVendedor /></RequirePermission></ExpedicaoGuard>} />
 
-                          <Route path="/clientes" element={<ExpedicaoGuard><Clientes /></ExpedicaoGuard>} />
-                          <Route path="/devedores" element={<ExpedicaoGuard><Devedores /></ExpedicaoGuard>} />
+                          <Route path="/clientes" element={<ExpedicaoGuard><RequirePermission permission="cobranca"><Clientes /></RequirePermission></ExpedicaoGuard>} />
+                          <Route path="/devedores" element={<ExpedicaoGuard><RequirePermission permission="cobranca"><Devedores /></RequirePermission></ExpedicaoGuard>} />
 
                           <Route path="/produtos" element={<ExpedicaoGuard><RequirePermission permission="produtos"><Produtos /></RequirePermission></ExpedicaoGuard>} />
                           <Route path="/produtos/novo" element={<ExpedicaoGuard><RequirePermission permission="produtos"><NovoProduto /></RequirePermission></ExpedicaoGuard>} />
@@ -153,10 +154,10 @@ function App() {
                           <Route path="/produtos/cestas-base/nova" element={<ExpedicaoGuard><RequirePermission permission="produtos"><NovaCestaBase /></RequirePermission></ExpedicaoGuard>} />
                           <Route path="/produtos/cestas-base/editar/:id" element={<ExpedicaoGuard><RequirePermission permission="produtos"><EditarCestaBase /></RequirePermission></ExpedicaoGuard>} />
 
-                          <Route path="/entregas" element={<ExpedicaoGuard><Entregas /></ExpedicaoGuard>} />
-                          <Route path="/entregas/nova" element={<ExpedicaoGuard><NovaEntrega /></ExpedicaoGuard>} />
+                          <Route path="/entregas" element={<ExpedicaoGuard><RequirePermission permission="cobranca"><Entregas /></RequirePermission></ExpedicaoGuard>} />
+                          <Route path="/entregas/nova" element={<ExpedicaoGuard><RequirePermission permission="cobranca"><NovaEntrega /></RequirePermission></ExpedicaoGuard>} />
 
-                          <Route path="/pagamentos" element={<ExpedicaoGuard><Pagamentos /></ExpedicaoGuard>} />
+                          <Route path="/pagamentos" element={<ExpedicaoGuard><RequirePermission permission="cobranca"><Pagamentos /></RequirePermission></ExpedicaoGuard>} />
                           <Route path="/configuracoes" element={<ExpedicaoGuard><RequireAdmin><Configuracoes /></RequireAdmin></ExpedicaoGuard>} />
                           <Route path="/funcionarios" element={<ExpedicaoGuard><RequireAdmin><Funcionarios /></RequireAdmin></ExpedicaoGuard>} />
 

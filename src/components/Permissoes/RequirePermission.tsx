@@ -5,6 +5,7 @@ export type PermissaoKey =
   | 'orcamentos_pj' | 'vendas_atacado' | 'notas_fiscais'
   | 'caixa' | 'acertos' | 'relatorios' | 'funcionarios'
   | 'vendedores' | 'produtos' | 'configuracoes' | 'configuracoes_fiscais'
+  | 'cobranca' | 'cestas_vendedor'
   | 'expedicao';
 
 export const ROTAS_EXPEDICAO = [
@@ -21,7 +22,8 @@ export function isRotaExpedicaoPermitida(pathname: string): boolean {
 }
 
 interface RequirePermissionProps {
-  permission: PermissaoKey;
+  /** Uma permissão, ou uma lista em que basta ter qualquer uma. */
+  permission: PermissaoKey | PermissaoKey[];
   children: React.ReactNode;
   redirectTo?: string;
 }
@@ -40,7 +42,8 @@ export default function RequirePermission({
     return <>{children}</>;
   }
 
-  const temPermissao = permissions?.[permission as keyof typeof permissions];
+  const lista = Array.isArray(permission) ? permission : [permission];
+  const temPermissao = lista.some((p) => !!permissions?.[p as keyof typeof permissions]);
   if (!temPermissao) return <Navigate to={redirectTo} replace />;
   return <>{children}</>;
 }

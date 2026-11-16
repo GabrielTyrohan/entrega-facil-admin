@@ -56,13 +56,13 @@ describe('FuncionarioModal — payload via Edge Function', () => {
 
   it('20. permissão vendedores aparece no modal', () => {
     renderModalCriacao();
-    expect(screen.getByText('vendedores')).toBeInTheDocument();
+    expect(screen.getByText('Cadastro de vendedores')).toBeInTheDocument();
   });
 
   it('21. vendedores=true é enviado corretamente', async () => {
     renderModalCriacao();
     preencherObrigatorios();
-    fireEvent.click(screen.getByRole('checkbox', { name: 'vendedores' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Cadastro de vendedores' }));
     await enviar();
     const payload = mockCreate.mock.calls[0][0] as {
       permissoes: Record<string, boolean>;
@@ -74,7 +74,7 @@ describe('FuncionarioModal — payload via Edge Function', () => {
     renderModalCriacao();
     preencherObrigatorios();
     // Primeiro marca vendedores, depois ativa expedição: tudo deve zerar.
-    fireEvent.click(screen.getByRole('checkbox', { name: 'vendedores' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Cadastro de vendedores' }));
     const caixas = screen.getAllByRole('checkbox');
     fireEvent.click(caixas[0]); // toggle de expedição (primeiro checkbox do card)
     await enviar();

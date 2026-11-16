@@ -18,8 +18,23 @@ const DEFAULT_PERMISSIONS = {
   acertos: false,
   relatorios: false,
   vendedores: false,
-  produtos: false
+  produtos: false,
+  cobranca: false,
+  cestas_vendedor: false
 } satisfies Omit<FuncionarioPermissions, 'expedicao'>;
+
+const PERMISSAO_LABELS: Record<keyof typeof DEFAULT_PERMISSIONS, string> = {
+  orcamentos_pj: 'Orçamentos PJ',
+  vendas_atacado: 'Vendas atacado (PJ)',
+  notas_fiscais: 'Notas fiscais',
+  caixa: 'Fluxo de caixa',
+  acertos: 'Acertos diários',
+  relatorios: 'Relatórios',
+  vendedores: 'Cadastro de vendedores',
+  produtos: 'Produtos e estoque',
+  cobranca: 'Clientes, entregas e cobrança',
+  cestas_vendedor: 'Liberar cestas e avulsos',
+};
 
 type PermissaoNormal = keyof typeof DEFAULT_PERMISSIONS;
 
@@ -311,8 +326,8 @@ const FuncionarioModal: React.FC<FuncionarioModalProps> = ({ isOpen, onClose, fu
                                 onChange={handlePermissionChange}
                                 className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                             />
-                            <span className="text-sm text-gray-700 dark:text-gray-300 capitalize">
-                                {key.replace('_', ' ')}
+                            <span className="text-sm text-gray-700 dark:text-gray-300">
+                                {PERMISSAO_LABELS[key as PermissaoNormal] ?? key.replace('_', ' ')}
                             </span>
                         </label>
                     ))}
