@@ -199,7 +199,9 @@ const Devedores: React.FC = () => {
           )
         `)
         .eq('cliente_id', devedor.cliente_id)
-        .not('dataRetorno', 'is', null);
+        .not('dataRetorno', 'is', null)
+        // Fase 6b: entrega devolvida não é dívida (o pago virou crédito)
+        .or('status_entrega.is.null,status_entrega.neq.devolução');
 
       if (selectedVendedor && periodo.inicioStr && periodo.fimStr) {
         query = query
@@ -320,7 +322,9 @@ const Devedores: React.FC = () => {
             nome
           )
         `)
-        .not('dataRetorno', 'is', null);
+        .not('dataRetorno', 'is', null)
+        // Fase 6b: entrega devolvida não é dívida (o pago virou crédito)
+        .or('status_entrega.is.null,status_entrega.neq.devolução');
 
       if (selectedVendedor && periodo.inicioStr && periodo.fimStr) {
         query = query

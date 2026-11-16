@@ -59,6 +59,7 @@ import NovaVendaAtacado from './pages/VendasAtacado/NovaVendaAtacado';
 import OfflinePage from './pages/OfflinePage';
 import PedidosVendedores from './pages/PedidosVendedores';
 import Comissoes from './pages/Comissoes';
+import Devolucoes from './pages/Devolucoes';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 
 export function ExpedicaoGuard({ children }: { children: React.ReactNode }) {
@@ -166,6 +167,7 @@ function App() {
                           <Route path="/configuracoes" element={<ExpedicaoGuard><RequireAdmin><Configuracoes /></RequireAdmin></ExpedicaoGuard>} />
                           <Route path="/funcionarios" element={<ExpedicaoGuard><RequireAdmin><Funcionarios /></RequireAdmin></ExpedicaoGuard>} />
                           <Route path="/comissoes" element={<ExpedicaoGuard><RequireAdmin><Comissoes /></RequireAdmin></ExpedicaoGuard>} />
+                          <Route path="/devolucoes" element={<ExpedicaoGuard><RequirePermission permission="cobranca"><Devolucoes /></RequirePermission></ExpedicaoGuard>} />
 
                           {/* Rotas com <ExpedicaoGuard> + <RequirePermission> */}
                           <Route path="/configuracoes-fiscais" element={

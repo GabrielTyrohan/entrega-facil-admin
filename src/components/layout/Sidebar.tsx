@@ -30,6 +30,7 @@ import {
   Inbox,
   BadgePercent,
   ShoppingCart,
+  Undo2,
   Truck,
   Upload,
   UserCircle,
@@ -89,6 +90,7 @@ const PATH_TO_SECTION: Record<string, string> = {
   '/pagamentos': 'Financeiro',
   '/devedores': 'Financeiro',
   '/comissoes': 'Financeiro',
+  '/devolucoes': 'Financeiro',
   '/caixa': 'Financeiro',
   '/acertos-diarios': 'Financeiro',
   '/vendas-atacado': 'Comercial',
@@ -301,6 +303,13 @@ const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed, badges
       path: '/devedores',
       label: 'Devedores',
       icon: <AlertCircle className="w-5 h-5" />,
+      permission: 'cobranca',
+      group: 'Financeiro'
+    },
+    {
+      path: '/devolucoes',
+      label: 'Devoluções',
+      icon: <Undo2 className="w-5 h-5" />,
       permission: 'cobranca',
       group: 'Financeiro'
     },

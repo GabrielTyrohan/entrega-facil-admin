@@ -70,5 +70,9 @@ Migrations e Edge Functions dos 3 sistemas ficam versionadas **aqui**, em
 - Testar antes de aplicar qualquer coisa em produção (o Supabase é produção).
 - O app mobile só recebe mudanças novas com um APK novo; avise quando uma mudança depender disso.
 - Mensagens de erro para o usuário final em português simples.
+- **Documentar tudo no Obsidian** (o vault é esta pasta): ao fim de cada fase ou alteração, antes do commit,
+  crie ou atualize `documentacao/fases/<fase>.md` e `documentacao/estado-atual.md`, ligue as notas em
+  `documentacao/INDEX.md` e rode o lint da skill obsidian-notes. Use links relativos em markdown e
+  frontmatter (`title`, `date`, `tags`).
 - Plano geral das fases: `C:\Users\gabri\.claude\plans\no-momento-estou-te-recursive-meadow.md`
   (fases 1 a 6 feitas; faltam 6b troca/devolução, 6d fiscal IBS/CBS, 6e Contora, 7 superadmin).
