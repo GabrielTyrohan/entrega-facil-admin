@@ -150,16 +150,23 @@ const DetalhesOrcamento: React.FC = () => {
   const handleConvert = async () => {
     if (!orcamento) return;
     
+    if (!window.confirm('Converter em venda? Os itens saem do estoque agora.')) return;
+
     try {
-      await updateOrcamento.mutateAsync({
-        id: orcamento.id,
-        data: { status: 'convertido' }
+      // A função cria a venda PJ com baixa de estoque e marca o orçamento
+      // como convertido, tudo de uma vez (não converte duas vezes).
+      const { error } = await supabase.rpc('converter_orcamento_em_venda', {
+        p_orcamento_id: orcamento.id,
+        p_venda: {},
       });
-      toast.success('Orçamento convertido em venda com sucesso!');
+      if (error) throw error;
+      toast.success('Orçamento convertido em venda. Estoque atualizado.');
+      queryClient.invalidateQueries();
       refetch();
     } catch (error) {
       console.error('Erro ao converter orçamento:', error);
-      toast.error('Erro ao converter orçamento');
+      const msg = error && typeof error === 'object' && 'message' in error ? String((error as { message: string }).message) : '';
+      toast.error('Erro ao converter orçamento' + (msg ? `: ${msg}` : ''));
     }
   };
 

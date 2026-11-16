@@ -18,6 +18,8 @@ import Entregas from './pages/Entregas';
 import HistoricoPdfs from './pages/HistoricoPdfs';
 import MovimentacoesEstoque from './pages/Estoque/MovimentacoesEstoque';
 import RelatorioEstoque from './pages/Estoque/RelatorioEstoque';
+import Compras from './pages/Estoque/Compras';
+import NovaCompra from './pages/Estoque/NovaCompra';
 import NovaEntrega from './pages/NovaEntrega';
 
 import DetalheAcerto from './pages/AcertosDiarios/DetalhesAcerto';
@@ -285,6 +287,20 @@ function App() {
                             </ExpedicaoGuard>
                           } />
 
+                          <Route path="/estoque/compras" element={
+                            <ExpedicaoGuard>
+                              <RequirePermission permission="produtos">
+                                <Compras />
+                              </RequirePermission>
+                            </ExpedicaoGuard>
+                          } />
+                          <Route path="/estoque/compras/nova" element={
+                            <ExpedicaoGuard>
+                              <RequirePermission permission="produtos">
+                                <NovaCompra />
+                              </RequirePermission>
+                            </ExpedicaoGuard>
+                          } />
                           <Route path="/estoque/movimentacoes" element={
                             <ExpedicaoGuard>
                               <RequirePermission permission="produtos">

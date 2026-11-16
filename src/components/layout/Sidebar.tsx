@@ -77,6 +77,8 @@ const PATH_TO_SECTION: Record<string, string> = {
   '/clientes': 'Cadastros',
   '/produtos': 'Produtos e Estoque',
   '/produtos/cestas-base': 'Produtos e Estoque',
+  '/estoque/compras': 'Produtos e Estoque',
+  '/estoque/compras/nova': 'Produtos e Estoque',
   '/estoque/movimentacoes': 'Produtos e Estoque',
   '/estoque/relatorio': 'Produtos e Estoque',
   '/entregas': 'Operação',
@@ -249,6 +251,13 @@ const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed, badges
     },
 
     // ESTOQUE
+    {
+      path: '/estoque/compras',
+      label: 'Compras',
+      icon: <ShoppingCart className="w-5 h-5" />,
+      permission: 'produtos',
+      group: 'Estoque'
+    },
     {
       path: '/estoque/movimentacoes',
       label: 'Movimentações',
