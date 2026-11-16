@@ -9,6 +9,74 @@ import { supabase } from '@/lib/supabase';
 const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 const CONFIGURAR_EMPRESA_FUNCTION = 'configurar-empresa-contora';
 const ENVIAR_CERTIFICADO_FUNCTION = 'enviar-certificado-contora';
+const CONSUMO_FUNCTION = 'consumo-fiscal-contora';
+
+// ── Fase 6e: "Notas do mês" ─────────────────────────────────────────────
+export interface ConsumoFiscal {
+  administrador_id: string;
+  limite: number | null;
+  usados: number | null;
+  restantes: number | null;
+  uso_percentual: number | null;
+  aviso: 'none' | 'attention' | 'critical' | 'blocked' | string | null;
+  saldo_carteira: number | null;
+  eventos_empresa: number | null;
+  atualizado_em: string;
+}
+
+export interface RespostaConsumoFiscal {
+  consumo: ConsumoFiscal | null;
+  /** false quando a Contora não respondeu e o valor é o último guardado */
+  atualizado: boolean;
+  erro: string | null;
+}
+
+/** Percentual usado (0–100) a partir do que a Contora informou. */
+export function percentualUsado(c: Pick<ConsumoFiscal, 'limite' | 'usados' | 'uso_percentual'>): number | null {
+  if (typeof c.uso_percentual === 'number') return Math.max(0, Math.min(100, c.uso_percentual));
+  if (typeof c.limite === 'number' && c.limite > 0 && typeof c.usados === 'number') {
+    return Math.max(0, Math.min(100, Math.round((c.usados / c.limite) * 100)));
+  }
+  return null;
+}
+
+/** Nível do aviso para a cor do card. */
+export function nivelConsumo(c: Pick<ConsumoFiscal, 'aviso' | 'limite' | 'usados' | 'uso_percentual' | 'restantes'>): 'ok' | 'atencao' | 'critico' | 'bloqueado' {
+  if (c.aviso === 'blocked' || c.restantes === 0) return 'bloqueado';
+  if (c.aviso === 'critical') return 'critico';
+  if (c.aviso === 'attention') return 'atencao';
+  const p = percentualUsado(c);
+  if (p !== null && p >= 95) return 'critico';
+  if (p !== null && p >= 80) return 'atencao';
+  return 'ok';
+}
+
+/** Mensagem amigável quando a Contora recusa por limite de notas. */
+export function mensagemLimiteNotas(erro: string): string | null {
+  const e = erro.toLowerCase();
+  if (e.includes('http 402') || e.includes('quota') || e.includes('limite de eventos') || e.includes('insufficient')) {
+    return 'O limite de notas do mês da conta fiscal foi atingido. Fale com o suporte do sistema para liberar mais notas.';
+  }
+  return null;
+}
+
+export async function obterConsumoFiscal(): Promise<RespostaConsumoFiscal> {
+  const accessToken = await getAccessToken();
+  const response = await fetch(`${EDGE_BASE}/${CONSUMO_FUNCTION}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    },
+    body: '{}',
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data?.success) {
+    throw new Error((data as { error?: string })?.error || `Erro ${response.status} ao consultar o consumo de notas`);
+  }
+  return { consumo: data.consumo ?? null, atualizado: Boolean(data.atualizado), erro: data.erro ?? null };
+}
 
 // Ambiente fixo em homologação — emissão SEFAZ em produção NÃO implementada.
 export const CONTORA_AMBIENTE = 'homologacao' as const;
@@ -335,5 +403,7 @@ export function mapearTextoStatusIntegracao(
   if (integracaoStatus === 'pronta_homologacao') return 'Pronta para homologação';
   if (integracaoStatus === 'empresa_configurada')
     return 'Empresa configurada — certificado pendente';
+  if (integracaoStatus === 'certificado_vencendo') return 'Certificado perto de vencer — renove';
+  if (integracaoStatus === 'certificado_vencido') return 'Certificado vencido — envie um novo';
   return integracaoStatus || 'Empresa não configurada';
 }

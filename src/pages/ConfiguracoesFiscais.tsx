@@ -19,6 +19,7 @@ import {
   type EmpresaContoraPayload,
 } from '../services/contoraConfigService';
 import { toast } from '../utils/toast';
+import CardNotasDoMes from '../components/CardNotasDoMes';
 
 // Formata data ISO (YYYY-MM-DD) sem converter timezone — evita subtrair 1 dia por BRT (UTC-3)
 function formatarDataLocal(dateStr: string | null | undefined): string | null {
@@ -598,6 +599,9 @@ export default function ConfiguracoesFiscais() {
               <span>{erroCarga}</span>
             </div>
           )}
+
+          {/* Fase 6e: consumo de notas na Contora */}
+          <CardNotasDoMes />
 
           {/* Status da integração */}
           <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 space-y-3">

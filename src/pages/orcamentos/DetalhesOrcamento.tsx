@@ -4,6 +4,7 @@ import { useCliente } from '@/hooks/useClientes';
 import { useOrcamentoPJById, useUpdateOrcamentoPJ } from '@/hooks/useOrcamentosPJ';
 import { supabase } from '@/lib/supabase';
 import { nfeService } from '@/services/nfeService';
+import { mensagemLimiteNotas } from '@/services/contoraConfigService';
 import { toast } from '@/utils/toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -117,7 +118,9 @@ const DetalhesOrcamento: React.FC = () => {
       await refetchNotas();
       queryClient.invalidateQueries({ queryKey: ['notas-fiscais-orcamento', id] });
     } catch (error: any) {
-      toast.error(error?.message || 'Erro ao validar NF-e em homologação');
+      const msg = String(error?.message || 'Erro ao validar NF-e em homologação');
+      // Fase 6e: limite de notas do mês com mensagem clara
+      toast.error(mensagemLimiteNotas(msg) ?? msg);
     } finally {
       setIsValidandoNFe(false);
     }
