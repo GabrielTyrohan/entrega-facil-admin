@@ -41,7 +41,8 @@ Migrations e Edge Functions dos 3 sistemas ficam versionadas **aqui**, em
   `criar_entrega_avulsa_segura`) e na **venda PJ** (`criar_venda_atacado_segura`,
   `converter_orcamento_em_venda`). A venda do vendedor ao cliente **não** baixa o geral de novo.
 - Entra pela compra (`registrar_compra` → `entrada_compra`, com custo médio).
-- O estoque do vendedor (`estoque_vendedor`) é contado por cesta (`produto_id = produtos.id`).
+- O estoque do vendedor é **cesta + itens extras**: cestas em `estoque_vendedor` e itens soltos em
+  `estoque_vendedor_itens`, calculados pelo banco a partir das entregas (`reconciliar_estoque_entregas`).
 - Constraints: `usuario_tipo` ∈ admin/funcionario/vendedor (na auditoria também `desenvolvedor`);
   `referencia_tipo` restrito a uma lista; `quantidade > 0`.
 
@@ -51,6 +52,8 @@ Migrations e Edge Functions dos 3 sistemas ficam versionadas **aqui**, em
   checam `auth.uid()` (dono ou funcionária ativa, não bloqueada e com a permissão) e fazem tudo em uma
   transação. O front só chama `supabase.rpc(...)`. Nada de gravar direto em tabela sensível pelo front.
 - Helpers: `can_operate_cestas`, `can_operate_cobranca`, `can_gerir_estoque`, `is_super_admin`.
+- O superadmin (dev) é auditado automaticamente (`fn_auditoria_dev`); ações de dev são funções `dev_*`
+  com motivo. `auditoria_acoes` é só leitura para usuários.
 - Toda função nova: `revoke all ... from public, anon; grant execute ... to authenticated, service_role;`.
 - Para mudar uma migration, **use a skill `testar-migration-supabase`**: teste em transação desfeita e
   só depois aplique.
@@ -75,4 +78,4 @@ Migrations e Edge Functions dos 3 sistemas ficam versionadas **aqui**, em
   `documentacao/INDEX.md` e rode o lint da skill obsidian-notes. Use links relativos em markdown e
   frontmatter (`title`, `date`, `tags`).
 - Plano geral das fases: `C:\Users\gabri\.claude\plans\no-momento-estou-te-recursive-meadow.md`
-  (fases 1 a 6 feitas; faltam 6b troca/devolução, 6d fiscal IBS/CBS, 6e Contora, 7 superadmin).
+  (todas as fases concluídas: 1 a 7, incluindo 6b, 6d e 6e). Estado atual: `documentacao/estado-atual.md`.
