@@ -7,13 +7,31 @@ import { EstoqueAtual } from '@/types/estoque';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Activity, AlertTriangle, ArrowRight, Calendar,
-  DollarSign, FileText, HelpCircle, Package,
+  DollarSign, FileText, HelpCircle, Package, Search, ShoppingBasket,
   TrendingDown, TrendingUp, Truck, Users
 } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { Link } from 'react-router-dom';
 import PageHeader from '../components/layout/PageHeader';
+import PrecisaDeVoce from '../components/dashboard/PrecisaDeVoce';
+import ReceitaMensalChart from '../components/dashboard/ReceitaMensalChart';
+import { abrirBusca } from '../components/layout/Sidebar';
+
+// Ícone dos cartões em tom suave (novo visual), a partir da cor sólida antiga.
+const ICONE_SUAVE: Record<string, string> = {
+  'bg-emerald-500': 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300',
+  'bg-green-500': 'bg-green-50 text-green-600 dark:bg-green-500/15 dark:text-green-300',
+  'bg-red-500': 'bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-300',
+  'bg-purple-500': 'bg-purple-50 text-purple-600 dark:bg-purple-500/15 dark:text-purple-300',
+  'bg-indigo-500': 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300',
+  'bg-blue-500': 'bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300',
+};
+
+const saudacao = () => {
+  const h = new Date().getHours();
+  return h >= 5 && h < 12 ? 'Bom dia' : h >= 12 && h < 18 ? 'Boa tarde' : 'Boa noite';
+};
 
 // ─── Tooltip ──────────────────────────────────────────────────────────────────
 const Tooltip: React.FC<{ text: string }> = ({ text }) => {
@@ -153,8 +171,8 @@ const StatCard: React.FC<StatCardProps> = ({
             </div>
           )}
         </div>
-        <div className={`w-10 h-10 sm:w-12 sm:h-12 ${color} rounded-lg flex items-center justify-center flex-shrink-0 ml-3`}>
-          <Icon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+        <div className={`w-10 h-10 ${ICONE_SUAVE[color] ?? `${color} text-white`} rounded-lg flex items-center justify-center flex-shrink-0 ml-3`}>
+          <Icon className="w-5 h-5" />
         </div>
       </div>
     )}
@@ -222,241 +240,6 @@ const InadimplenciaCard: React.FC<{
               </span>
             </div>
           ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ─── FaturamentoMensalChart ───────────────────────────────────────────────────
-interface MonthData { month: string; value: number; height: number; }
-
-const FaturamentoMensalChart: React.FC<{ data: MonthData[]; isLoading: boolean }> = ({ data, isLoading }) => {
-  const [hoveredPoint, setHoveredPoint] = useState<number | null>(null);
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
-  const pathRef = useRef<SVGPathElement>(null);
-  const [pathLength, setPathLength] = useState(0);
-  const hasAnimated = useRef(false);
-  const [animatedProgress, setAnimatedProgress] = useState(0);
-
-  // ResizeObserver: inicia na montagem, sem dependências
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const observer = new ResizeObserver((entries) => {
-      const { width, height } = entries[0].contentRect;
-      if (width > 0 && height > 0) setDimensions({ width, height });
-    });
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, []);
-
-  // Calcula pathLength quando o SVG é desenhado
-  useEffect(() => {
-    if (pathRef.current) {
-      setPathLength(pathRef.current.getTotalLength());
-    }
-  }, [dimensions, data]);
-
-  // Dispara animação uma única vez quando tiver dimensões e pathLength
-  useEffect(() => {
-    if (!hasAnimated.current && pathLength > 0 && dimensions.width > 0) {
-      hasAnimated.current = true;
-      const timer = setTimeout(() => setAnimatedProgress(1), 50);
-      return () => clearTimeout(timer);
-    }
-  }, [pathLength, dimensions.width]);
-
-  const padding = { top: 20, right: 16, bottom: 32, left: 52 };
-  const graphWidth = dimensions.width - padding.left - padding.right;
-  const graphHeight = dimensions.height - padding.top - padding.bottom;
-
-  const maxValue = Math.max(...data.map(d => d.value), 1);
-  const niceMax = maxValue > 1000 ? Math.ceil(maxValue / 1000) * 1000 : Math.ceil(maxValue / 100) * 100;
-
-  const formatYAxis = (val: number) => {
-    if (val === 0) return 'R$0';
-    if (val >= 1000000) return `R$${(val / 1000000).toFixed(1).replace('.0', '').replace('.', ',')}M`;
-    if (val >= 1000) return `R$${(val / 1000).toFixed(1).replace('.0', '').replace('.', ',')}k`;
-    return `R$${val}`;
-  };
-
-  const formatShortMonth = (label: string) => {
-    const parts = label.split(/[-–]/);
-    if (parts.length === 2) {
-      const monthNum = parseInt(parts[1].split('/')[1], 10);
-      if (!isNaN(monthNum) && monthNum >= 1 && monthNum <= 12) {
-        return ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'][monthNum - 1];
-      }
-    }
-    return label;
-  };
-
-  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(pct => niceMax * pct);
-
-  const points = data.map((d, i) => {
-    const x = padding.left + (i / Math.max(data.length - 1, 1)) * graphWidth;
-    const y = padding.top + graphHeight - ((d.value / niceMax) * graphHeight);
-    return { x, y, value: d.value, month: d.month };
-  });
-
-  const createSmoothPath = (pts: typeof points) => {
-    if (pts.length === 0) return '';
-    if (pts.length === 1) return `M ${pts[0].x},${pts[0].y}`;
-    let path = `M ${pts[0].x},${pts[0].y}`;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p0 = i === 0 ? pts[0] : pts[i - 1];
-      const p1 = pts[i];
-      const p2 = pts[i + 1];
-      const p3 = i + 2 < pts.length ? pts[i + 2] : p2;
-      const cp1x = p1.x + (p2.x - p0.x) / 6;
-      const cp1y = p1.y + (p2.y - p0.y) / 6;
-      const cp2x = p2.x - (p3.x - p1.x) / 6;
-      const cp2y = p2.y - (p3.y - p1.y) / 6;
-      path += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`;
-    }
-    return path;
-  };
-
-  const linePath = createSmoothPath(points);
-  const areaPath = points.length > 0
-    ? `${linePath} L ${points[points.length - 1].x},${padding.top + graphHeight} L ${points[0].x},${padding.top + graphHeight} Z`
-    : '';
-
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 relative h-80 flex flex-col">
-      <div className="flex items-center gap-2 mb-4 flex-shrink-0">
-        <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-          Receita Mensal
-        </h3>
-        <Tooltip text="Total recebido por mês nos últimos 12 meses, somando pagamentos de entregas e vendas atacado." />
-      </div>
-
-      {isLoading ? (
-        <div
-          className="flex-1 rounded-lg"
-          style={{
-            minHeight: 0,
-            background: 'linear-gradient(90deg, var(--skeleton-base, #e5e7eb) 25%, var(--skeleton-shine, #f3f4f6) 50%, var(--skeleton-base, #e5e7eb) 75%)',
-            backgroundSize: '200% 100%',
-            animation: 'shimmer 1.5s ease-in-out infinite',
-          }}
-        />
-      ) : (
-        <div ref={containerRef} className="flex-1 relative min-h-0 w-full select-none">
-          {hoveredPoint !== null && points[hoveredPoint] && (
-            <div
-              className="absolute z-10 bg-gray-900 dark:bg-gray-700 text-white px-2 sm:px-3 py-1 sm:py-2 rounded-lg shadow-lg text-xs sm:text-sm font-medium pointer-events-none transform -translate-x-1/2 -translate-y-full transition-all duration-150"
-              style={{ left: tooltipPos.x, top: tooltipPos.y - 12 }}
-            >
-              <div className="text-center">
-                <div className="font-semibold">{points[hoveredPoint].month}</div>
-                <div className="text-green-400">
-                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
-                    .format(points[hoveredPoint].value)}
-                </div>
-              </div>
-              <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900 dark:border-t-gray-700" />
-            </div>
-          )}
-
-          {dimensions.width > 0 && dimensions.height > 0 && (
-            <svg width={dimensions.width} height={dimensions.height} className="absolute inset-0 overflow-visible">
-              <defs>
-                <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="rgba(59,130,246,0.18)" />
-                  <stop offset="100%" stopColor="rgba(59,130,246,0)" />
-                </linearGradient>
-              </defs>
-
-              {yTicks.map((val, i) => {
-                const y = padding.top + graphHeight - ((val / niceMax) * graphHeight);
-                return (
-                  <g key={`y-${i}`}>
-                    <line
-                      x1={padding.left} y1={y}
-                      x2={dimensions.width - padding.right} y2={y}
-                      className="stroke-[#e5e7eb] dark:stroke-[#374151]"
-                    />
-                    <text
-                      x={padding.left - 8} y={y + 4}
-                      className="text-xs fill-current text-gray-400"
-                      textAnchor="end"
-                    >
-                      {formatYAxis(val)}
-                    </text>
-                  </g>
-                );
-              })}
-
-              {points.map((p, i) => (
-                <text
-                  key={`x-${i}`}
-                  x={p.x} y={dimensions.height - 10}
-                  className="text-xs fill-current text-gray-400 dark:text-gray-500"
-                  textAnchor="middle"
-                >
-                  {formatShortMonth(p.month)}
-                </text>
-              ))}
-
-              <path
-                d={areaPath}
-                fill="url(#areaGradient)"
-                style={{
-                  opacity: animatedProgress,
-                  transition: 'opacity 1200ms ease-in-out'
-                }}
-              />
-
-              <path
-                ref={pathRef}
-                d={linePath}
-                fill="none"
-                className="stroke-[#3b82f6]"
-                strokeWidth={2.5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                style={{
-                  strokeDasharray: pathLength,
-                  strokeDashoffset: pathLength - (pathLength * animatedProgress),
-                  transition: 'stroke-dashoffset 1200ms ease-in-out'
-                }}
-              />
-
-              {points.map((p, i) => (
-                <circle
-                  key={`point-${i}`}
-                  cx={p.x} cy={p.y}
-                  r={hoveredPoint === i ? 6 : 4}
-                  fill="white"
-                  className="stroke-[#3b82f6]"
-                  strokeWidth={2}
-                  style={{
-                    transformOrigin: `${p.x}px ${p.y}px`,
-                    transform: `scale(${animatedProgress === 1 ? 1 : 0})`,
-                    transition: `transform 300ms ease-out ${i * 80}ms, r 150ms ease`
-                  }}
-                />
-              ))}
-
-              {points.map((p, i) => (
-                <rect
-                  key={`hover-${i}`}
-                  x={p.x - 20} y={padding.top}
-                  width={40} height={graphHeight}
-                  fill="transparent"
-                  className="cursor-pointer"
-                  onMouseEnter={() => {
-                    setHoveredPoint(i);
-                    setTooltipPos({ x: p.x, y: p.y });
-                  }}
-                  onMouseLeave={() => setHoveredPoint(null)}
-                />
-              ))}
-            </svg>
-          )}
         </div>
       )}
     </div>
@@ -738,7 +521,7 @@ const VendedoresPorTipoCard: React.FC<{
 
 // ─── Dashboard Principal ──────────────────────────────────────────────────────
 const Dashboard: React.FC = () => {
-  const { userType, permissions, adminId } = useAuth();
+  const { userType, permissions, adminId, userProfile } = useAuth();
   const queryClient = useQueryClient();
   const isExpedicao = userType !== 'admin' && permissions?.expedicao === true;
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
@@ -905,33 +688,55 @@ const Dashboard: React.FC = () => {
     },
   ] as const;
 
+  const podeEntregarCesta = userType === 'admin' || !!permissions?.cestas_vendedor || !!permissions?.produtos;
+  const primeiroNome = (userProfile?.nome || '').split(' ')[0];
+
   return (
     <div className="space-y-6 sm:space-y-8">
       <PageHeader
-        title="Dashboard"
-        description="Visão geral da operação"
+        title={`${saudacao()}${primeiroNome ? `, ${primeiroNome}` : ''}`}
+        description={new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(currentDateTime).replace(/^./, (c) => c.toUpperCase())}
         actions={
-          <div className="text-left sm:text-right">
+          <div className="flex items-center gap-2">
             {someLoading && (
-              <div className="flex items-center gap-2 justify-start sm:justify-end mb-2">
-                <Activity className="w-3 h-3 animate-pulse text-blue-500" />
-                <span className="text-xs text-gray-500">Atualizando...</span>
-              </div>
+              <span className="mr-1 inline-flex items-center gap-1.5 text-xs text-gray-500" title={formatDateTime(currentDateTime)}>
+                <Activity className="h-3 w-3 animate-pulse text-blue-500" /> Atualizando…
+              </span>
             )}
-            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Data e hora</p>
-            <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white">
-              {formatDateTime(currentDateTime)}
-            </p>
+            <button
+              type="button"
+              onClick={abrirBusca}
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+            >
+              <Search className="h-4 w-4" /> Buscar
+              <kbd className="hidden rounded border border-gray-200 px-1 font-mono text-[10px] text-gray-400 dark:border-gray-600 sm:inline">Ctrl K</kbd>
+            </button>
+            {podeEntregarCesta && (
+              <Link
+                to="/produtos/cestas"
+                className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
+              >
+                <ShoppingBasket className="h-4 w-4" /> Entregar cesta
+              </Link>
+            )}
           </div>
         }
       >
         {stats?.periodoInicio && stats?.periodoFim && (
-          <span className="bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 text-xs px-2.5 py-0.5 rounded-full inline-flex items-center">
+          <span className="bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300 text-xs px-2.5 py-0.5 rounded-full inline-flex items-center">
             <Calendar className="w-3.5 h-3.5 mr-1.5" />
-            {new Date(stats.periodoInicio + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} a {new Date(stats.periodoFim + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+            Período {new Date(stats.periodoInicio + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} a {new Date(stats.periodoFim + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
           </span>
         )}
       </PageHeader>
+
+      {/* SEÇÃO 0 — O que fazer agora */}
+      <PrecisaDeVoce
+        estoqueAlerts={estoqueAlerts}
+        inadimplencia={isExpedicao ? null : inadimplencia}
+        autonomosPendentes={vendedoresPorTipo?.autonomosPendentes ?? 0}
+        carregando={isLoading || loadingStates.estoque || loadingStates.inadimplencia}
+      />
 
       {/* SEÇÃO 1 — O que está acontecendo agora */}
       {!isExpedicao && (
@@ -950,8 +755,19 @@ const Dashboard: React.FC = () => {
         </DashboardSection>
       )}
 
-      {/* SEÇÃO 2 — O que precisa de atenção */}
-      <DashboardSection title="Atenção necessária" description="Itens que precisam de acompanhamento">
+      {/* SEÇÃO 2 — O que quero analisar */}
+      {!isExpedicao && (
+        <DashboardSection title="Análises" description="Evolução e desempenho no período">
+          <ReceitaMensalChart data={charts.faturamentoMensal} isLoading={loadingStates.grafico} />
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <TopVendedoresCard data={vendedores} isLoading={loadingStates.vendedores} />
+            <TopProdutosCard data={topProdutos} isLoading={loadingStates.topProdutos} />
+          </div>
+        </DashboardSection>
+      )}
+
+      {/* SEÇÃO 3 — Detalhe do que precisa de atenção */}
+      <DashboardSection title="Atenção necessária" description="Detalhe da inadimplência e do estoque">
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           {!isExpedicao && (
             <InadimplenciaCard data={inadimplencia} isLoading={loadingStates.inadimplencia} />
@@ -959,17 +775,6 @@ const Dashboard: React.FC = () => {
           <EstoqueAlertsCard data={estoqueAlerts} isLoading={loadingStates.estoque} />
         </div>
       </DashboardSection>
-
-      {/* SEÇÃO 3 — O que quero analisar */}
-      {!isExpedicao && (
-        <DashboardSection title="Análises" description="Evolução e desempenho no período">
-          <FaturamentoMensalChart data={charts.faturamentoMensal} isLoading={loadingStates.grafico} />
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            <TopVendedoresCard data={vendedores} isLoading={loadingStates.vendedores} />
-            <TopProdutosCard data={topProdutos} isLoading={loadingStates.topProdutos} />
-          </div>
-        </DashboardSection>
-      )}
     </div>
   );
 };
