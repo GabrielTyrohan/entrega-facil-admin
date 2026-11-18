@@ -1,65 +1,17 @@
 // ============================================
 // ARQUIVO: src/components/layout/Sidebar.tsx
-// Menu lateral com controle de permissões dinâmico
+// Menu lateral (novo visual). Itens, seções e permissões vêm de ./menu.tsx.
 // ============================================
 
-import { Permissoes, useAuth, UserType } from '@/contexts/AuthContext';
-import {
-  AlertCircle,
-  ArrowUpDown,
-  BarChart3,
-  ChevronDown,
-  ChevronRight,
-  ClipboardList,
-  CreditCard,
-  DollarSign,
-  FileKey,
-  FileText,
-  LayoutDashboard,
-  Lock,
-  LogOut,
-  MessageSquare,
-  Package,
-  PackagePlus,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Receipt,
-  RefreshCw,
-  Settings,
-  ShoppingBasket,
-  Inbox,
-  BadgePercent,
-  ShoppingCart,
-  Undo2,
-  ListChecks,
-  Truck,
-  Upload,
-  UserCircle,
-  UserCog,
-  Users,
-  X
-} from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from '@/utils/toast';
+import { ChevronDown, ChevronRight, Lock, LogOut, PanelLeftClose, PanelLeftOpen, Search, UserCog, X } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { toast } from '@/utils/toast';
 import packageJson from '../../../package.json';
+import { MAINTENANCE_MSG, MENU_ITEMS, PATH_TO_SECTION, SECTION_ORDER, secaoDaRota, useVisibleMenu, type MenuItem } from './menu';
 
-export const MAINTENANCE_ROUTES: string[] = [];
-const MAINTENANCE_MSG = 'Esta área está temporariamente indisponível por estar em manutenção. Em breve retornaremos com uma nova solução de emissão fiscal.';
-
-interface MenuItem {
-  path: string;
-  label: string;
-  icon: React.ReactNode;
-  permission?: keyof Permissoes;
-  /** Basta ter qualquer uma destas permissões. */
-  permissionAny?: (keyof Permissoes)[];
-  adminOnly?: boolean;
-  funcionarioOnly?: boolean;
-  group?: string;
-  disabled?: boolean;
-  maintenanceMessage?: string;
-}
+export { MAINTENANCE_ROUTES } from './menu';
 
 interface SidebarProps {
   isOpen?: boolean;
@@ -70,405 +22,81 @@ interface SidebarProps {
   badges?: Record<string, number>;
 }
 
-// ===== AGRUPAMENTO VISUAL (apresentação) =====
-// Não altera rotas nem permissões: o filtro de permissões continua usando `item.group`.
-const PATH_TO_SECTION: Record<string, string> = {
-  '/dashboard': 'Principal',
-  '/vendedores': 'Cadastros',
-  '/funcionarios': 'Cadastros',
-  '/clientes': 'Cadastros',
-  '/produtos': 'Produtos e Estoque',
-  '/produtos/cestas-base': 'Produtos e Estoque',
-  '/estoque/compras': 'Produtos e Estoque',
-  '/estoque/compras/nova': 'Produtos e Estoque',
-  '/estoque/movimentacoes': 'Produtos e Estoque',
-  '/estoque/relatorio': 'Produtos e Estoque',
-  '/entregas': 'Operação',
-  '/produtos/cestas': 'Operação',
-  '/entregas/avulsas': 'Operação',
-  '/pedidos-vendedores': 'Operação',
-  '/historico-pdfs': 'Operação',
-  '/pagamentos': 'Financeiro',
-  '/devedores': 'Financeiro',
-  '/comissoes': 'Financeiro',
-  '/devolucoes': 'Financeiro',
-  '/caixa': 'Financeiro',
-  '/acertos-diarios': 'Financeiro',
-  '/vendas-atacado': 'Comercial',
-  '/orcamentos-pj': 'Comercial',
-  '/tabela-precos': 'Comercial',
-  '/configuracoes-fiscais': 'Comercial',
-  '/configuracoes-fiscais/importacao': 'Comercial',
-  '/configuracoes-fiscais/revisao': 'Comercial',
-  '/relatorios': 'Relatórios',
-  '/suporte': 'Sistema',
-  '/configuracoes': 'Sistema',
-};
+const GRUPOS_KEY = 'sidebarGruposAbertos';
+const GRUPOS_PADRAO: Record<string, boolean> = { Operação: true, Financeiro: true };
 
-const SECTION_ORDER = [
-  'Principal',
-  'Cadastros',
-  'Produtos e Estoque',
-  'Operação',
-  'Financeiro',
-  'Comercial',
-  'Relatórios',
-  'Sistema',
-  'Outros'
-];
-
-function useVisibleMenu(userType: UserType, permissions: Permissoes, isAdmin: boolean, menuItems: MenuItem[]) {
-  return useMemo(() => {
-    // ADMIN
-    if (isAdmin) return menuItems;
-
-    // EXPEDIÇÃO
-    if (userType !== 'admin' && permissions?.expedicao) {
-      const expedicaoPaths = [
-        '/dashboard',
-        '/vendedores', '/clientes',
-        '/produtos', '/produtos/cestas-base', '/produtos/cestas', '/entregas/avulsas', '/pedidos-vendedores',
-        '/configuracoes', '/suporte'
-      ];
-      return menuItems.filter(item => expedicaoPaths.includes(item.path));
-    }
-
-    // FUNCIONÁRIO NORMAL
-    return menuItems.filter(item => {
-      if (item.adminOnly) return false;
-      if (item.funcionarioOnly && userType !== 'funcionario') return false;
-
-      // Itens com permissão própria decidem sozinhos (cobrança, cestas do vendedor).
-      if (item.permissionAny) return item.permissionAny.some(p => !!permissions?.[p]);
-      if (item.permission === 'cobranca') return !!permissions?.cobranca;
-
-      switch (item.group) {
-        case 'Estoque': {
-          // Autoridade é a permissão explícita do item (produtos) —
-          // caixa NÃO libera estoque administrativo.
-          if (item.permission) return !!permissions[item.permission];
-          return !!permissions?.produtos;
-        }
-
-        case 'Financeiro': {
-          const hasFinanceiroAcc = permissions?.caixa || permissions?.acertos || permissions?.relatorios;
-          if (!hasFinanceiroAcc) return false;
-          if (item.permission && !permissions[item.permission]) return false;
-          return true;
-        }
-
-        case 'Comercial': {
-          const hasComercialAcc = permissions?.vendas_atacado || permissions?.orcamentos_pj || permissions?.configuracoes_fiscais;
-          if (!hasComercialAcc) return false;
-          if (item.permission && !permissions[item.permission]) return false;
-          return true;
-        }
-
-        case 'Relatórios':
-          return !!permissions?.relatorios;
-
-        default:
-          if (item.path === '/funcionarios') return !!permissions?.funcionarios;
-          if (item.permission && !permissions[item.permission]) return false;
-          return true;
-      }
-    });
-  }, [userType, permissions, isAdmin, menuItems]);
-}
+/** Abre a busca Ctrl+K (o MainLayout escuta este evento). */
+export const abrirBusca = () => window.dispatchEvent(new CustomEvent('abrir-busca'));
 
 const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed, badges }: SidebarProps) => {
   const location = useLocation();
-  const { permissions, isAdmin, userType, signOut } = useAuth();
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const { permissions, isAdmin, userType, signOut, userProfile } = useAuth();
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    try {
+      const salvo = localStorage.getItem(GRUPOS_KEY);
+      return salvo ? JSON.parse(salvo) : GRUPOS_PADRAO;
+    } catch {
+      return GRUPOS_PADRAO;
+    }
+  });
   const [hovered, setHovered] = useState<{ label: string; top: number; left: number } | null>(null);
 
-  // ===== ITENS DO MENU =====
-  // Memorizado para evitar recriação a cada render e loops infinitos no useEffect
-  const menuItems: MenuItem[] = useMemo(() => [
-    // PRINCIPAL
-    {
-      path: '/dashboard',
-      label: 'Dashboard',
-      icon: <LayoutDashboard className="w-5 h-5" />,
-      group: 'Principal'
-    },
-
-    // PESSOAS
-    {
-      path: '/vendedores',
-      label: 'Vendedores',
-      icon: <Users className="w-5 h-5" />,
-      permission: 'vendedores',
-      group: 'Pessoas'
-    },
-    {
-      path: '/funcionarios',
-      label: 'Funcionários',
-      icon: <UserCog className="w-5 h-5" />,
-      permission: 'funcionarios',
-      adminOnly: true,
-      group: 'Pessoas'
-    },
-    {
-      path: '/clientes',
-      label: 'Clientes',
-      icon: <UserCircle className="w-5 h-5" />,
-      permission: 'cobranca',
-      group: 'Pessoas'
-    },
-
-    // CATÁLOGO
-    {
-      path: '/produtos',
-      label: 'Produtos',
-      icon: <Package className="w-5 h-5" />,
-      permission: 'produtos',
-      group: 'Catálogo'
-    },
-    {
-      path: '/produtos/cestas',
-      label: 'Entregar Cesta',
-      icon: <ShoppingBasket className="w-5 h-5" />,
-      permissionAny: ['cestas_vendedor', 'produtos'],
-      group: 'Catálogo'
-    },
-    {
-      path: '/produtos/cestas-base',
-      label: 'Cadastrar Cestas',
-      icon: <PackagePlus className="w-5 h-5" />,
-      permission: 'produtos',
-      group: 'Catálogo'
-    },
-    {
-      path: '/entregas/avulsas',
-      label: 'Entregas Avulsas',
-      icon: <Truck className="w-5 h-5" />,
-      permissionAny: ['cestas_vendedor', 'produtos'],
-      group: 'Catálogo'
-    },
-    {
-      path: '/pedidos-vendedores',
-      label: 'Pedidos dos Vendedores',
-      icon: <Inbox className="w-5 h-5" />,
-      permissionAny: ['cestas_vendedor', 'produtos'],
-      group: 'Catálogo'
-    },
-
-    // ESTOQUE
-    {
-      path: '/estoque/compras',
-      label: 'Compras',
-      icon: <ShoppingCart className="w-5 h-5" />,
-      permission: 'produtos',
-      group: 'Estoque'
-    },
-    {
-      path: '/estoque/movimentacoes',
-      label: 'Movimentações',
-      icon: <ArrowUpDown className="w-5 h-5" />,
-      permission: 'produtos',
-      group: 'Estoque'
-    },
-    {
-      path: '/estoque/relatorio',
-      label: 'Relatório',
-      icon: <ClipboardList className="w-5 h-5" />,
-      permission: 'produtos',
-      group: 'Estoque'
-    },
-
-    // OPERACIONAL
-    {
-      path: '/entregas',
-      label: 'Entregas',
-      icon: <Truck className="w-5 h-5" />,
-      permission: 'cobranca',
-      group: 'Operacional'
-    },
-    {
-      path: '/historico-pdfs',
-      label: 'Histórico de Notas',
-      icon: <FileText className="w-5 h-5" />,
-      adminOnly: true,
-      group: 'Operacional',
-    },
-
-    // FINANCEIRO
-    {
-      path: '/pagamentos',
-      label: 'Pagamentos',
-      icon: <CreditCard className="w-5 h-5" />,
-      permission: 'cobranca',
-      group: 'Financeiro'
-    },
-    {
-      path: '/devedores',
-      label: 'Devedores',
-      icon: <AlertCircle className="w-5 h-5" />,
-      permission: 'cobranca',
-      group: 'Financeiro'
-    },
-    {
-      path: '/devolucoes',
-      label: 'Devoluções',
-      icon: <Undo2 className="w-5 h-5" />,
-      permission: 'cobranca',
-      group: 'Financeiro'
-    },
-    {
-      path: '/comissoes',
-      label: 'Comissões',
-      icon: <BadgePercent className="w-5 h-5" />,
-      adminOnly: true,
-      group: 'Financeiro'
-    },
-    {
-      path: '/caixa',
-      label: 'Fluxo de Caixa',
-      icon: <DollarSign className="w-5 h-5" />,
-      permission: 'caixa',
-      group: 'Financeiro'
-    },
-    {
-      path: '/acertos-diarios',
-      label: 'Acertos Diários',
-      icon: <ClipboardList className="w-5 h-5" />,
-      permission: 'acertos',
-      group: 'Financeiro'
-    },
-
-    // COMERCIAL
-    {
-      path: '/vendas-atacado',
-      label: 'Vendas Atacado',
-      icon: <ShoppingCart className="w-5 h-5" />,
-      permission: 'vendas_atacado',
-      group: 'Comercial',
-    },
-    {
-      path: '/orcamentos-pj',
-      label: 'Orçamento PJ',
-      icon: <FileText className="w-5 h-5" />,
-      permission: 'orcamentos_pj',
-      group: 'Comercial',
-    },
-    {
-      path: '/tabela-precos',
-      label: 'Tabela de Preços',
-      icon: <Receipt className="w-5 h-5" />,
-      permission: 'vendas_atacado',
-      group: 'Comercial'
-    },
-    {
-      path: '/configuracoes-fiscais',
-      label: 'Configuração Fiscal',
-      icon: <FileKey className="w-5 h-5" />,
-      permission: 'configuracoes_fiscais',
-      adminOnly: true,
-      group: 'Comercial'
-    },
-    {
-      path: '/configuracoes-fiscais/importacao',
-      label: 'Importação Fiscal',
-      icon: <Upload className="w-5 h-5" />,
-      permission: 'configuracoes_fiscais',
-      adminOnly: true,
-      group: 'Comercial'
-    },
-    {
-      path: '/configuracoes-fiscais/revisao',
-      label: 'Revisão Fiscal',
-      icon: <ListChecks className="w-5 h-5" />,
-      permission: 'configuracoes_fiscais',
-      adminOnly: true,
-      group: 'Comercial'
-    },
-    {
-      path: '/configuracoes-fiscais/sincronizacao',
-      label: 'Sincronização Fiscal',
-      icon: <RefreshCw className="w-5 h-5" />,
-      permission: 'configuracoes_fiscais',
-      adminOnly: true,
-      group: 'Comercial'
-    },
-
-    // RELATÓRIOS
-    {
-      path: '/relatorios',
-      label: 'Relatórios',
-      icon: <BarChart3 className="w-5 h-5" />,
-      permission: 'relatorios',
-      group: 'Relatórios'
-    },
-
-    // SISTEMA
-    {
-      path: '/suporte',
-      label: 'Suporte',
-      icon: <MessageSquare className="w-5 h-5" />,
-      group: 'Sistema'
-    },
-    {
-      path: '/configuracoes',
-      label: 'Configurações',
-      icon: <Settings className="w-5 h-5" />,
-      permission: 'configuracoes',
-      adminOnly: true,
-      group: 'Sistema'
-    },
-  ], []);
-
-  // ===== FILTRAR ITENS BASEADO NAS PERMISSÕES =====
-  const visibleItems = useVisibleMenu(userType, permissions, isAdmin, menuItems);
+  const visibleItems = useVisibleMenu(userType, permissions, isAdmin, MENU_ITEMS);
 
   // Agrupar itens por seção visual (sem alterar a lógica de permissões)
-  const sectionedItems = useMemo(() => visibleItems.reduce((acc, item) => {
-    const section = PATH_TO_SECTION[item.path] || 'Outros';
-    if (!acc[section]) acc[section] = [];
-    acc[section].push(item);
-    return acc;
-  }, {} as Record<string, MenuItem[]>), [visibleItems]);
+  const sectionedItems = useMemo(
+    () =>
+      visibleItems.reduce((acc, item) => {
+        const section = PATH_TO_SECTION[item.path] || 'Outros';
+        (acc[section] ||= []).push(item);
+        return acc;
+      }, {} as Record<string, MenuItem[]>),
+    [visibleItems]
+  );
 
-  // Expandir automaticamente a seção do item ativo
+  // Expandir automaticamente a seção da tela aberta (inclusive subrotas, ex.: /vendas-atacado/nova)
+  const secaoAtiva = secaoDaRota(location.pathname).secao;
   useEffect(() => {
-    const activeItem = visibleItems.find(item => item.path === location.pathname);
-    if (!activeItem) return;
-    const section = PATH_TO_SECTION[activeItem.path] || 'Outros';
-    if (section === 'Principal') return;
-    setOpenGroups(prev => {
-      // Evitar atualização de estado se já estiver correto para prevenir loops
-      if (prev[section]) return prev;
-      return {
-        ...prev,
-        [section]: true
-      };
-    });
-  }, [location.pathname, visibleItems]);
+    if (!secaoAtiva || secaoAtiva === 'Início') return;
+    setOpenGroups((prev) => (prev[secaoAtiva] ? prev : { ...prev, [secaoAtiva]: true }));
+  }, [secaoAtiva]);
 
-  const toggleGroup = (group: string) => {
-    setOpenGroups(prev => ({
-      ...prev,
-      [group]: !prev[group]
-    }));
-  };
+  useEffect(() => {
+    try {
+      localStorage.setItem(GRUPOS_KEY, JSON.stringify(openGroups));
+    } catch {
+      // localStorage indisponível: mantém só em memória
+    }
+  }, [openGroups]);
+
+  const toggleGroup = (group: string) => setOpenGroups((prev) => ({ ...prev, [group]: !prev[group] }));
 
   const showTip = (label: string) => (e: React.MouseEvent<HTMLElement> | React.FocusEvent<HTMLElement>) => {
     if (!collapsed) return;
     const rect = e.currentTarget.getBoundingClientRect();
     setHovered({ label, top: rect.top + rect.height / 2, left: rect.right + 8 });
   };
-
   const hideTip = () => setHovered(null);
 
-  const itemBaseClass = (isActive: boolean) => `relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm
-    transition-all duration-200 ${
+  const fecharNoCelular = () => {
+    hideTip();
+    if (window.innerWidth < 1024 && onClose) onClose();
+  };
+
+  const ativo = (path: string) => location.pathname === path || (path !== '/dashboard' && location.pathname.startsWith(path + '/') && secaoDaRota(location.pathname).item?.path === path);
+
+  const itemClass = (isActive: boolean) =>
+    `group relative flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] transition-colors ${
       isActive
-        ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium'
-        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-    } ${collapsed ? 'lg:justify-center lg:px-2' : ''}`;
+        ? 'bg-blue-50 font-medium text-blue-700 dark:bg-blue-500/15 dark:text-blue-300'
+        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700/60 dark:hover:text-gray-100'
+    } ${collapsed ? 'lg:justify-center lg:px-0' : ''}`;
 
   const renderMenuItem = (item: MenuItem) => {
-    const isActive = location.pathname === item.path;
+    const isActive = ativo(item.path);
+    const Icon = item.icon;
+    const icone = <Icon className={`h-[17px] w-[17px] shrink-0 ${isActive ? '' : 'text-gray-400 group-hover:text-gray-600 dark:text-gray-500 dark:group-hover:text-gray-300'}`} />;
+    const contador = badges?.[item.path];
 
     if (item.disabled) {
       return (
@@ -482,11 +110,11 @@ const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed, badges
           onMouseLeave={hideTip}
           onFocus={showTip(item.label)}
           onBlur={hideTip}
-          className={`${itemBaseClass(false)} w-full text-left cursor-not-allowed opacity-50`}
+          className={`${itemClass(false)} w-full cursor-not-allowed text-left opacity-50`}
         >
-          <span className="shrink-0">{item.icon}</span>
-          <span className={`flex-1 truncate whitespace-nowrap transition-opacity duration-200 ${collapsed ? 'lg:hidden' : ''}`}>{item.label}</span>
-          <Lock className={`w-4 h-4 shrink-0 ${collapsed ? 'lg:hidden' : ''}`} />
+          {icone}
+          <span className={`flex-1 truncate ${collapsed ? 'lg:hidden' : ''}`}>{item.label}</span>
+          <Lock className={`h-3.5 w-3.5 shrink-0 ${collapsed ? 'lg:hidden' : ''}`} />
         </button>
       );
     }
@@ -496,223 +124,179 @@ const Sidebar = ({ isOpen, onClose, collapsed = false, onToggleCollapsed, badges
         key={item.path}
         to={item.path}
         aria-label={item.label}
-        onClick={() => {
-          hideTip();
-          if (window.innerWidth < 1024 && onClose) onClose();
-        }}
+        aria-current={isActive ? 'page' : undefined}
+        onClick={fecharNoCelular}
         onMouseEnter={showTip(item.label)}
         onMouseLeave={hideTip}
         onFocus={showTip(item.label)}
         onBlur={hideTip}
-        className={itemBaseClass(isActive)}
+        className={itemClass(isActive)}
       >
-        {isActive && (
+        {icone}
+        <span className={`truncate ${collapsed ? 'lg:hidden' : ''}`}>{item.label}</span>
+        {!!contador && (
           <span
-            aria-hidden="true"
-            className={`absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-blue-600 dark:bg-blue-400 ${collapsed ? 'lg:hidden' : ''}`}
-          />
-        )}
-        <span className="shrink-0">{item.icon}</span>
-        <span className={`truncate whitespace-nowrap transition-opacity duration-200 ${collapsed ? 'lg:hidden' : ''}`}>{item.label}</span>
-        {!!badges?.[item.path] && (
-          <span
-            aria-label={`${badges[item.path]} aguardando`}
-            className={`ml-auto shrink-0 min-w-5 h-5 px-1.5 rounded-full bg-red-600 text-white text-xs font-semibold inline-flex items-center justify-center tabular-nums ${collapsed ? 'lg:hidden' : ''}`}
+            aria-label={`${contador} aguardando`}
+            className={`ml-auto inline-flex h-[18px] min-w-[20px] shrink-0 items-center justify-center rounded-full bg-blue-600 px-1.5 font-mono text-[11px] font-semibold text-white ${
+              collapsed ? 'lg:absolute lg:right-1 lg:top-0.5 lg:ml-0 lg:h-4 lg:min-w-4 lg:px-1 lg:text-[10px]' : ''
+            }`}
           >
-            {badges[item.path]}
+            {contador}
           </span>
         )}
       </Link>
     );
   };
 
+  const nome = userProfile?.nome || 'Usuário';
+  const papel = userType === 'admin' ? 'Administrador' : 'Funcionário';
+
   return (
     <>
-      {/* Mobile backdrop */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
-          onClick={onClose}
-        />
-      )}
+      {/* Fundo escuro no celular */}
+      {isOpen && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={onClose} />}
 
       <aside
         aria-label="Menu de navegação principal"
         className={`
-        h-screen bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700
-        flex flex-col flex-shrink-0 overflow-hidden
-        fixed lg:relative inset-y-0 left-0 z-50 lg:z-0
-        w-64 ${collapsed ? 'lg:w-20' : 'lg:w-64'}
+        fixed inset-y-0 left-0 z-50 flex h-screen flex-shrink-0 flex-col overflow-hidden
+        border-r border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 lg:relative lg:z-0
+        w-64 ${collapsed ? 'lg:w-[68px]' : 'lg:w-60'}
         transition-[width,transform] duration-200 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}>
-        {/* Header fixo do sidebar */}
-        <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-700 relative">
-          {/* Mobile Close Button */}
-          <button
-            onClick={onClose}
-            aria-label="Fechar menu"
-            className="absolute top-4 right-4 p-1 lg:hidden text-gray-500 hover:text-gray-700 dark:text-gray-400"
-          >
-            <X size={20} />
-          </button>
-
-          {/* Cabeçalho expandido (mobile sempre + desktop expandida) */}
-          <div className={`p-6 ${collapsed ? 'lg:hidden' : ''}`}>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-              Gestão Entrega Fácil
-            </h2>
-
-            {/* Badge de tipo de usuário */}
-            <div className="mt-3 flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-2">
-                {userType === 'admin' ? (
-                  <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs font-medium rounded">
-                    Administrador
-                  </span>
-                ) : (
-                  <span className="px-2 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs font-medium rounded">
-                    Funcionário
-                  </span>
-                )}
-                {onToggleCollapsed && (
-                  <button
-                    type="button"
-                    onClick={onToggleCollapsed}
-                    aria-label="Recolher menu lateral"
-                    aria-expanded="true"
-                    title="Recolher menu lateral"
-                    className="hidden lg:flex p-1.5 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-700 transition-colors"
-                  >
-                    <PanelLeftClose className="w-5 h-5" />
-                  </button>
-                )}
-              </div>
-            </div>
+      `}
+      >
+        {/* Empresa + recolher */}
+        <div className={`flex flex-shrink-0 items-center gap-2.5 px-3.5 pb-2 pt-3.5 ${collapsed ? 'lg:flex-col lg:px-2' : ''}`}>
+          <div aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-900 text-sm font-bold text-white dark:bg-gray-100 dark:text-gray-900">
+            E
           </div>
-
-          {/* Cabeçalho colapsado (somente desktop) */}
-          <div className={`hidden ${collapsed ? 'lg:flex' : ''} flex-col items-center gap-2 px-2 py-4`}>
-            <div
-              aria-hidden="true"
-              className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-lg font-bold text-white"
+          <div className={`min-w-0 flex-1 ${collapsed ? 'lg:hidden' : ''}`}>
+            <h2 className="truncate text-[13.5px] font-semibold leading-tight text-gray-900 dark:text-white">Gestão Entrega Fácil</h2>
+            <p className="truncate text-[11.5px] text-gray-500 dark:text-gray-400">{papel}</p>
+          </div>
+          {onToggleCollapsed && (
+            <button
+              type="button"
+              onClick={onToggleCollapsed}
+              aria-label={collapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+              aria-expanded={!collapsed}
+              title={collapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+              className="hidden rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-white lg:flex"
             >
-              E
-            </div>
-            {onToggleCollapsed && (
-              <button
-                type="button"
-                onClick={onToggleCollapsed}
-                aria-label="Expandir menu lateral"
-                aria-expanded="false"
-                title="Expandir menu lateral"
-                className="p-1.5 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-700 transition-colors"
-              >
-                <PanelLeftOpen className="w-5 h-5" />
-              </button>
-            )}
-          </div>
+              {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            </button>
+          )}
+          <button onClick={onClose} aria-label="Fechar menu" className="p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 lg:hidden">
+            <X size={18} />
+          </button>
         </div>
 
-        {/* Menu com scroll independente */}
-        <nav
-          aria-label="Navegação principal"
-          onScroll={hideTip}
-          className={`sidebar-scroll flex-1 overflow-y-auto py-4 ${collapsed ? 'px-2 lg:px-2' : 'px-3'} ${collapsed ? 'space-y-2 lg:space-y-2' : 'space-y-4'}`}
-        >
-          {SECTION_ORDER.map((section, sectionIndex) => {
+        {/* Busca Ctrl+K */}
+        <div className={`flex-shrink-0 px-3 pb-2 ${collapsed ? 'lg:px-2' : ''}`}>
+          <button
+            type="button"
+            onClick={() => {
+              fecharNoCelular();
+              abrirBusca();
+            }}
+            onMouseEnter={showTip('Buscar (Ctrl+K)')}
+            onMouseLeave={hideTip}
+            aria-label="Buscar telas e ações (Ctrl+K)"
+            className={`flex h-8 w-full items-center gap-2 rounded-md border border-gray-200 bg-gray-50 px-2.5 text-left text-[12.5px] text-gray-400 transition-colors hover:border-gray-300 hover:text-gray-600 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-500 dark:hover:text-gray-300 ${
+              collapsed ? 'lg:justify-center lg:px-0' : ''
+            }`}
+          >
+            <Search className="h-4 w-4 shrink-0" />
+            <span className={`flex-1 ${collapsed ? 'lg:hidden' : ''}`}>Buscar ou fazer…</span>
+            <kbd className={`rounded border border-gray-200 bg-white px-1.5 font-mono text-[10.5px] text-gray-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 ${collapsed ? 'lg:hidden' : ''}`}>
+              Ctrl K
+            </kbd>
+          </button>
+        </div>
+
+        {/* Menu com scroll próprio */}
+        <nav aria-label="Navegação principal" onScroll={hideTip} className={`sidebar-scroll flex-1 overflow-y-auto pb-3 ${collapsed ? 'px-2' : 'px-2.5'}`}>
+          {SECTION_ORDER.map((section) => {
             const items = sectionedItems[section];
             if (!items?.length) return null;
-
-            const isPrincipal = section === 'Principal' || section === 'Outros';
-            // No modo colapsado (desktop) todos os itens ficam visíveis em sequência
+            const isPrincipal = section === 'Início' || section === 'Outros';
             const isGroupOpen = isPrincipal ? true : !!openGroups[section];
             const isSectionOpen = collapsed ? true : isGroupOpen;
+            const totalBadges = items.reduce((t, i) => t + (badges?.[i.path] ?? 0), 0);
 
             return (
-               <div key={section} className="space-y-1">
-                {/* Cabeçalho da Seção (Dropdown) — oculto no modo colapsado (desktop) */}
+              <div key={section} className={isPrincipal ? 'mt-1' : 'mt-3'}>
                 {!isPrincipal && (
                   <button
                     type="button"
                     onClick={() => toggleGroup(section)}
                     aria-expanded={isGroupOpen}
-                    className={`flex items-center justify-between w-full px-3 py-2 min-h-[32px] text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-900 dark:hover:text-gray-300 transition-colors ${collapsed ? 'lg:hidden' : ''}`}
+                    className={`mb-0.5 flex h-6 w-full items-center gap-1 px-2.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-300 ${
+                      collapsed ? 'lg:hidden' : ''
+                    }`}
                   >
-                    <span className="truncate">{section}</span>
-                    {isGroupOpen ? (
-                      <ChevronDown className="w-4 h-4 shrink-0" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4 shrink-0" />
-                    )}
+                    <span className="flex-1 truncate text-left">{section}</span>
+                    {!isGroupOpen && totalBadges > 0 && <span className="h-1.5 w-1.5 rounded-full bg-blue-600" aria-label="Há pendências nesta seção" />}
+                    {isGroupOpen ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
                   </button>
                 )}
-
-                {/* Lista de Itens */}
-                <div className={`space-y-1 ${!isPrincipal && !isSectionOpen ? 'hidden' : ''}`}>
-                  {items.map((item) => renderMenuItem(item))}
-                </div>
-
-                {/* Divisor sutil entre seções no modo colapsado (desktop) */}
-                {collapsed && sectionIndex < SECTION_ORDER.length - 1 && items.length > 0 && (
-                  <div aria-hidden="true" className="mx-1 hidden border-t border-gray-100 pt-2 lg:block dark:border-gray-800" />
-                )}
+                {collapsed && !isPrincipal && <div aria-hidden="true" className="mx-2 my-2 hidden border-t border-gray-100 dark:border-gray-700 lg:block" />}
+                <div className={`space-y-px ${!isPrincipal && !isSectionOpen ? 'hidden' : ''}`}>{items.map(renderMenuItem)}</div>
               </div>
             );
           })}
         </nav>
 
-        {/* Footer fixo do sidebar */}
-        <div className={`flex-shrink-0 space-y-2 border-t border-gray-200 dark:border-gray-700 ${collapsed ? 'p-2' : 'p-4'}`}>
-          {/* Menu Fixo de Rodapé */}
+        {/* Usuário */}
+        <div className={`flex-shrink-0 border-t border-gray-200 dark:border-gray-700 ${collapsed ? 'p-2' : 'p-2.5'}`}>
           {userType === 'funcionario' && (
             <Link
               to="/funcionario-config"
               aria-label="Meu Perfil"
-              onClick={() => { hideTip(); if (window.innerWidth < 1024 && onClose) onClose(); }}
+              onClick={fecharNoCelular}
               onMouseEnter={showTip('Meu Perfil')}
               onMouseLeave={hideTip}
               onFocus={showTip('Meu Perfil')}
               onBlur={hideTip}
-              className={`flex items-center gap-3 w-full px-3 py-2 text-sm rounded-lg transition-colors ${
-                location.pathname === '/funcionario-config'
-                  ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-              } ${collapsed ? 'lg:justify-center lg:px-2' : ''}`}
+              className={itemClass(location.pathname === '/funcionario-config')}
             >
-              <UserCog className="w-5 h-5 shrink-0" />
-              <span className={`truncate whitespace-nowrap transition-opacity duration-200 ${collapsed ? 'lg:hidden' : ''}`}>Meu Perfil</span>
+              <UserCog className="h-[17px] w-[17px] shrink-0" />
+              <span className={`truncate ${collapsed ? 'lg:hidden' : ''}`}>Meu Perfil</span>
             </Link>
           )}
-          <button
-            type="button"
-            aria-label="Sair"
-            onClick={() => {
-              hideTip();
-              signOut();
-              if (window.innerWidth < 1024 && onClose) onClose();
-            }}
-            onMouseEnter={showTip('Sair')}
-            onMouseLeave={hideTip}
-            onFocus={showTip('Sair')}
-            onBlur={hideTip}
-            className={`flex items-center gap-3 w-full px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg transition-colors ${collapsed ? 'lg:justify-center lg:px-2' : ''}`}
-          >
-            <LogOut className="w-5 h-5 shrink-0" />
-            <span className={`truncate whitespace-nowrap transition-opacity duration-200 ${collapsed ? 'lg:hidden' : ''}`}>Sair</span>
-          </button>
-
-          <p className={`text-xs text-gray-500 dark:text-gray-400 text-center mt-4 pt-2 border-t border-gray-100 dark:border-gray-800 ${collapsed ? 'lg:hidden' : ''}`}>
-            Versão {packageJson.version}
-          </p>
+          <div className={`flex items-center gap-2.5 rounded-md px-1.5 py-1.5 ${collapsed ? 'lg:flex-col lg:px-0' : ''}`}>
+            <div aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+              {nome.charAt(0).toUpperCase()}
+            </div>
+            <div className={`min-w-0 flex-1 ${collapsed ? 'lg:hidden' : ''}`}>
+              <p className="truncate text-[12.5px] font-medium text-gray-800 dark:text-gray-100">{nome}</p>
+              <p className="truncate text-[11px] text-gray-400">Versão {packageJson.version}</p>
+            </div>
+            <button
+              type="button"
+              aria-label="Sair"
+              title="Sair"
+              onClick={() => {
+                hideTip();
+                signOut();
+                if (window.innerWidth < 1024 && onClose) onClose();
+              }}
+              onMouseEnter={showTip('Sair')}
+              onMouseLeave={hideTip}
+              className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </aside>
 
-      {/* Tooltip do modo colapsado (desktop): posição fixa fora do scroll, sem clipping */}
+      {/* Dica do modo recolhido (desktop): posição fixa fora do scroll, sem corte */}
       {collapsed && hovered && (
         <span
           role="tooltip"
-          className="pointer-events-none fixed z-[70] hidden rounded-md bg-gray-900 px-2 py-1 text-xs font-medium whitespace-nowrap text-white shadow-lg lg:block dark:bg-gray-700"
+          className="pointer-events-none fixed z-[70] hidden whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-xs font-medium text-white shadow-lg dark:bg-gray-700 lg:block"
           style={{ left: hovered.left, top: hovered.top, transform: 'translateY(-50%)' }}
         >
           {hovered.label}

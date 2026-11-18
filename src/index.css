@@ -5,15 +5,16 @@
 @layer base {
   :root {
     /* Tema claro mais suave - inspirado no tema dark */
-    --background: 0 0% 96%;      /* Fundo mais escuro que branco puro */
-    --foreground: 0 0% 15%;      /* Texto menos preto, mais suave */
-    --card: 0 0% 97%;            /* Cards ligeiramente mais escuros */
-    --card-foreground: 0 0% 18%;
-    --popover: 0 0% 97%;
-    --popover-foreground: 0 0% 18%;
+    /* Novo visual: neutros com leve viés azulado e o azul do guia como destaque. */
+    --background: 220 23% 97%;   /* gray-50 */
+    --foreground: 222 23% 8%;    /* gray-900 */
+    --card: 0 0% 100%;
+    --card-foreground: 222 23% 8%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 23% 8%;
 
-    --primary: 0 0% 20%;         /* Primary mais suave */
-    --primary-foreground: 0 0% 96%;
+    --primary: 225 77% 53%;      /* blue-600 */
+    --primary-foreground: 0 0% 100%;
 
     --secondary: 0 0% 92%;       /* Secondary mais escuro */
     --secondary-foreground: 0 0% 20%;
@@ -27,9 +28,9 @@
     --destructive: 0 65% 48%;    /* Destructive menos agressivo */
     --destructive-foreground: 0 0% 96%;
 
-    --border: 0 0% 82%;          /* Bordas mais visíveis mas suaves */
-    --input: 0 0% 85%;           /* Inputs mais escuros */
-    --ring: 0 0% 25%;            /* Ring de foco mais suave */
+    --border: 218 17% 91%;       /* gray-200 */
+    --input: 217 16% 83%;        /* gray-300 */
+    --ring: 225 77% 53%;         /* foco no azul de destaque */
 
     --chart-1: 12 65% 52%;       /* Charts com cores mais suaves */
     --chart-2: 173 45% 32%;
@@ -43,14 +44,14 @@
     --radius: 0.5rem;
   }
   .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
+    --background: 222 23% 8%;    /* gray-900 */
+    --foreground: 220 23% 94%;
+    --card: 222 21% 12%;         /* gray-800 */
+    --card-foreground: 220 23% 94%;
+    --popover: 222 21% 12%;
+    --popover-foreground: 220 23% 94%;
+    --primary: 225 90% 71%;      /* azul claro no escuro */
+    --primary-foreground: 222 23% 8%;
     --secondary: 0 0% 14.9%;
     --secondary-foreground: 0 0% 98%;
     --muted: 0 0% 14.9%;
@@ -59,9 +60,9 @@
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
+    --border: 220 17% 20%;       /* gray-700 */
+    --input: 220 17% 20%;
+    --ring: 225 90% 71%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
@@ -91,6 +92,15 @@
   }
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  /* Valores em tabelas e indicadores ficam alinhados (centavos um embaixo do outro). */
+  table, .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+  h1, h2, h3 {
+    letter-spacing: -0.015em;
   }
 }
 

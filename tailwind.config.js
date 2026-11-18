@@ -6,9 +6,18 @@ export default {
   	extend: {
   		fontFamily: {
   			sans: [
+  				'Geist',
   				'Inter',
   				'system-ui',
+  				'Segoe UI',
   				'sans-serif'
+  			],
+  			mono: [
+  				'Geist Mono',
+  				'ui-monospace',
+  				'Cascadia Mono',
+  				'Consolas',
+  				'monospace'
   			]
   		},
   		spacing: {
@@ -39,6 +48,34 @@ export default {
   			sm: 'calc(var(--radius) - 4px)'
   		},
   		colors: {
+  			// Novo visual (guia de estilo aprovado em 18/11/2026): neutros com leve viés azulado
+  			// e um único azul de destaque. Redefinir as escalas muda todas as telas de uma vez.
+  			gray: {
+  				50: '#f7f8fa',
+  				100: '#f0f2f5',
+  				200: '#e3e6eb',
+  				300: '#cdd2da',
+  				400: '#9aa2b0',
+  				500: '#6c7585',
+  				600: '#4f5868',
+  				700: '#2b313d',
+  				800: '#171b24',
+  				900: '#0f1218',
+  				950: '#090b0f'
+  			},
+  			blue: {
+  				50: '#eef2ff',
+  				100: '#e0e8ff',
+  				200: '#c6d4fe',
+  				300: '#a3b8fc',
+  				400: '#7493f8',
+  				500: '#4a6ff0',
+  				600: '#2b59e3',
+  				700: '#2149c4',
+  				800: '#1f3d9c',
+  				900: '#1e377b',
+  				950: '#172451'
+  			},
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			card: {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
+import CommandPalette from './CommandPalette';
 import Header from './Header';
 import Sidebar from './Sidebar';
 import { useAuth } from '@/contexts/AuthContext';
@@ -35,6 +36,25 @@ const MainLayout: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Busca Ctrl+K (também abre pelo botão do menu e do cabeçalho via evento "abrir-busca")
+  const [buscaAberta, setBuscaAberta] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setBuscaAberta((v) => !v);
+      }
+    };
+    const abrir = () => setBuscaAberta(true);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('abrir-busca', abrir);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('abrir-busca', abrir);
+    };
+  }, []);
+  const badges = pedidosPendentes ? { '/pedidos-vendedores': pedidosPendentes } : undefined;
+
   const toggleSidebarCollapsed = () => {
     setSidebarCollapsed((prev) => {
       const next = !prev;
@@ -55,8 +75,9 @@ const MainLayout: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
         onClose={() => setSidebarOpen(false)}
         collapsed={sidebarCollapsed}
         onToggleCollapsed={toggleSidebarCollapsed}
-        badges={pedidosPendentes ? { '/pedidos-vendedores': pedidosPendentes } : undefined}
+        badges={badges}
       />
+      <CommandPalette open={buscaAberta} onOpenChange={setBuscaAberta} badges={badges} />
 
       {/* Conteúdo Principal */} 
       <div className="flex flex-col flex-1 min-w-0"> 
