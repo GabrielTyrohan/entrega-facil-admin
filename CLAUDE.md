@@ -60,7 +60,9 @@ Migrations e Edge Functions dos 3 sistemas ficam versionadas **aqui**, em
 
 ## Comandos
 
-- Tipos: `npx tsc --noEmit -p .`
+- Tipos: `npx tsc --noEmit -p tsconfig.app.json` (o `tsconfig.json` raiz tem `"files": []`, então `-p .`
+  não confere nada). Há erros antigos em `NovoProduto.tsx`, `services/importacaoFiscalReferenciaService.ts`
+  e alguns testes; confira só se os arquivos que você mudou ficaram limpos.
 - Testes: `npx vitest run` (ficam em `src/tests`, espelhando `src/`)
 - Dev: `npm run electron:dev`
 
