@@ -7,7 +7,7 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import { toast } from '@/utils/toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, AlertTriangle, Calendar, CheckCircle2, Edit, Eye, Filter, Loader2, MoreHorizontal, Package, Plus, Search, ShoppingBasket, Trash2, User, X } from 'lucide-react';
+import { AlertCircle, Calendar, CheckCircle2, Edit, Eye, Loader2, MoreHorizontal, Package, Plus, ShoppingBasket, Trash2, User, X } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,6 +19,7 @@ import { supabase } from '../lib/supabase';
 import { CACHE_KEYS } from '../lib/supabaseCache';
 import { CestaService } from '../services/cestaService';
 import { salvarESalvarPdf } from '../utils/pdfStorage';
+import { BarraFiltros, Busca, CabecalhoPagina, Chips, Etiqueta, cls, type ChipOpcao, type Tom } from '../components/ui/lista';
 
 
 type Cesta = CestaData;
@@ -381,7 +382,7 @@ const CestasVendedor: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="space-y-6 p-4 sm:p-6">
+      <div className="space-y-5">
         <div className="flex items-center justify-between">
           <div className="space-y-2">
             <Skeleton className="h-8 w-64" />
@@ -439,74 +440,58 @@ const CestasVendedor: React.FC = () => {
     );
   }
 
+  // Contagem por situação (considerando a busca) para os chips
+  const baseChips = searchTerm
+    ? cestas.filter(
+        (c) =>
+          c.vendedor_nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          c.cesta_nome?.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    : cestas;
+  const chipsStatus: ChipOpcao<string>[] = [
+    { valor: 'todos', rotulo: 'Todas', contagem: baseChips.length },
+    { valor: 'em_uso', rotulo: 'Em uso', contagem: baseChips.filter((c) => c.status === 'em_uso').length },
+    { valor: 'entregue', rotulo: 'Entregues', contagem: baseChips.filter((c) => c.status === 'entregue').length },
+    { valor: 'retornada', rotulo: 'Retornadas', contagem: baseChips.filter((c) => c.status === 'retornada').length },
+  ];
+  const tomStatus = (status: string): Tom => (status === 'em_uso' ? 'destaque' : status === 'entregue' ? 'ok' : 'neutro');
+
   return (
-    <div className="space-y-6 p-4 sm:p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Cestas dos Vendedores</h1>
-          <p className="text-gray-600 dark:text-gray-400">Cestas distribuídas aos vendedores</p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={() => setModalSelecionarVendedor(true)}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
-          >
-            <Package className="w-4 h-4" />
-            <span>Entregar em Lote</span>
-          </button>
-          <button 
-            onClick={() => navigate('/produtos/cestas/nova')}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center space-x-2 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Emitir Cesta</span>
-          </button>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <CabecalhoPagina
+        titulo="Cestas dos Vendedores"
+        descricao="Cestas liberadas para cada vendedor. Liberar dá baixa no estoque geral."
+        acoes={
+          <>
+            <button onClick={() => setModalSelecionarVendedor(true)} className={cls.btn}>
+              <Package className="h-4 w-4" />
+              <span>Entregar em Lote</span>
+            </button>
+            <button onClick={() => navigate('/produtos/cestas/nova')} className={cls.btnPri}>
+              <Plus className="h-4 w-4" />
+              <span>Emitir Cesta</span>
+            </button>
+          </>
+        }
+      />
 
       {/* Filtros */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0 md:space-x-4">
-          <div className="flex-1 max-w-md">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Buscar por vendedor ou nome da cesta..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-              />
-            </div>
-          </div>
-          <div className="flex items-center space-x-3">
-            <Filter className="w-4 h-4 text-gray-400" />
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-            >
-              <option value="todos">Todos os Status</option>
-              <option value="em_uso">Em Uso</option>
-              <option value="entregue">Entregue</option>
-              <option value="retornada">Retornada</option>
-            </select>
-          </div>
-        </div>
+      <div className="space-y-2.5">
+        <BarraFiltros>
+          <Busca value={searchTerm} onChange={setSearchTerm} placeholder="Buscar por vendedor ou nome da cesta" className="flex-1 sm:max-w-md" />
+        </BarraFiltros>
+        <Chips rotulo="Filtrar por situação" opcoes={chipsStatus} valor={statusFilter} onChange={setStatusFilter} />
       </div>
 
       {/* Error State */}
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
           <div className="flex">
-            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5 mr-3" />
+            <AlertCircle className="mr-3 mt-0.5 h-5 w-5 text-red-600 dark:text-red-400" />
             <div>
               <h3 className="text-sm font-medium text-red-800 dark:text-red-200">Erro ao carregar cestas</h3>
-              <p className="text-sm text-red-700 dark:text-red-300 mt-1">
-                {error.message || 'Ocorreu um erro inesperado. Tente novamente.'}
-              </p>
-              <button onClick={() => refetch()} className="mt-2 text-sm text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 underline">
+              <p className="mt-1 text-sm text-red-700 dark:text-red-300">{error.message || 'Ocorreu um erro inesperado. Tente novamente.'}</p>
+              <button onClick={() => refetch()} className="mt-2 text-sm text-red-600 underline hover:text-red-800 dark:text-red-400 dark:hover:text-red-200">
                 Tentar novamente
               </button>
             </div>
@@ -516,109 +501,84 @@ const CestasVendedor: React.FC = () => {
 
       {/* Lista de Cestas */}
       {!isLoading && !error && filteredCestas.length > 0 && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className={`${cls.card} overflow-hidden`}>
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 dark:bg-gray-700">
+              <thead className={cls.thead}>
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Vendedor</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Data de Montagem</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Itens</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Valor Total</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Entregas</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Estoque Mobile</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ações</th>
+                  <th className={cls.th}>Vendedor</th>
+                  <th className={cls.th}>Montada em</th>
+                  <th className={cls.thR}>Itens</th>
+                  <th className={cls.thR}>Valor</th>
+                  <th className={cls.thR}>Entregas</th>
+                  <th className={cls.th}>Com o vendedor</th>
+                  <th className={cls.th}>Situação</th>
+                  <th className={cls.th}>
+                    <span className="sr-only">Ações</span>
+                  </th>
                 </tr>
               </thead>
-              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {filteredCestas.map((cesta, index) => (
-                  <tr
-                    key={cesta.id}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-700 animate-fade-in-up"
-                    style={{ animationDelay: `${index * 75}ms` }}
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold mr-4">
+              <tbody className={cls.tbody}>
+                {filteredCestas.map((cesta) => (
+                  <tr key={cesta.id} className={cls.tr}>
+                    <td className={cls.td}>
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
                           {cesta.vendedor_nome.charAt(0).toUpperCase()}
                         </div>
-                        <div>
-                          <div className="text-sm font-medium text-gray-900 dark:text-white">{cesta.vendedor_nome}</div>
-                          <div className="text-sm text-gray-500 dark:text-gray-400">{cesta.cesta_nome}</div>
+                        <div className="min-w-0">
+                          <div className="truncate font-medium text-gray-900 dark:text-white">{cesta.vendedor_nome}</div>
+                          <div className="truncate text-xs text-gray-500 dark:text-gray-400">{cesta.cesta_nome}</div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center text-sm text-gray-900 dark:text-white">
-                        <Calendar className="w-4 h-4 mr-2 text-gray-400" />
-                        {formatDate(cesta.data_montagem)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        {(cesta.itens ?? []).length} produtos diferentes
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                      R$ {(cesta.valor_total || 0).toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900 dark:text-white">
-                        {cesta.entregas_realizadas || 0}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className={`${cls.td} whitespace-nowrap`}>{formatDate(cesta.data_montagem)}</td>
+                    <td className={cls.tdR}>{(cesta.itens ?? []).length}</td>
+                    <td className={cls.tdR}>{(cesta.valor_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                    <td className={cls.tdR}>{cesta.entregas_realizadas || 0}</td>
+                    <td className={cls.td}>
                       {(() => {
                         const qtd = cesta.quantidade_disponivel;
-                        if (qtd === null) {
-                          return <span className="text-xs text-gray-400 dark:text-gray-500 italic">Não definido</span>;
-                        }
+                        if (qtd === null) return <span className="text-xs italic text-gray-400">Não definido</span>;
                         return (
-                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
-                            qtd === 0
-                              ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
-                              : qtd <= 3
-                              ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400'
-                              : 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400'
-                          }`}>
+                          <Etiqueta tom={qtd === 0 ? 'perigo' : qtd <= 3 ? 'atencao' : 'ok'}>
                             {qtd} cesta{qtd !== 1 ? 's' : ''}
-                          </span>
+                          </Etiqueta>
                         );
                       })()}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(cesta.status)}`}>
-                        {getStatusText(cesta.status)}
-                      </span>
+                    <td className={cls.td}>
+                      <Etiqueta tom={tomStatus(cesta.status)}>{getStatusText(cesta.status)}</Etiqueta>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors">
-                            <MoreHorizontal className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleViewCesta(cesta)}>
-                            <Eye className="w-4 h-4 mr-2" />
-                            Visualizar
-                          </DropdownMenuItem>
-                          {cesta.status === 'em_uso' && (
-                            <DropdownMenuItem onClick={() => handleEditCesta(cesta)}>
-                              <Edit className="w-4 h-4 mr-2" />
-                              Editar
+                    <td className={`${cls.td} whitespace-nowrap`}>
+                      <div className={cls.rowActions}>
+                        <button type="button" onClick={() => handleViewCesta(cesta)} className={cls.btnGhost}>
+                          <Eye className="h-3.5 w-3.5" /> Ver
+                        </button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button aria-label={`Mais ações da cesta de ${cesta.vendedor_nome}`} className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-200">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleViewCesta(cesta)}>
+                              <Eye className="mr-2 h-4 w-4" />
+                              Visualizar
                             </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem
-                            onClick={() => solicitarExclusaoCesta(cesta)}
-                            className="text-red-600 dark:text-red-400"
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Excluir
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                            {cesta.status === 'em_uso' && (
+                              <DropdownMenuItem onClick={() => handleEditCesta(cesta)}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Editar
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={() => solicitarExclusaoCesta(cesta)} className="text-red-600 dark:text-red-400">
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Excluir
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </td>
                   </tr>
                 ))}

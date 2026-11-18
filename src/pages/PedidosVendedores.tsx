@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { Check, ClipboardList, Package, ShoppingBasket, X } from 'lucide-react';
-import PageHeader from '@/components/layout/PageHeader';
 import { toast } from '@/utils/toast';
+import { CabecalhoPagina, Chips, Etiqueta, Vazio, cls, type ChipOpcao, type Tom } from '@/components/ui/lista';
 import {
   PedidoVendedor,
   StatusPedido,
   useAtenderPedido,
+  usePedidosPendentesCount,
   usePedidosVendedor,
   useRecusarPedido,
 } from '@/hooks/usePedidosVendedor';
@@ -18,12 +19,12 @@ const STATUS_LABEL: Record<StatusPedido, string> = {
   cancelado: 'Cancelado pelo vendedor',
 };
 
-const STATUS_CLASS: Record<StatusPedido, string> = {
-  pendente: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-  aprovado: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-  parcial: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-  recusado: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-  cancelado: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+const STATUS_TOM: Record<StatusPedido, Tom> = {
+  pendente: 'atencao',
+  aprovado: 'ok',
+  parcial: 'destaque',
+  recusado: 'perigo',
+  cancelado: 'neutro',
 };
 
 const FILTROS: { value: StatusPedido | 'todos'; label: string }[] = [
@@ -90,144 +91,133 @@ const PainelAtendimento: React.FC<PainelProps> = ({ pedido, onFechar }) => {
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-5 space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+    <div className={`${cls.card} lg:sticky lg:top-0`}>
+      <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-5 py-4 dark:border-gray-700">
+        <div className="min-w-0">
+          <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">
             Pedido #{pedido.numero} — {pedido.vendedor?.nome ?? 'Vendedor'}
           </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Enviado em {formatarData(pedido.created_at)}</p>
+          <p className="text-[12.5px] text-gray-500 dark:text-gray-400">Enviado em {formatarData(pedido.created_at)}</p>
         </div>
-        <button onClick={onFechar} className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Fechar">
-          <X className="w-5 h-5 text-gray-500" />
+        <button onClick={onFechar} className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-white" aria-label="Fechar">
+          <X className="h-4 w-4" />
         </button>
       </div>
 
-      {pedido.observacao && (
-        <div className="text-sm bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
-          <span className="font-medium text-gray-700 dark:text-gray-300">Observação do vendedor: </span>
-          <span className="text-gray-700 dark:text-gray-300">{pedido.observacao}</span>
-        </div>
-      )}
-
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-            <th className="py-2 font-medium">Item</th>
-            <th className="py-2 font-medium text-right">Pedido</th>
-            <th className="py-2 font-medium text-right w-32">{pendente ? 'Liberar' : 'Liberado'}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {pedido.itens.map((item) => (
-            <tr key={item.id} className="border-b border-gray-100 dark:border-gray-700/60">
-              <td className="py-2">
-                <div className="flex items-center gap-2 text-gray-900 dark:text-white">
-                  {item.tipo === 'cesta'
-                    ? <ShoppingBasket className="w-4 h-4 text-blue-500 shrink-0" />
-                    : <Package className="w-4 h-4 text-amber-500 shrink-0" />}
-                  <span>{item.descricao}</span>
-                </div>
-                <span className="text-xs text-gray-500">{item.tipo === 'cesta' ? 'Cesta' : 'Produto avulso'}</span>
-              </td>
-              <td className="py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">{item.quantidade_solicitada}</td>
-              <td className="py-2 text-right">
-                {pendente ? (
-                  <input
-                    type="number"
-                    min={0}
-                    max={item.quantidade_solicitada}
-                    step={item.tipo === 'cesta' ? 1 : 'any'}
-                    value={quantidades[item.id] ?? 0}
-                    onChange={(e) => setQuantidades((q) => ({ ...q, [item.id]: Number(e.target.value) }))}
-                    disabled={modoRecusa || ocupado}
-                    className="w-24 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-right bg-white dark:bg-gray-700 dark:text-white tabular-nums"
-                  />
-                ) : (
-                  <span className="tabular-nums text-gray-700 dark:text-gray-300">{item.quantidade_atendida}</span>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {pendente ? (
-        <>
-          <label className="block text-sm">
-            <span className="text-gray-700 dark:text-gray-300">
-              {modoRecusa ? 'Motivo da recusa (o vendedor verá no app) *' : 'Recado para o vendedor (opcional)'}
-            </span>
-            <textarea
-              value={resposta}
-              onChange={(e) => setResposta(e.target.value)}
-              rows={2}
-              maxLength={500}
-              className="mt-1 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white"
-            />
-          </label>
-
-          {!modoRecusa && totalInformado > 0 && totalInformado < totalSolicitado && (
-            <p className="text-sm text-blue-700 dark:text-blue-300">
-              Será registrado como atendido em parte.
-            </p>
-          )}
-
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-            {modoRecusa ? (
-              <>
-                <button
-                  onClick={() => setModoRecusa(false)}
-                  disabled={ocupado}
-                  className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
-                >
-                  Voltar
-                </button>
-                <button
-                  onClick={confirmarRecusa}
-                  disabled={ocupado || !resposta.trim()}
-                  className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
-                >
-                  {recusar.isPending ? 'Recusando…' : 'Confirmar recusa'}
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={() => setModoRecusa(true)}
-                  disabled={ocupado}
-                  className="px-4 py-2 text-sm border border-red-300 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
-                >
-                  Recusar
-                </button>
-                <button
-                  onClick={confirmarAtendimento}
-                  disabled={ocupado || totalInformado <= 0}
-                  className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 inline-flex items-center justify-center gap-2"
-                >
-                  <Check className="w-4 h-4" />
-                  {atender.isPending ? 'Liberando…' : 'Liberar ao vendedor'}
-                </button>
-              </>
-            )}
+      <div className="space-y-4 px-5 py-4">
+        {pedido.observacao && (
+          <div className="rounded-md bg-gray-50 px-3 py-2.5 text-[13px] text-gray-700 dark:bg-gray-900/50 dark:text-gray-300">
+            <span className="font-medium">Observação do vendedor: </span>
+            {pedido.observacao}
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Liberar dá baixa no estoque geral e envia ao vendedor na próxima sincronização do app.
-            Se faltar estoque de algum item, nada é liberado.
-          </p>
-        </>
-      ) : (
-        <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-          <p>
-            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_CLASS[pedido.status]}`}>
-              {STATUS_LABEL[pedido.status]}
-            </span>
-            {pedido.atendido_por_nome && <> por {pedido.atendido_por_nome}</>}
-            {pedido.atendido_em && <> em {formatarData(pedido.atendido_em)}</>}
-          </p>
-          {pedido.resposta && <p>Recado: {pedido.resposta}</p>}
-        </div>
-      )}
+        )}
+
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-gray-200 dark:border-gray-700">
+              <th className="py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Item</th>
+              <th className="py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400">Pedido</th>
+              <th className="w-32 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400">{pendente ? 'Liberar' : 'Liberado'}</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60">
+            {pedido.itens.map((item) => (
+              <tr key={item.id}>
+                <td className="py-2.5">
+                  <div className="flex items-center gap-2 text-[13px] text-gray-900 dark:text-white">
+                    {item.tipo === 'cesta'
+                      ? <ShoppingBasket className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                      : <Package className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />}
+                    <span>{item.descricao}</span>
+                  </div>
+                  <span className="ml-6 text-xs text-gray-500">{item.tipo === 'cesta' ? 'Cesta' : 'Produto avulso'}</span>
+                </td>
+                <td className="py-2.5 text-right font-mono text-[13px] tabular-nums text-gray-700 dark:text-gray-300">{item.quantidade_solicitada}</td>
+                <td className="py-2.5 text-right">
+                  {pendente ? (
+                    <input
+                      type="number"
+                      min={0}
+                      max={item.quantidade_solicitada}
+                      step={item.tipo === 'cesta' ? 1 : 'any'}
+                      value={quantidades[item.id] ?? 0}
+                      onChange={(e) => setQuantidades((q) => ({ ...q, [item.id]: Number(e.target.value) }))}
+                      disabled={modoRecusa || ocupado}
+                      aria-label={`Quantidade a liberar de ${item.descricao}`}
+                      className="h-8 w-24 rounded-md border border-gray-300 bg-white px-2 text-right font-mono text-[13px] tabular-nums focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                    />
+                  ) : (
+                    <span className="font-mono text-[13px] tabular-nums text-gray-700 dark:text-gray-300">{item.quantidade_atendida}</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {pendente ? (
+          <>
+            <label className="block">
+              <span className="mb-1.5 block text-[13px] font-medium text-gray-700 dark:text-gray-300">
+                {modoRecusa ? 'Motivo da recusa (o vendedor verá no app) *' : 'Recado para o vendedor (opcional)'}
+              </span>
+              <textarea
+                value={resposta}
+                onChange={(e) => setResposta(e.target.value)}
+                rows={2}
+                maxLength={500}
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+              />
+            </label>
+
+            {!modoRecusa && totalInformado > 0 && totalInformado < totalSolicitado && (
+              <p className="rounded-md bg-blue-50 px-3 py-2 text-[13px] text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
+                Será registrado como atendido em parte.
+              </p>
+            )}
+
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              {modoRecusa ? (
+                <>
+                  <button onClick={() => setModoRecusa(false)} disabled={ocupado} className={cls.btn}>
+                    Voltar
+                  </button>
+                  <button
+                    onClick={confirmarRecusa}
+                    disabled={ocupado || !resposta.trim()}
+                    className="inline-flex h-8 items-center justify-center rounded-md bg-red-600 px-3 text-[13px] font-medium text-white shadow-sm hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {recusar.isPending ? 'Recusando…' : 'Confirmar recusa'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button onClick={() => setModoRecusa(true)} disabled={ocupado} className={`${cls.btn} text-red-600 dark:text-red-400`}>
+                    Recusar
+                  </button>
+                  <button onClick={confirmarAtendimento} disabled={ocupado || totalInformado <= 0} className={cls.btnPri}>
+                    <Check className="h-4 w-4" />
+                    {atender.isPending ? 'Liberando…' : 'Liberar ao vendedor'}
+                  </button>
+                </>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Liberar dá baixa no estoque geral e envia ao vendedor na próxima sincronização do app.
+              Se faltar estoque de algum item, nada é liberado.
+            </p>
+          </>
+        ) : (
+          <div className="space-y-1.5 text-[13px] text-gray-600 dark:text-gray-400">
+            <p className="flex flex-wrap items-center gap-1.5">
+              <Etiqueta tom={STATUS_TOM[pedido.status]}>{STATUS_LABEL[pedido.status]}</Etiqueta>
+              {pedido.atendido_por_nome && <span>por {pedido.atendido_por_nome}</span>}
+              {pedido.atendido_em && <span>em {formatarData(pedido.atendido_em)}</span>}
+            </p>
+            {pedido.resposta && <p>Recado: {pedido.resposta}</p>}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -236,68 +226,73 @@ const PedidosVendedores: React.FC = () => {
   const [filtro, setFiltro] = useState<StatusPedido | 'todos'>('pendente');
   const [selecionadoId, setSelecionadoId] = useState<string | null>(null);
   const { data: pedidos = [], isLoading, error } = usePedidosVendedor(filtro);
+  const { data: aguardando } = usePedidosPendentesCount();
 
   const selecionado = useMemo(
     () => pedidos.find((p) => p.id === selecionadoId) ?? null,
     [pedidos, selecionadoId]
   );
 
+  const opcoes: ChipOpcao<StatusPedido | 'todos'>[] = FILTROS.map((f) => ({
+    valor: f.value,
+    rotulo: f.label,
+    contagem: f.value === 'pendente' && aguardando ? aguardando : undefined,
+  }));
+
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Pedidos dos vendedores"
-        description="Cestas e produtos que os vendedores pediram pelo app."
+    <div className="space-y-5">
+      <CabecalhoPagina titulo="Pedidos dos vendedores" descricao="Cestas e produtos que os vendedores pediram pelo app. Atenda ou recuse cada pedido." />
+
+      <Chips
+        rotulo="Filtrar pedidos por situação"
+        opcoes={opcoes}
+        valor={filtro}
+        onChange={(v) => {
+          setFiltro(v);
+          setSelecionadoId(null);
+        }}
       />
 
-      <div className="flex flex-wrap gap-2">
-        {FILTROS.map((f) => (
-          <button
-            key={f.value}
-            onClick={() => { setFiltro(f.value); setSelecionadoId(null); }}
-            className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-              filtro === f.value
-                ? 'bg-blue-600 border-blue-600 text-white'
-                : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
+        <div className={`${cls.card} overflow-hidden`}>
           {isLoading ? (
-            <p className="p-6 text-sm text-gray-500">Carregando pedidos…</p>
+            <div className="space-y-3 p-4" aria-label="Carregando pedidos…">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="space-y-1.5">
+                  <div className="h-3.5 w-1/3 animate-pulse rounded bg-gray-100 dark:bg-gray-700" />
+                  <div className="h-3 w-2/3 animate-pulse rounded bg-gray-100 dark:bg-gray-700" />
+                </div>
+              ))}
+            </div>
           ) : error ? (
             <p className="p-6 text-sm text-red-600">Erro ao carregar pedidos: {mensagemErro(error)}</p>
           ) : pedidos.length === 0 ? (
-            <div className="p-10 text-center text-gray-500 dark:text-gray-400">
-              <ClipboardList className="w-10 h-10 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">Nenhum pedido {filtro === 'pendente' ? 'aguardando' : 'neste filtro'}.</p>
-            </div>
+            <Vazio
+              icone={ClipboardList}
+              titulo={`Nenhum pedido ${filtro === 'pendente' ? 'aguardando' : 'neste filtro'}.`}
+              texto={filtro === 'pendente' ? 'Quando um vendedor pedir cestas pelo app, o pedido aparece aqui.' : undefined}
+            />
           ) : (
-            <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+            <ul className="divide-y divide-gray-200 dark:divide-gray-700">
               {pedidos.map((p) => {
                 const resumo = p.itens.map((i) => `${i.quantidade_solicitada}× ${i.descricao}`).join(', ');
+                const ativo = selecionadoId === p.id;
                 return (
                   <li key={p.id}>
                     <button
                       onClick={() => setSelecionadoId(p.id)}
-                      className={`w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${
-                        selecionadoId === p.id ? 'bg-blue-50 dark:bg-blue-900/20' : ''
-                      }`}
+                      aria-current={ativo ? 'true' : undefined}
+                      className={`relative w-full px-4 py-3 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/40 ${ativo ? 'bg-blue-50/70 dark:bg-blue-500/10' : ''}`}
                     >
+                      {ativo && <span aria-hidden="true" className="absolute inset-y-0 left-0 w-0.5 bg-blue-600" />}
                       <div className="flex items-center justify-between gap-3">
-                        <span className="font-medium text-gray-900 dark:text-white">
+                        <span className="text-[13.5px] font-medium text-gray-900 dark:text-white">
                           #{p.numero} · {p.vendedor?.nome ?? 'Vendedor'}
                         </span>
-                        <span className={`shrink-0 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_CLASS[p.status]}`}>
-                          {STATUS_LABEL[p.status]}
-                        </span>
+                        <Etiqueta tom={STATUS_TOM[p.status]} className="shrink-0">{STATUS_LABEL[p.status]}</Etiqueta>
                       </div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 truncate">{resumo}</p>
-                      <p className="text-xs text-gray-400">{formatarData(p.created_at)}</p>
+                      <p className="truncate text-[13px] text-gray-600 dark:text-gray-400">{resumo}</p>
+                      <p className="font-mono text-xs text-gray-400">{formatarData(p.created_at)}</p>
                     </button>
                   </li>
                 );
@@ -310,7 +305,7 @@ const PedidosVendedores: React.FC = () => {
           {selecionado ? (
             <PainelAtendimento key={selecionado.id} pedido={selecionado} onFechar={() => setSelecionadoId(null)} />
           ) : (
-            <div className="hidden lg:block text-sm text-gray-500 dark:text-gray-400 p-6 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-center">
+            <div className="hidden rounded-lg border border-dashed border-gray-300 p-8 text-center text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400 lg:block">
               Selecione um pedido para ver os itens e atender.
             </div>
           )}

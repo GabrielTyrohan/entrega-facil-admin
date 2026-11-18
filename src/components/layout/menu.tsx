@@ -220,7 +220,7 @@ export const ACOES_RAPIDAS: AcaoRapida[] = [
   { label: 'Entregar cesta para vendedor', path: '/produtos/cestas', base: '/produtos/cestas', icon: ShoppingBasket, palavras: 'liberar estoque vendedor' },
   { label: 'Atender pedidos dos vendedores', path: '/pedidos-vendedores', base: '/pedidos-vendedores', icon: Inbox, palavras: 'pedido pendente' },
   { label: 'Nova entrega', path: '/entregas/nova', base: '/entregas', icon: Plus, palavras: 'entrega cliente' },
-  { label: 'Cadastrar vendedor', path: '/vendedores/novo', base: '/vendedores', icon: Plus, palavras: 'novo vendedor' },
+  { label: 'Cadastrar vendedor', path: '/vendedores?novo=1', base: '/vendedores', icon: Plus, palavras: 'novo vendedor' },
   { label: 'Cadastrar produto', path: '/produtos/novo', base: '/produtos', icon: Plus, palavras: 'novo produto' },
   { label: 'Registrar compra', path: '/estoque/compras/nova', base: '/estoque/compras', icon: ShoppingCart, palavras: 'compra fornecedor nota entrada estoque' },
   { label: 'Nova venda atacado', path: '/vendas-atacado/nova', base: '/vendas-atacado', icon: Plus, palavras: 'venda pj empresa nf-e nota' },

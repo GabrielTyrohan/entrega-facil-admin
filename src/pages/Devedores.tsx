@@ -2,13 +2,32 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Pagination } from "@/components/ui/pagination";
 import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertTriangle, Calendar, DollarSign, Eye, MapPin, Phone, Search, User, X } from 'lucide-react';
+import { AlertTriangle, Calendar, DollarSign, Eye, MapPin, Phone, Search, X } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useCreatePagamento } from '../hooks/usePagamentos';
 import { supabase } from '../lib/supabase';
 import { toast } from '@/utils/toast';
 import { usePeriodoVendedor } from '../hooks/usePeriodoVendedor';
+import { BarraFiltros, Busca, CabecalhoPagina, Chips, Etiqueta, Resumo, Vazio, cls, type ChipOpcao, type Tom } from '@/components/ui/lista';
+
+type FaixaAtraso = 'todos' | 'ate30' | 'de31a60' | 'de61a90' | 'acima90';
+const FAIXAS: { valor: FaixaAtraso; rotulo: string }[] = [
+  { valor: 'todos', rotulo: 'Todos' },
+  { valor: 'ate30', rotulo: 'Até 30 dias' },
+  { valor: 'de31a60', rotulo: '31 a 60 dias' },
+  { valor: 'de61a90', rotulo: '61 a 90 dias' },
+  { valor: 'acima90', rotulo: 'Mais de 90 dias' },
+];
+function naFaixa(dias: number, faixa: FaixaAtraso) {
+  switch (faixa) {
+    case 'ate30': return dias <= 30;
+    case 'de31a60': return dias > 30 && dias <= 60;
+    case 'de61a90': return dias > 60 && dias <= 90;
+    case 'acima90': return dias > 90;
+    default: return true;
+  }
+}
 
 interface DevedorData {
   cliente_id: string;
@@ -63,6 +82,7 @@ const Devedores: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedVendedor, setSelectedVendedor] = useState<string>('');
   const [sortOption, setSortOption] = useState<string>('maior_atraso');
+  const [faixa, setFaixa] = useState<FaixaAtraso>('todos');
   const [modalAberto, setModalAberto] = useState(false);
   const [clienteSelecionado, setClienteSelecionado] = useState<ClienteDetalhes | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -526,12 +546,26 @@ const Devedores: React.FC = () => {
         devedor.cliente_telefone.includes(searchTerm) ||
         devedor.vendedor_nome.toLowerCase().includes(searchTerm.toLowerCase());
 
-      const matchesVendedor = selectedVendedor === '' || 
+      const matchesVendedor = selectedVendedor === '' ||
         devedor.vendedor_id === selectedVendedor;
 
-      return matchesSearch && matchesVendedor;
+      return matchesSearch && matchesVendedor && naFaixa(devedor.maior_dias_atraso, faixa);
     })
   );
+
+  // Contagem por faixa considerando busca e vendedor (para os chips)
+  const baseChips = devedoresProcessados.filter((d) =>
+    (searchTerm === '' ||
+      d.cliente_nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      d.cliente_telefone.includes(searchTerm) ||
+      d.vendedor_nome.toLowerCase().includes(searchTerm.toLowerCase())) &&
+    (selectedVendedor === '' || d.vendedor_id === selectedVendedor)
+  );
+  const chipsFaixa: ChipOpcao<FaixaAtraso>[] = FAIXAS.map((f) => ({
+    valor: f.valor,
+    rotulo: f.rotulo,
+    contagem: baseChips.filter((d) => naFaixa(d.maior_dias_atraso, f.valor)).length,
+  }));
 
   // Função para calcular itens por página baseado no tamanho da tela
   const calculateItemsPerPage = () => {
@@ -573,7 +607,7 @@ const Devedores: React.FC = () => {
   // Reset página quando filtro mudar
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedVendedor, sortOption]);
+  }, [searchTerm, selectedVendedor, sortOption, faixa]);
 
   // Lógica de paginação — safePage clamps currentPage defensively without a setState
   const totalPages = Math.ceil(devedoresFiltrados.length / itemsPerPage);
@@ -599,15 +633,11 @@ const Devedores: React.FC = () => {
     return new Date(dateString).toLocaleDateString('pt-BR');
   };
 
-  const getDiasAtrasoColor = (dias: number) => {
-    if (dias <= 7) return 'text-yellow-600 bg-yellow-100';
-    if (dias <= 30) return 'text-orange-600 bg-orange-100';
-    return 'text-red-600 bg-red-100';
-  };
+  const tomAtraso = (dias: number): Tom => (dias > 30 ? 'perigo' : dias > 0 ? 'atencao' : 'neutro');
 
   if (isLoading) {
     return (
-      <div className="space-y-6 p-4 sm:p-6">
+      <div className="space-y-5">
         {/* Header Skeleton */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="space-y-2">
@@ -691,192 +721,149 @@ const Devedores: React.FC = () => {
     );
   }
 
+  const filtrosAtivos = !!(searchTerm || selectedVendedor || faixa !== 'todos');
+
   return (
-    <div className="space-y-6 p-4 sm:p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Devedores</h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Clientes com pagamentos em atraso
-          </p>
-        </div>
-        <div className="flex items-center space-x-4">
-          <div className="text-right">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Total devido</p>
-            <p className="text-2xl font-bold text-red-600">{formatCurrency(totalDevido)}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Devedores</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{totalDevedores}</p>
-          </div>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <CabecalhoPagina
+        titulo="Devedores"
+        descricao="Quem está devendo, há quanto tempo e com qual vendedor."
+        acoes={
+          <Resumo
+            itens={[
+              { rotulo: 'Total devido', valor: formatCurrency(totalDevido), tom: 'perigo' },
+              { rotulo: 'Clientes', valor: totalDevedores },
+            ]}
+          />
+        }
+      />
 
       {/* Filtros */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Busca */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Buscar por cliente, telefone ou vendedor..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-            />
-          </div>
-
-          <div className="flex flex-col space-y-2">
-            <select
-              value={selectedVendedor}
-              onChange={(e) => setSelectedVendedor(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-            >
-              <option value="">Todos os vendedores</option>
-              {(vendedoresData as Record<string, unknown>[]).map((vendedor) => (
-                <option key={String(vendedor.id)} value={String(vendedor.id)}>
-                  {String(vendedor.nome)}
-                </option>
-              ))}
-            </select>
-            {selectedVendedor && periodo.exibicao && (
-              <span className="text-xs text-gray-500 dark:text-gray-400 pl-1">
-                📅 Período: {periodo.exibicao}
-              </span>
-            )}
-          </div>
-
-          {/* Ordenação */}
-          <select
-            value={sortOption}
-            onChange={(e) => setSortOption(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-          >
-            <option value="mais_devido">Maior Devedor</option>
-            <option value="menos_devido">Menor Devedor</option>
-            <option value="maior_atraso">Maior Atraso</option>
-            <option value="menor_atraso">Menor Atraso</option>
-            <option value="primeira_data">Primeira Data</option>
-            <option value="ultima_data">Última Data</option>
-            <option value="mais_entregas">Maior Entregas</option>
-            <option value="menos_entregas">Menor Entregas</option>
+      <div className="space-y-2.5">
+        <BarraFiltros>
+          <Busca value={searchTerm} onChange={setSearchTerm} placeholder="Buscar cliente, telefone ou vendedor" className="flex-1 sm:max-w-sm" />
+          <select aria-label="Vendedor" value={selectedVendedor} onChange={(e) => setSelectedVendedor(e.target.value)} className={cls.select}>
+            <option value="">Todos os vendedores</option>
+            {(vendedoresData as Record<string, unknown>[]).map((vendedor) => (
+              <option key={String(vendedor.id)} value={String(vendedor.id)}>
+                {String(vendedor.nome)}
+              </option>
+            ))}
           </select>
-        </div>
+          <select aria-label="Ordenar por" value={sortOption} onChange={(e) => setSortOption(e.target.value)} className={cls.select}>
+            <option value="maior_atraso">Maior atraso</option>
+            <option value="menor_atraso">Menor atraso</option>
+            <option value="mais_devido">Maior dívida</option>
+            <option value="menos_devido">Menor dívida</option>
+            <option value="primeira_data">Retorno mais antigo</option>
+            <option value="ultima_data">Retorno mais recente</option>
+            <option value="mais_entregas">Mais entregas</option>
+            <option value="menos_entregas">Menos entregas</option>
+          </select>
+          {selectedVendedor && periodo.exibicao && (
+            <Etiqueta tom="destaque">
+              <Calendar className="h-3 w-3" /> Período {periodo.exibicao}
+            </Etiqueta>
+          )}
+        </BarraFiltros>
+        <Chips rotulo="Filtrar por tempo de atraso" opcoes={chipsFaixa} valor={faixa} onChange={setFaixa} />
       </div>
 
       {/* Lista de Devedores */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+      <div className={`${cls.card} overflow-hidden`}>
         {devedoresFiltrados.length === 0 ? (
-          <div className="p-8 text-center">
-            <AlertTriangle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-              Nenhum devedor encontrado
-            </h3>
-            <p className="text-gray-500 dark:text-gray-400">
-              {searchTerm || selectedVendedor 
-                ? 'Tente ajustar os filtros de busca.'
-                : 'Não há clientes com pagamentos em atraso no momento.'}
-            </p>
-          </div>
+          <Vazio
+            icone={filtrosAtivos ? Search : AlertTriangle}
+            titulo={filtrosAtivos ? 'Nenhum devedor com esses filtros' : 'Nenhum cliente com pagamento em atraso'}
+            texto={filtrosAtivos ? 'Tente outro nome ou limpe os filtros.' : 'Quando uma entrega passar do retorno sem pagamento, ela aparece aqui.'}
+            acao={
+              filtrosAtivos ? (
+                <button
+                  type="button"
+                  className={cls.btn}
+                  onClick={() => {
+                    setSearchTerm('');
+                    setSelectedVendedor('');
+                    setFaixa('todos');
+                  }}
+                >
+                  Limpar filtros
+                </button>
+              ) : undefined
+            }
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 dark:bg-gray-700">
+              <thead className={cls.thead}>
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Cliente
+                  <th className={cls.th}>Cliente</th>
+                  <th className={cls.th}>Vendedor</th>
+                  <th className={cls.thR}>Em aberto</th>
+                  <th className={cls.thR}>Entregas</th>
+                  <th className={cls.th}>Retorno mais antigo</th>
+                  <th className={cls.th}>Atraso</th>
+                  <th className={cls.th}>Contato</th>
+                  <th className={cls.th}>
+                    <span className="sr-only">Ações</span>
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Vendedor
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Total Devido
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Entregas
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Primeira Data Retorno
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Maior Atraso
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                     Contato
-                   </th>
-                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                     Ação
-                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {currentDevedores.map((devedor, index) => (
-                  <tr 
-                    key={`${devedor.cliente_id}_${devedor.vendedor_id}`} 
-                    className="hover:bg-gray-50 dark:hover:bg-gray-700 animate-fade-in-up"
-                    style={{ animationDelay: `${index * 75}ms` }}
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <User className="w-4 h-4 text-gray-400 mr-2" />
-                        <div>
-                          <div className="text-sm font-medium text-gray-900 dark:text-white">
-                            {devedor.cliente_nome} {devedor.cliente_sobrenome}
-                          </div>
-                          <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center">
-                            <MapPin className="w-3 h-3 mr-1" />
-                            {devedor.cliente_endereco.substring(0, 30)}...
-                          </div>
-                        </div>
+              <tbody className={cls.tbody}>
+                {currentDevedores.map((devedor) => (
+                  <tr key={`${devedor.cliente_id}_${devedor.vendedor_id}`} className={cls.tr}>
+                    <td className={`${cls.td} max-w-[260px]`}>
+                      <div className="truncate font-medium text-gray-900 dark:text-white">
+                        {devedor.cliente_nome} {devedor.cliente_sobrenome}
                       </div>
-                      </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                      {devedor.vendedor_nome}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900 dark:text-white">
-                        {formatCurrency(devedor.total_devido)}
+                      <div className="flex items-center truncate text-xs text-gray-500 dark:text-gray-400" title={devedor.cliente_endereco}>
+                        <MapPin className="mr-1 h-3 w-3 shrink-0" />
+                        <span className="truncate">{devedor.cliente_endereco || 'Sem endereço'}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                      {devedor.total_entregas} cestas
+                    <td className={`${cls.td} whitespace-nowrap`}>{devedor.vendedor_nome}</td>
+                    <td className={`${cls.tdR} font-semibold`}>{formatCurrency(devedor.total_devido)}</td>
+                    <td className={cls.tdR}>{devedor.total_entregas}</td>
+                    <td className={`${cls.td} whitespace-nowrap`}>{formatDate(devedor.menor_data_retorno)}</td>
+                    <td className={cls.td}>
+                      <Etiqueta tom={tomAtraso(devedor.maior_dias_atraso)}>
+                        {devedor.maior_dias_atraso} {devedor.maior_dias_atraso === 1 ? 'dia' : 'dias'}
+                      </Etiqueta>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center text-sm text-gray-900 dark:text-white">
-                        <Calendar className="w-4 h-4 text-gray-400 mr-2" />
-                        {formatDate(devedor.menor_data_retorno)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getDiasAtrasoColor(devedor.maior_dias_atraso)}`}>
-                        {devedor.maior_dias_atraso} dias
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                       <div className="flex items-center text-sm text-gray-900 dark:text-white">
-                         <Phone className="w-4 h-4 text-gray-400 mr-2" />
-                         <a 
-                           href={`tel:${devedor.cliente_telefone}`}
-                           className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                         >
-                           {formatarTelefone(devedor.cliente_telefone)}
-                         </a>
-                       </div>
-                     </td>
-                     <td className="px-6 py-4 whitespace-nowrap">
-                        <button
-                          onClick={() => abrirModalCliente(devedor)}
-                          className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    <td className={`${cls.td} whitespace-nowrap`}>
+                      {devedor.cliente_telefone ? (
+                        <a
+                          href={`tel:${devedor.cliente_telefone}`}
+                          className="inline-flex items-center gap-1.5 font-mono text-[12.5px] text-gray-700 hover:text-blue-600 dark:text-gray-300 dark:hover:text-blue-400"
                         >
-                          <Eye className="w-4 h-4 mr-1" />
-                          Ver Detalhes
+                          <Phone className="h-3.5 w-3.5 text-gray-400" />
+                          {formatarTelefone(devedor.cliente_telefone)}
+                        </a>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </td>
+                    <td className={`${cls.td} whitespace-nowrap`}>
+                      <div className={cls.rowActions}>
+                        <button type="button" onClick={() => abrirModalCliente(devedor)} className={cls.btn}>
+                          <Eye className="h-4 w-4" />
+                          Ver detalhes
                         </button>
-                      </td>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
+              <tfoot className="border-t border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/40">
+                <tr>
+                  <td className={`${cls.td} font-medium`} colSpan={2}>
+                    {totalDevedores} {totalDevedores === 1 ? 'cliente' : 'clientes'}
+                    {filtrosAtivos && <span className="text-gray-400"> (filtrado)</span>}
+                  </td>
+                  <td className={`${cls.tdR} font-semibold text-red-600 dark:text-red-400`}>{formatCurrency(totalDevido)}</td>
+                  <td colSpan={5} />
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}

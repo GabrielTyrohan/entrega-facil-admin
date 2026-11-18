@@ -1,7 +1,8 @@
 import { format, parseISO } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { ChevronLeft, ChevronRight, FileText, Filter, Plus, TrendingUp } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileText, Plus, TrendingUp } from 'lucide-react';
+import { BarraFiltros, CabecalhoPagina, Chips, Etiqueta, Vazio, cls, type ChipOpcao, type Tom } from '../../components/ui/lista';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -285,193 +286,174 @@ const ListaVendas = () => {
     doc.save('relatorio_vendas_atacado.pdf');
   };
 
+  const STATUS_OPCOES: ChipOpcao<StatusPagamento>[] = [
+    { valor: 'todos', rotulo: 'Todas' },
+    { valor: 'pendente', rotulo: 'Pendentes' },
+    { valor: 'atrasado', rotulo: 'Atrasadas' },
+    { valor: 'pago', rotulo: 'Pagas' },
+    { valor: 'cancelado', rotulo: 'Canceladas' },
+  ];
+  const STATUS_VISUAL: Record<string, { rotulo: string; tom: Tom }> = {
+    pago: { rotulo: 'Pago', tom: 'ok' },
+    pendente: { rotulo: 'Pendente', tom: 'atencao' },
+    atrasado: { rotulo: 'Atrasado', tom: 'perigo' },
+    cancelado: { rotulo: 'Cancelado', tom: 'neutro' },
+  };
+  const dataCls = `${cls.select} w-[150px]`;
+
   return (
-    <div className="p-6 max-w-[1600px] mx-auto space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Vendas Atacado</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Gerencie suas vendas e acompanhe os resultados</p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => navigate('/vendas-atacado/nova')}
-            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-sm"
-          >
-            <Plus size={18} className="mr-2" />
-            Nova Venda
-          </button>
-          <button
-            type="button"
-            onClick={handleExportPDF}
-            className="flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors shadow-sm"
-            title="Exportar para PDF"
-          >
-            <FileText size={18} className="mr-2" />
-            Exportar PDF
-          </button>
-        </div>
+    <div className="space-y-5">
+      <CabecalhoPagina
+        titulo="Vendas Atacado"
+        descricao="Vendas para empresas (PJ) com a situação de cada pagamento."
+        acoes={
+          <>
+            <button type="button" onClick={handleExportPDF} className={cls.btn} title="Exportar para PDF">
+              <FileText className="h-4 w-4" />
+              Exportar PDF
+            </button>
+            <button type="button" onClick={() => navigate('/vendas-atacado/nova')} className={cls.btnPri}>
+              <Plus className="h-4 w-4" />
+              Nova Venda
+            </button>
+          </>
+        }
+      />
+
+      {/* Filtros */}
+      <div className="space-y-2.5">
+        <BarraFiltros>
+          <label className="flex items-center gap-2 text-[13px] text-gray-500 dark:text-gray-400">
+            De
+            <input type="date" aria-label="Período (início)" className={dataCls} value={startDate} onChange={(e) => { setStartDate(e.target.value); setPage(0); }} />
+          </label>
+          <label className="flex items-center gap-2 text-[13px] text-gray-500 dark:text-gray-400">
+            até
+            <input type="date" aria-label="Período (fim)" className={dataCls} value={endDate} onChange={(e) => { setEndDate(e.target.value); setPage(0); }} />
+          </label>
+          <select aria-label="Vendedor" className={cls.select} value={selectedVendedor} onChange={(e) => { setSelectedVendedor(sanitizeVendedorId(e.target.value)); setPage(0); }}>
+            <option value="todos">Todos os vendedores</option>
+            {(vendedores as Vendedor[] | undefined)?.map((v) => (
+              <option key={v.id} value={v.id}>{v.nome}</option>
+            ))}
+          </select>
+          {(startDate || endDate || selectedVendedor !== 'todos' || statusPagamento !== 'todos') && (
+            <button
+              type="button"
+              className={cls.btnGhost}
+              onClick={() => {
+                setStartDate('');
+                setEndDate('');
+                setSelectedVendedor('todos');
+                setStatusPagamento('todos');
+                setPage(0);
+              }}
+            >
+              Limpar filtros
+            </button>
+          )}
+        </BarraFiltros>
+        <Chips rotulo="Filtrar por situação do pagamento" opcoes={STATUS_OPCOES} valor={statusPagamento} onChange={(v) => { setStatusPagamento(sanitizeStatus(v)); setPage(0); }} />
       </div>
 
-      {/* Filters */}
-      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-3 flex items-center">
-          <Filter size={16} className="mr-2" />
-          Filtros
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Período (Início)</label>
-            <input
-              type="date"
-              className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Período (Fim)</label>
-            <input
-              type="date"
-              className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Vendedor</label>
-            <select
-              className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
-              value={selectedVendedor}
-              onChange={(e) => setSelectedVendedor(sanitizeVendedorId(e.target.value))}
-            >
-              <option value="todos">Todos</option>
-              {(vendedores as Vendedor[] | undefined)?.map(v => (
-                <option key={v.id} value={v.id}>{v.nome}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Status Pagamento</label>
-            <select
-              className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500"
-              value={statusPagamento}
-              onChange={(e) => setStatusPagamento(sanitizeStatus(e.target.value))}
-            >
-              <option value="todos">Todos</option>
-              <option value="pendente">Pendente</option>
-              <option value="pago">Pago</option>
-              <option value="atrasado">Atrasado</option>
-              <option value="cancelado">Cancelado</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-4">
         <div className="xl:col-span-3">
-          <div className="bg-white dark:bg-gray-800 shadow-sm rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className={`${cls.card} overflow-hidden`}>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-700">
+              <table className="min-w-full">
+                <thead className={cls.thead}>
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Entrega</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Nome Cliente</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Valor</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Ações</th>
+                    <th className={cls.th}>Entrega</th>
+                    <th className={cls.th}>Cliente</th>
+                    <th className={cls.thR}>Valor</th>
+                    <th className={cls.th}>Situação</th>
+                    <th className={cls.th}>
+                      <span className="sr-only">Ações</span>
+                    </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody className={cls.tbody}>
                   {isLoading ? (
-                    <tr>
-                      <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-                        Carregando vendas...
-                      </td>
-                    </tr>
-                  ) : vendas?.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-                        Nenhuma venda encontrada.
-                      </td>
-                    </tr>
-                  ) : (
-                    (vendas as Venda[])?.map((venda) => (
-                      <tr
-                        key={venda.id}
-                        className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
-                        onClick={() => navigate(`/vendas-atacado/${venda.id}`)}
-                      >
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                          {format(parseISO(venda.data_entrega), 'dd/MM/yyyy')}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                          {getClienteNome(venda.clientes)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-white">
-                          {formatCurrency(venda.valor_total)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full
-                            ${venda.status_pagamento === 'pago' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
-                              venda.status_pagamento === 'atrasado' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
-                              venda.status_pagamento === 'cancelado' ? 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300' :
-                              'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'}`}>
-                            {venda.status_pagamento.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                          <button type="button" className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300">Ver</button>
+                    [0, 1, 2, 3].map((i) => (
+                      <tr key={i}>
+                        <td colSpan={5} className="px-4 py-3">
+                          <div className="h-3.5 animate-pulse rounded bg-gray-100 dark:bg-gray-700" />
                         </td>
                       </tr>
                     ))
+                  ) : !vendas || vendas.length === 0 ? (
+                    <tr>
+                      <td colSpan={5}>
+                        <Vazio
+                          icone={FileText}
+                          titulo="Nenhuma venda encontrada."
+                          texto="Mude o período ou a situação, ou registre uma venda nova."
+                          acao={
+                            <button type="button" onClick={() => navigate('/vendas-atacado/nova')} className={cls.btnPri}>
+                              <Plus className="h-4 w-4" /> Nova Venda
+                            </button>
+                          }
+                        />
+                      </td>
+                    </tr>
+                  ) : (
+                    (vendas as Venda[]).map((venda) => {
+                      const st = STATUS_VISUAL[venda.status_pagamento] ?? { rotulo: venda.status_pagamento, tom: 'neutro' as Tom };
+                      return (
+                        <tr key={venda.id} className={`${cls.tr} cursor-pointer`} onClick={() => navigate(`/vendas-atacado/${venda.id}`)}>
+                          <td className={`${cls.td} whitespace-nowrap font-mono`}>{format(parseISO(venda.data_entrega), 'dd/MM/yyyy')}</td>
+                          <td className={`${cls.td} font-medium text-gray-900 dark:text-white`}>{getClienteNome(venda.clientes)}</td>
+                          <td className={`${cls.tdR} font-semibold`}>{formatCurrency(venda.valor_total)}</td>
+                          <td className={cls.td}>
+                            <Etiqueta tom={st.tom}>{st.rotulo}</Etiqueta>
+                          </td>
+                          <td className={`${cls.td} whitespace-nowrap`}>
+                            <div className={cls.rowActions}>
+                              <button
+                                type="button"
+                                className={cls.btnGhost}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/vendas-atacado/${venda.id}`);
+                                }}
+                              >
+                                Ver
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
             </div>
 
-            {/* Pagination */}
-            <div className="bg-white dark:bg-gray-800 px-4 py-3 flex items-center justify-between border-t border-gray-200 dark:border-gray-700 sm:px-6">
-              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm text-gray-700 dark:text-gray-300">
-                    Mostrando <span className="font-medium">{vendas ? vendas.length : 0}</span> de{' '}
-                    <span className="font-medium">{totalCount}</span> resultados
-                  </p>
-                </div>
-                <div>
-                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setPage(p => Math.max(0, p - 1)); }}
-                      disabled={page === 0}
-                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium text-gray-500 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50"
-                    >
-                      <span className="sr-only">Anterior</span>
-                      <ChevronLeft size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setPage(p => (totalPages > p + 1 ? p + 1 : p)); }}
-                      disabled={page >= totalPages - 1}
-                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium text-gray-500 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50"
-                    >
-                      <span className="sr-only">Próxima</span>
-                      <ChevronRight size={16} />
-                    </button>
-                  </nav>
-                </div>
-              </div>
+            {/* Paginação */}
+            <div className="flex items-center justify-between border-t border-gray-200 px-4 py-2.5 dark:border-gray-700">
+              <p className="text-[13px] text-gray-500 dark:text-gray-400">
+                Mostrando <span className="font-mono text-gray-900 dark:text-white">{vendas ? vendas.length : 0}</span> de{' '}
+                <span className="font-mono text-gray-900 dark:text-white">{totalCount}</span> vendas
+              </p>
+              <nav className="flex gap-1" aria-label="Paginação">
+                <button type="button" onClick={(e) => { e.stopPropagation(); setPage((p) => Math.max(0, p - 1)); }} disabled={page === 0} className={`${cls.btn} px-2`}>
+                  <span className="sr-only">Anterior</span>
+                  <ChevronLeft size={16} />
+                </button>
+                <button type="button" onClick={(e) => { e.stopPropagation(); setPage((p) => (totalPages > p + 1 ? p + 1 : p)); }} disabled={page >= totalPages - 1} className={`${cls.btn} px-2`}>
+                  <span className="sr-only">Próxima</span>
+                  <ChevronRight size={16} />
+                </button>
+              </nav>
             </div>
           </div>
         </div>
 
         {/* Right Column: Vendas por Vendedor */}
         <div className="xl:col-span-1">
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 h-full sticky top-6">
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-3 flex items-center">
-              <TrendingUp size={16} className="mr-2" />
+          <div className={`${cls.card} sticky top-0 p-4`}>
+            <h3 className="mb-3 flex items-center text-[13.5px] font-semibold text-gray-900 dark:text-white">
+              <TrendingUp size={16} className="mr-2 text-gray-400" />
               Vendas por Vendedor
             </h3>
             <div className="space-y-3 overflow-y-auto pr-2" style={{ maxHeight: 'calc(100vh - 250px)' }}>

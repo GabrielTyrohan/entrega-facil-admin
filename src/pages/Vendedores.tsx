@@ -7,11 +7,13 @@ import {
 import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/Skeleton";
 import VendedorModal from '@/components/ui/VendedorModal';
-import { CheckCircle, Clock, Edit, Eye, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
+import { Edit, Eye, MoreHorizontal, Plus, Search, Trash2, Users } from 'lucide-react';
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageHeader from '../components/layout/PageHeader';
-import { TableContainer, TableEmptyState, TableErrorState, TableToolbar } from '../components/table';
+import { TableErrorState } from '../components/table';
+import { BarraFiltros, Busca, CabecalhoPagina, Etiqueta, Vazio, cls } from '../components/ui/lista';
+import NovoVendedor from './NovoVendedor';
 import { useAuth } from '../contexts/AuthContext';
 import { useTotalEntregasPorAdministrador } from '../hooks/useDashboard';
 import {
@@ -32,6 +34,17 @@ const Vendedores: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [vendedorParaExcluir, setVendedorParaExcluir] = useState<Vendedor | null>(null);
+
+  // Cadastro em painel lateral; abre também por /vendedores?novo=1 (ação do Ctrl+K)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [novoAberto, setNovoAberto] = useState(searchParams.get('novo') === '1');
+  React.useEffect(() => {
+    if (searchParams.get('novo') === '1') {
+      setNovoAberto(true);
+      searchParams.delete('novo');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   // Debounce para busca server-side
   React.useEffect(() => {
@@ -105,40 +118,6 @@ const Vendedores: React.FC = () => {
   // Formatação de percentual
   const formatPercentual = (percentual?: number | null) => {
     return percentual ? `${percentual}%` : 'N/A';
-  };
-
-  // Badge de tipo de vínculo
-  const VinculoBadge = ({ tipo }: { tipo?: string | null }) => {
-    const isAutonomo = tipo === 'autonomo';
-    return (
-      <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${
-        isAutonomo
-          ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-          : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
-      }`}>
-        {isAutonomo ? 'Autônomo' : 'Representado'}
-      </span>
-    );
-  };
-
-  // Ícone de status de pagamento
-  const PagamentoIcon = ({ status }: { status?: string | null }) => {
-    if (status === 'pago') {
-      return (
-        <span title="Pagamento em dia">
-          <CheckCircle className="w-4 h-4 text-green-500" />
-        </span>
-      );
-    }
-    if (status === 'pendente') {
-      return (
-        <span title="Aguardando pagamento" className="cursor-help">
-          <Clock className="w-4 h-4 text-orange-500" />
-        </span>
-      );
-    }
-    // null = representado, admin paga — sem ícone
-    return null;
   };
 
   // Formatação de telefone
@@ -251,208 +230,130 @@ const Vendedores: React.FC = () => {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <PageHeader
-        title="Vendedores"
-        description="Gerencie sua equipe de vendas"
-        actions={
-          <button
-            onClick={() => navigate('/vendedores/novo')}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 sm:py-2 rounded-lg font-medium flex items-center justify-center space-x-2 transition-colors touch-manipulation w-full sm:w-auto"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Novo Vendedor</span>
+    <div className="space-y-5">
+      <CabecalhoPagina
+        titulo="Vendedores"
+        descricao="Quem vende na rua, o vínculo de cada um e quem paga a assinatura."
+        acoes={
+          <button type="button" onClick={() => setNovoAberto(true)} className={cls.btnPri}>
+            <Plus className="h-4 w-4" /> Novo vendedor
           </button>
         }
       />
 
-      <TableToolbar
-        search={{
-          value: searchTerm,
-          onChange: setSearchTerm,
-          placeholder: 'Buscar vendedores...',
-          ariaLabel: 'Buscar vendedores',
-        }}
-        resultText={`${total} vendedores encontrados`}
-        trailingInfo={`Página ${currentPage + 1} de ${totalPages}`}
-        onClearFilters={clearSearch}
-        hasActiveFilters={hasActiveSearch}
-        clearLabel="Limpar busca"
-      />
+      <BarraFiltros>
+        <Busca value={searchTerm} onChange={setSearchTerm} placeholder="Buscar vendedor por nome" className="flex-1 sm:max-w-sm" />
+        <span className="text-[13px] text-gray-500 dark:text-gray-400">
+          {total} {total === 1 ? 'vendedor' : 'vendedores'}
+          {totalPages > 1 && ` · página ${currentPage + 1} de ${totalPages}`}
+        </span>
+      </BarraFiltros>
 
-      {/* Vendedores Table */}
-      <TableContainer>
-          <table className="w-full min-w-[900px]">
-            <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0 z-10">
-              <tr>
-                <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  Vendedor
-                </th>
-                <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden sm:table-cell">
-                  Contato
-                </th>
-                <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden md:table-cell">
-                  Status
-                </th>
-                <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden md:table-cell">
-                  Vínculo
-                </th>
-                <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden lg:table-cell">
-                  Pgto.
-                </th>
-                <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden lg:table-cell">
-                  Entregas
-                </th>
-                <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden lg:table-cell">
-                  PERCENTUAL MÍN.
-                </th>
-                <th scope="col" className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden xl:table-cell">
-                  Data Cadastro
-                </th>
-                <th scope="col" className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  Ações
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
-              {currentVendedores.length === 0 ? (
-                hasActiveSearch ? (
-                  <TableEmptyState
-                    colSpan={9}
-                    title="Não encontramos resultados para os filtros atuais."
-                    action={
-                      <button
-                        type="button"
-                        onClick={clearSearch}
-                        className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
-                      >
-                        Limpar busca
-                      </button>
-                    }
-                  />
-                ) : (
-                  <TableEmptyState
-                    colSpan={9}
-                    title="Nenhum vendedor cadastrado"
-                    description="Cadastre seu primeiro vendedor para começar."
-                    action={
-                      <button
-                        type="button"
-                        onClick={() => navigate('/vendedores/novo')}
-                        className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>Novo Vendedor</span>
-                      </button>
-                    }
-                  />
-                )
-              ) : (
-                currentVendedores.map((vendedor: Vendedor, index) => (
-                  <tr
-                    key={vendedor.id}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors animate-fade-in-up"
-                    style={{ animationDelay: `${index * 75}ms` }}
-                  >
-                    <td className="px-3 sm:px-6 py-3 sm:py-4">
-                      <div className="flex items-center">
-                        <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
+      <div className={`${cls.card} overflow-hidden`}>
+        {currentVendedores.length === 0 ? (
+          hasActiveSearch ? (
+            <Vazio
+              icone={Search}
+              titulo="Nenhum vendedor com esse nome"
+              texto="Confira a grafia ou limpe a busca."
+              acao={
+                <button type="button" onClick={clearSearch} className={cls.btn}>
+                  Limpar busca
+                </button>
+              }
+            />
+          ) : (
+            <Vazio
+              icone={Users}
+              titulo="Nenhum vendedor cadastrado"
+              texto="Cadastre o primeiro vendedor para liberar cestas e acompanhar a cobrança."
+              acao={
+                <button type="button" onClick={() => setNovoAberto(true)} className={cls.btnPri}>
+                  <Plus className="h-4 w-4" /> Novo vendedor
+                </button>
+              }
+            />
+          )
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[880px]">
+              <thead className={cls.thead}>
+                <tr>
+                  <th scope="col" className={cls.th}>Vendedor</th>
+                  <th scope="col" className={cls.th}>Contato</th>
+                  <th scope="col" className={cls.th}>Situação</th>
+                  <th scope="col" className={cls.th}>Quem paga</th>
+                  <th scope="col" className={cls.thR}>Entregas</th>
+                  <th scope="col" className={cls.thR}>% mínimo</th>
+                  <th scope="col" className={cls.th}>Desde</th>
+                  <th scope="col" className={cls.th}>
+                    <span className="sr-only">Ações</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className={cls.tbody}>
+                {currentVendedores.map((vendedor: Vendedor) => (
+                  <tr key={vendedor.id} className={cls.tr}>
+                    <td className={cls.td}>
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
                           {vendedor.nome.charAt(0).toUpperCase()}
                         </div>
-                        <div className="ml-3 min-w-0 flex-1">
-                          <div className="text-sm font-medium text-gray-900 dark:text-white truncate" title={vendedor.nome}>
-                            {vendedor.nome}
-                          </div>
-                          {/* Mobile-only info */}
-                          <div className="sm:hidden mt-1 space-y-1">
-                            <div className="text-xs text-gray-600 dark:text-gray-400">
-                              {vendedor.email || 'N/A'}
-                            </div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400">
-                              {formatPhone(vendedor.telefone)}
-                            </div>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <div className="md:hidden">
-                                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                  vendedor.ativo 
-                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-                                    : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
-                                }`}>
-                                  {vendedor.ativo ? 'Ativo' : 'Inativo'}
-                                </span>
-                              </div>
-                              <VinculoBadge tipo={vendedor.tipo_vinculo} />
-                              <PagamentoIcon status={vendedor.status_pagamento_vendedor} />
-                            </div>
-                          </div>
-                        </div>
+                        <span className="truncate font-medium text-gray-900 dark:text-white" title={vendedor.nome}>
+                          {vendedor.nome}
+                        </span>
                       </div>
                     </td>
-                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden sm:table-cell">
-                      <div className="text-sm text-gray-900 dark:text-white" title={vendedor.email || undefined}>{vendedor.email || 'N/A'}</div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400">{formatPhone(vendedor.telefone)}</div>
+                    <td className={cls.td}>
+                      <div className="max-w-[220px] truncate" title={vendedor.email || undefined}>
+                        {vendedor.email || '—'}
+                      </div>
+                      <div className="font-mono text-xs text-gray-500 dark:text-gray-400">{formatPhone(vendedor.telefone)}</div>
                     </td>
-                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden md:table-cell">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        vendedor.ativo 
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-                          : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
-                      }`}>
-                        {vendedor.ativo ? 'Ativo' : 'Inativo'}
-                      </span>
+                    <td className={cls.td}>
+                      <Etiqueta tom={vendedor.ativo ? 'ok' : 'neutro'}>{vendedor.ativo ? 'Ativo' : 'Inativo'}</Etiqueta>
                     </td>
-                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden md:table-cell">
-                      <VinculoBadge tipo={vendedor.tipo_vinculo} />
-                    </td>
-                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden lg:table-cell">
-                      <div className="flex items-center">
-                        <PagamentoIcon status={vendedor.status_pagamento_vendedor} />
+                    <td className={cls.td}>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Etiqueta tom={vendedor.tipo_vinculo === 'autonomo' ? 'neutro' : 'destaque'}>
+                          {vendedor.tipo_vinculo === 'autonomo' ? 'O vendedor' : 'A empresa'}
+                        </Etiqueta>
+                        {vendedor.status_pagamento_vendedor === 'pendente' && <Etiqueta tom="atencao">Pendente</Etiqueta>}
+                        {vendedor.status_pagamento_vendedor === 'pago' && <Etiqueta tom="ok">Em dia</Etiqueta>}
                       </div>
                     </td>
-                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap hidden lg:table-cell">
-                       {isLoadingEntregas ? (
-                         <div className="animate-pulse bg-gray-200 dark:bg-gray-600 h-4 w-8 rounded"></div>
-                       ) : (
-                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">
-                           {entregasPorVendedor[vendedor.id] || 0}
-                         </span>
-                       )}
-                     </td>
-                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white hidden lg:table-cell">
-                      {formatPercentual(vendedor.percentual_minimo)}
+                    <td className={cls.tdR}>
+                      {isLoadingEntregas ? <span className="inline-block h-3.5 w-6 animate-pulse rounded bg-gray-200 dark:bg-gray-600" /> : entregasPorVendedor[vendedor.id] || 0}
                     </td>
-                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white hidden xl:table-cell">
-                      {formatDate(vendedor.created_at)}
-                    </td>
-                    <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center justify-end gap-1">
-
+                    <td className={cls.tdR}>{formatPercentual(vendedor.percentual_minimo)}</td>
+                    <td className={`${cls.td} whitespace-nowrap`}>{formatDate(vendedor.created_at)}</td>
+                    <td className={`${cls.td} whitespace-nowrap`}>
+                      <div className={cls.rowActions}>
+                        <button type="button" onClick={() => handleEditVendedor(vendedor)} className={cls.btnGhost}>
+                          <Edit className="h-3.5 w-3.5" /> Editar
+                        </button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button
-                              aria-label={`Ações do vendedor ${vendedor.nome}`}
+                              aria-label={`Mais ações do vendedor ${vendedor.nome}`}
                               aria-haspopup="menu"
-                              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-2 touch-manipulation"
+                              className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-200"
                               disabled={deleteVendedorMutation.isPending}
                             >
-                              <MoreHorizontal className="w-4 h-4" />
+                              <MoreHorizontal className="h-4 w-4" />
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => handleViewVendedor(vendedor)}>
-                              <Eye className="w-4 h-4 mr-2" />
+                              <Eye className="mr-2 h-4 w-4" />
                               Visualizar
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleEditVendedor(vendedor)}>
-                              <Edit className="w-4 h-4 mr-2" />
-                              Editar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                               onClick={() => setVendedorParaExcluir(vendedor)}
                               className="text-red-600 dark:text-red-400"
                               disabled={deleteVendedorMutation.isPending}
                             >
-                              <Trash2 className="w-4 h-4 mr-2" />
+                              <Trash2 className="mr-2 h-4 w-4" />
                               {deleteVendedorMutation.isPending ? 'Excluindo...' : 'Excluir'}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -460,11 +361,14 @@ const Vendedores: React.FC = () => {
                       </div>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-      </TableContainer>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {novoAberto && <NovoVendedor emPainel aberto onFechar={() => setNovoAberto(false)} />}
 
       {/* Paginação */}
       {totalPages > 1 && (

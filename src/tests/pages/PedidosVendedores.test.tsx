@@ -11,6 +11,7 @@ vi.mock('@/hooks/usePedidosVendedor', () => ({
   usePedidosVendedor: () => ({ data: mockPedidos.current, isLoading: false, error: null }),
   useAtenderPedido: () => ({ mutateAsync: mockAtender, isPending: false }),
   useRecusarPedido: () => ({ mutateAsync: mockRecusar, isPending: false }),
+  usePedidosPendentesCount: () => ({ data: 1 }),
 }));
 
 vi.mock('@/utils/toast', () => ({
