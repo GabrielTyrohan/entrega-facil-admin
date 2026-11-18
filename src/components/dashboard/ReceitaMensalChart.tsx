@@ -4,7 +4,7 @@
 // Dados: get_faturamento_12_periodos_por_admin (pagamentos das entregas + vendas atacado).
 // ============================================
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface MonthData {
   month: string; // 'MM/YY'
@@ -27,9 +27,31 @@ function eixo(v: number) {
   return `R$ ${v}`;
 }
 
+// Passo "redondo" (1, 2, 2,5 ou 5 × 10^k) para o eixo ter 4 divisões com valores fáceis de ler.
+function passoRedondo(bruto: number) {
+  const base = Math.pow(10, Math.floor(Math.log10(bruto)));
+  const f = bruto / base;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * base;
+}
+
+// Largura real do gráfico em px: o SVG é desenhado 1:1, sem ampliar texto em telas largas.
+function useLargura<T extends HTMLElement>(inicial: number) {
+  const ref = useRef<T>(null);
+  const [largura, setLargura] = useState(inicial);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([e]) => setLargura(Math.round(e.contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, largura] as const;
+}
+
 export default function ReceitaMensalChart({ data, isLoading }: { data: MonthData[]; isLoading: boolean }) {
   const [periodo, setPeriodo] = useState<6 | 12>(12);
   const [hover, setHover] = useState<number | null>(null);
+  const [caixa, larguraReal] = useLargura<HTMLDivElement>(760);
 
   const lista = data.slice(-periodo);
   const n = lista.length;
@@ -38,14 +60,18 @@ export default function ReceitaMensalChart({ data, isLoading }: { data: MonthDat
   const media = fechados.length ? fechados.reduce((t, d) => t + d.value, 0) / fechados.length : 0;
   const melhor = lista.reduce<MonthData | null>((m, d) => (!m || d.value > m.value ? d : m), null);
 
-  const W = 760, H = 240, L = 64, R = 8, T = 14, B = 28;
-  const gw = W - L - R, gh = H - T - B;
   const maxBruto = Math.max(...lista.map((d) => d.value), 1);
-  const passo = maxBruto > 10000 ? 5000 : maxBruto > 2000 ? 1000 : 500;
-  const max = Math.ceil(maxBruto / passo) * passo;
+  const passo = passoRedondo(Math.max(maxBruto / 4, 1));
+  const max = passo * 4;
+  const marcas = [0, 1, 2, 3, 4].map((k) => passo * k);
+  // Margem esquerda do tamanho do maior rótulo (~6,6 px por caractere em 11 px mono).
+  const L = Math.ceil(Math.max(...marcas.map((v) => eixo(v).length)) * 6.6) + 10;
+  const W = Math.max(larguraReal, 280), H = 240, R = 4, T = 14, B = 28;
+  const gw = W - L - R, gh = H - T - B;
   const y = (v: number) => T + gh - (v / max) * gh;
   const slot = n ? gw / n : gw;
   const bw = Math.min(36, slot * 0.56);
+  const pulaRotulo = slot < 30; // tela estreita: mostra um mês sim, outro não (o atual sempre)
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-5">
@@ -100,13 +126,13 @@ export default function ReceitaMensalChart({ data, isLoading }: { data: MonthDat
             )}
           </dl>
 
-          <div className="relative">
-            <svg viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full overflow-visible" role="img" aria-label={`Receita por mês dos últimos ${n} meses`} onMouseLeave={() => setHover(null)}>
-              {[0, 0.25, 0.5, 0.75, 1].map((p) => (
-                <g key={p}>
-                  <line x1={L} x2={W - R} y1={y(max * p)} y2={y(max * p)} className="stroke-gray-200 dark:stroke-gray-700" strokeDasharray={p ? '3 4' : undefined} />
-                  <text x={L - 8} y={y(max * p) + 4} textAnchor="end" className="fill-gray-400 font-mono text-[11px]">
-                    {eixo(max * p)}
+          <div ref={caixa} className="relative">
+            <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="block max-w-full" role="img" aria-label={`Receita por mês dos últimos ${n} meses`} onMouseLeave={() => setHover(null)}>
+              {marcas.map((v) => (
+                <g key={v}>
+                  <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} className="stroke-gray-200 dark:stroke-gray-700" strokeDasharray={v ? '3 4' : undefined} />
+                  <text x={L - 8} y={y(v) + 4} textAnchor="end" className="fill-gray-400 font-mono text-[11px]">
+                    {eixo(v)}
                   </text>
                 </g>
               ))}
@@ -119,7 +145,7 @@ export default function ReceitaMensalChart({ data, isLoading }: { data: MonthDat
                     <rect x={cx - slot / 2 + 2} y={T} width={slot - 4} height={gh} rx={4} className={hover === i ? 'fill-gray-100 dark:fill-gray-700/50' : 'fill-transparent'} />
                     <rect x={cx - bw / 2} y={yy} width={bw} height={Math.max(T + gh - yy, d.value > 0 ? 2 : 0)} rx={3} className={`fill-blue-600 dark:fill-blue-400 ${atual ? 'opacity-50' : ''}`} />
                     <text x={cx} y={H - 8} textAnchor="middle" className={`text-[11.5px] ${atual ? 'fill-gray-900 font-semibold dark:fill-white' : 'fill-gray-400'}`}>
-                      {rotulo(d.month).curto}
+                      {pulaRotulo && !atual && (n - 1 - i) % 2 ? '' : rotulo(d.month).curto}
                     </text>
                   </g>
                 );

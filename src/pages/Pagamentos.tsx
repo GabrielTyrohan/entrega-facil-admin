@@ -306,7 +306,7 @@ const Pagamentos: React.FC = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                   Valor
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                <th className="hidden px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider xl:table-cell">
                   Método
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -339,7 +339,7 @@ const Pagamentos: React.FC = () => {
                           <DollarSign className="w-4 h-4" />
                         </div>
                         <div className="ml-3">
-                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                          <div className="max-w-[180px] truncate text-sm font-medium text-gray-900 dark:text-white xl:max-w-[320px]" title={[pagamento.cliente_nome, pagamento.cliente_sobrenome].filter(Boolean).join(' ')}>
                             {[pagamento.cliente_nome, pagamento.cliente_sobrenome]
     .filter(Boolean)
     .join(' ') || 'N/A'}
@@ -351,8 +351,9 @@ const Pagamentos: React.FC = () => {
                       <div className="text-sm font-medium text-gray-900 dark:text-white">
                         {formatCurrency(pagamento.valor)}
                       </div>
+                      <div className="text-xs text-gray-400 xl:hidden">{pagamento.forma_pagamento || 'N/A'}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="hidden px-6 py-4 whitespace-nowrap xl:table-cell">
                       <div className="flex items-center">
                         <div className="text-gray-400 mr-2">
                           {getMetodoPagamentoIcon(pagamento.forma_pagamento)}
@@ -365,7 +366,7 @@ const Pagamentos: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <User className="w-4 h-4 text-gray-400 mr-2" />
-                        <div className="text-sm text-gray-900 dark:text-white">
+                        <div className="max-w-[130px] truncate text-sm text-gray-900 dark:text-white xl:max-w-none">
                           {pagamento.vendedor_nome || getVendedorNome(pagamento.vendedor_id) || 'N/A'}
                         </div>
                       </div>

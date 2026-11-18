@@ -507,10 +507,10 @@ const CestasVendedor: React.FC = () => {
               <thead className={cls.thead}>
                 <tr>
                   <th className={cls.th}>Vendedor</th>
-                  <th className={cls.th}>Montada em</th>
+                  <th className={`${cls.th} hidden xl:table-cell`}>Montada em</th>
                   <th className={cls.thR}>Itens</th>
                   <th className={cls.thR}>Valor</th>
-                  <th className={cls.thR}>Entregas</th>
+                  <th className={`${cls.thR} hidden xl:table-cell`}>Entregas</th>
                   <th className={cls.th}>Com o vendedor</th>
                   <th className={cls.th}>Situação</th>
                   <th className={cls.th}>
@@ -521,21 +521,24 @@ const CestasVendedor: React.FC = () => {
               <tbody className={cls.tbody}>
                 {filteredCestas.map((cesta) => (
                   <tr key={cesta.id} className={cls.tr}>
-                    <td className={cls.td}>
+                    <td className={`${cls.td} max-w-[240px] xl:max-w-none`}>
                       <div className="flex items-center gap-2.5">
                         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
                           {cesta.vendedor_nome.charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">
                           <div className="truncate font-medium text-gray-900 dark:text-white">{cesta.vendedor_nome}</div>
-                          <div className="truncate text-xs text-gray-500 dark:text-gray-400">{cesta.cesta_nome}</div>
+                          <div className="truncate text-xs text-gray-500 dark:text-gray-400">
+                            {cesta.cesta_nome}
+                            <span className="xl:hidden"> · {formatDate(cesta.data_montagem)}</span>
+                          </div>
                         </div>
                       </div>
                     </td>
-                    <td className={`${cls.td} whitespace-nowrap`}>{formatDate(cesta.data_montagem)}</td>
+                    <td className={`${cls.td} hidden whitespace-nowrap xl:table-cell`}>{formatDate(cesta.data_montagem)}</td>
                     <td className={cls.tdR}>{(cesta.itens ?? []).length}</td>
                     <td className={cls.tdR}>{(cesta.valor_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                    <td className={cls.tdR}>{cesta.entregas_realizadas || 0}</td>
+                    <td className={`${cls.tdR} hidden xl:table-cell`}>{cesta.entregas_realizadas || 0}</td>
                     <td className={cls.td}>
                       {(() => {
                         const qtd = cesta.quantidade_disponivel;

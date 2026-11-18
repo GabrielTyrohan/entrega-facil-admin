@@ -258,16 +258,16 @@ const NovaCompra: React.FC = () => {
       </datalist>
 
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
-        <table className="w-full text-sm min-w-[900px]">
+        <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-              <th className="px-3 py-2 font-medium">Item da nota</th>
-              <th className="px-3 py-2 font-medium w-72">Produto no estoque *</th>
-              <th className="px-3 py-2 font-medium w-24 text-right">Qtd nota</th>
-              <th className="px-3 py-2 font-medium w-24 text-right" title="Quantas unidades do estoque vêm em cada unidade da nota (ex.: fardo com 10)">Fator</th>
-              <th className="px-3 py-2 font-medium w-24 text-right">Entra</th>
-              <th className="px-3 py-2 font-medium w-28 text-right">Valor total</th>
-              <th className="px-3 py-2 font-medium w-24 text-right">Custo un.</th>
+              <th className="min-w-[120px] px-3 py-2 font-medium">Item da nota</th>
+              <th className="px-3 py-2 font-medium w-48 xl:w-72">Produto no estoque *</th>
+              <th className="px-3 py-2 font-medium w-20 xl:w-24 text-right whitespace-nowrap">Qtd nota</th>
+              <th className="px-3 py-2 font-medium w-20 xl:w-24 text-right" title="Quantas unidades do estoque vêm em cada unidade da nota (ex.: fardo com 10)">Fator</th>
+              <th className="px-3 py-2 font-medium text-right xl:w-24">Entra</th>
+              <th className="px-3 py-2 font-medium w-24 xl:w-28 text-right whitespace-nowrap">Valor total</th>
+              <th className="px-3 py-2 font-medium text-right whitespace-nowrap xl:w-24">Custo un.</th>
               <th className="px-3 py-2 w-10" />
             </tr>
           </thead>
@@ -327,7 +327,7 @@ const NovaCompra: React.FC = () => {
                       onChange={(e) => atualizar(l.chave, { valor_total: Number(e.target.value) })}
                       className={`${inputClass} text-right`} />
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300 pt-3.5">{formatCurrency(custo)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-gray-700 dark:text-gray-300 pt-3.5">{formatCurrency(custo)}</td>
                   <td className="px-3 py-2 text-right">
                     <button
                       onClick={() => setLinhas((ls) => ls.filter((x) => x.chave !== l.chave))}

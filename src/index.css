@@ -104,6 +104,13 @@
   }
 }
 
+/* Janela estreita (até 1279 px; o Electron começa em 1024): células das tabelas com menos
+   espaço lateral, para as colunas caberem sem rolar. Fora de @layer para vencer o px-* do Tailwind. */
+@media (max-width: 1279px) {
+  main table :is(th, td).px-6 { padding-left: 0.75rem; padding-right: 0.75rem; }
+  main table :is(th, td).px-4 { padding-left: 0.625rem; padding-right: 0.625rem; }
+}
+
 @layer utilities {
   @keyframes fadeInUp {
     from {

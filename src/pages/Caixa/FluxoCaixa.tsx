@@ -325,8 +325,17 @@ const FluxoCaixa = () => {
               <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                 <LineChart data={stats?.graphData || []}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#374151" />
-                  <XAxis dataKey="date" stroke="#9CA3AF" />
-                  <YAxis stroke="#9CA3AF" />
+                  <XAxis dataKey="date" stroke="#9CA3AF" tick={{ fontSize: 11 }} minTickGap={12} />
+                  <YAxis
+                    stroke="#9CA3AF"
+                    width={64}
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(v: number) =>
+                      Math.abs(v) >= 1000
+                        ? `R$ ${(v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mil`
+                        : `R$ ${v}`
+                    }
+                  />
                   <Tooltip
                     contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#F3F4F6' }}
                     itemStyle={{ color: '#F3F4F6' }}

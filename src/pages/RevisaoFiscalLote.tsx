@@ -208,7 +208,7 @@ const RevisaoFiscalLote: React.FC = () => {
         ) : error ? (
           <p className="p-6 text-sm text-red-600">Erro ao carregar os produtos.</p>
         ) : (
-          <table className="w-full text-sm min-w-[1000px]">
+          <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
                 <th className="px-3 py-2 w-8" />
@@ -231,7 +231,7 @@ const RevisaoFiscalLote: React.FC = () => {
                     <td className="px-3 py-2">
                       <input type="checkbox" checked={sel.has(p.id)} onChange={() => alternar(p.id)} aria-label={`Selecionar ${p.produto_nome}`} />
                     </td>
-                    <td className="px-3 py-2 text-gray-900 dark:text-white">{p.produto_nome}</td>
+                    <td className="min-w-[130px] px-3 py-2 text-gray-900 dark:text-white">{p.produto_nome}</td>
                     <td className="px-3 py-2 tabular-nums">{p.ncm ?? '—'}</td>
                     <td className="px-3 py-2 tabular-nums">{p.cfop_padrao ?? '—'}</td>
                     <td className="px-3 py-2 tabular-nums">{p.cst_icms ?? '—'}</td>

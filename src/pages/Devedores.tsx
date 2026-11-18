@@ -800,10 +800,10 @@ const Devedores: React.FC = () => {
                   <th className={cls.th}>Cliente</th>
                   <th className={cls.th}>Vendedor</th>
                   <th className={cls.thR}>Em aberto</th>
-                  <th className={cls.thR}>Entregas</th>
-                  <th className={cls.th}>Retorno mais antigo</th>
+                  <th className={`${cls.thR} hidden 2xl:table-cell`}>Entregas</th>
+                  <th className={`${cls.th} hidden 2xl:table-cell`}>Retorno mais antigo</th>
                   <th className={cls.th}>Atraso</th>
-                  <th className={cls.th}>Contato</th>
+                  <th className={`${cls.th} hidden xl:table-cell`}>Contato</th>
                   <th className={cls.th}>
                     <span className="sr-only">Ações</span>
                   </th>
@@ -812,7 +812,7 @@ const Devedores: React.FC = () => {
               <tbody className={cls.tbody}>
                 {currentDevedores.map((devedor) => (
                   <tr key={`${devedor.cliente_id}_${devedor.vendedor_id}`} className={cls.tr}>
-                    <td className={`${cls.td} max-w-[260px]`}>
+                    <td className={`${cls.td} max-w-[220px] xl:max-w-[260px]`}>
                       <div className="truncate font-medium text-gray-900 dark:text-white">
                         {devedor.cliente_nome} {devedor.cliente_sobrenome}
                       </div>
@@ -821,16 +821,19 @@ const Devedores: React.FC = () => {
                         <span className="truncate">{devedor.cliente_endereco || 'Sem endereço'}</span>
                       </div>
                     </td>
-                    <td className={`${cls.td} whitespace-nowrap`}>{devedor.vendedor_nome}</td>
+                    <td className={`${cls.td} max-w-[140px] truncate whitespace-nowrap xl:max-w-none`} title={devedor.vendedor_nome}>{devedor.vendedor_nome}</td>
                     <td className={`${cls.tdR} font-semibold`}>{formatCurrency(devedor.total_devido)}</td>
-                    <td className={cls.tdR}>{devedor.total_entregas}</td>
-                    <td className={`${cls.td} whitespace-nowrap`}>{formatDate(devedor.menor_data_retorno)}</td>
+                    <td className={`${cls.tdR} hidden 2xl:table-cell`}>{devedor.total_entregas}</td>
+                    <td className={`${cls.td} hidden whitespace-nowrap 2xl:table-cell`}>{formatDate(devedor.menor_data_retorno)}</td>
                     <td className={cls.td}>
                       <Etiqueta tom={tomAtraso(devedor.maior_dias_atraso)}>
                         {devedor.maior_dias_atraso} {devedor.maior_dias_atraso === 1 ? 'dia' : 'dias'}
                       </Etiqueta>
+                      <div className="mt-0.5 whitespace-nowrap text-[11.5px] text-gray-400 2xl:hidden">
+                        desde {formatDate(devedor.menor_data_retorno)}
+                      </div>
                     </td>
-                    <td className={`${cls.td} whitespace-nowrap`}>
+                    <td className={`${cls.td} hidden whitespace-nowrap xl:table-cell`}>
                       {devedor.cliente_telefone ? (
                         <a
                           href={`tel:${devedor.cliente_telefone}`}
@@ -845,9 +848,9 @@ const Devedores: React.FC = () => {
                     </td>
                     <td className={`${cls.td} whitespace-nowrap`}>
                       <div className={cls.rowActions}>
-                        <button type="button" onClick={() => abrirModalCliente(devedor)} className={cls.btn}>
+                        <button type="button" onClick={() => abrirModalCliente(devedor)} className={cls.btn} aria-label="Ver detalhes" title="Ver detalhes">
                           <Eye className="h-4 w-4" />
-                          Ver detalhes
+                          <span className="hidden xl:inline">Ver detalhes</span>
                         </button>
                       </div>
                     </td>

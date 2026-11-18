@@ -211,7 +211,7 @@ const TabelaAtacado = () => {
                     {margin}%
                   </th>
                 ))}
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                <th scope="col" className="hidden px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider 2xl:table-cell">
                   Última Atualização
                 </th>
                 <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider sticky right-0 bg-gray-50 dark:bg-gray-700 z-10">
@@ -236,7 +236,7 @@ const TabelaAtacado = () => {
                 currentProdutos?.map((produto) => (
                   <tr key={produto.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800 z-10 group-hover:bg-gray-50 dark:group-hover:bg-gray-700">
-                      {produto.produto_nome}
+                      <div className="max-w-[170px] truncate xl:max-w-[240px] 2xl:max-w-none" title={produto.produto_nome}>{produto.produto_nome}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-semibold">
                       {formatCurrency(produto.preco_unt || 0)}
@@ -246,7 +246,7 @@ const TabelaAtacado = () => {
                         {formatCurrency((produto.preco_unt || 0) * (1 + margin / 100))}
                       </td>
                     ))}
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    <td className="hidden px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 2xl:table-cell">
                       {produto.updated_at 
                         ? format(new Date(produto.updated_at), "dd/MM/yyyy HH:mm", { locale: ptBR })
                         : '-'}

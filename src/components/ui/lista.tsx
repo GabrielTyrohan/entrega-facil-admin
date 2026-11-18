@@ -11,8 +11,8 @@ import React from 'react';
 // ---------- estilos reutilizáveis ----------
 export const cls = {
   card: 'rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800',
-  th: 'px-4 py-2.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap',
-  thR: 'px-4 py-2.5 text-right text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap',
+  th: 'relative px-4 py-2.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap',
+  thR: 'relative px-4 py-2.5 text-right text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap',
   td: 'px-4 py-3 text-[13px] text-gray-700 dark:text-gray-300',
   tdR: 'px-4 py-3 text-right font-mono text-[13px] tabular-nums text-gray-900 dark:text-white',
   thead: 'border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800',

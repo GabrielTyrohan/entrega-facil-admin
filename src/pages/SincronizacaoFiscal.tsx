@@ -1644,7 +1644,7 @@ function ListaNovosProdutos({
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700/50">
               <tr>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                <th className="relative px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                   <span className="sr-only">Seleção</span>
                 </th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">

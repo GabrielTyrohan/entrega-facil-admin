@@ -144,11 +144,11 @@ const ListaOrcamentos: React.FC = () => {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Nº</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Cliente</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Data</th>
+                  <th className="hidden px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider xl:table-cell">Data</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Valor Total</th>
                   {/* ✅ Coluna nova */}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  <th className="hidden px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider xl:table-cell">
                     <div className="flex items-center gap-1">
                       <User className="w-3.5 h-3.5" />
                       Criado por
@@ -173,9 +173,12 @@ const ListaOrcamentos: React.FC = () => {
                           #{orcamento.numero_orcamento}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                          {orcamento.cliente_nome}
+                          <div className="max-w-[240px] truncate" title={orcamento.cliente_nome}>{orcamento.cliente_nome}</div>
+                          <div className="text-xs text-gray-400 xl:hidden">
+                            {formatDate(orcamento.data_orcamento)} · por {nomeCriador}
+                          </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <td className="hidden px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 xl:table-cell">
                           {formatDate(orcamento.data_orcamento)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -186,7 +189,7 @@ const ListaOrcamentos: React.FC = () => {
                         </td>
 
                         {/* ✅ Célula com avatar + nome */}
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <td className="hidden px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 xl:table-cell">
                           <div className="flex items-center gap-2">
                             <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${getAvatarColor(nomeCriador)}`}>
                               {nomeCriador.charAt(0).toUpperCase()}
