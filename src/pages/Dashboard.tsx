@@ -2,13 +2,10 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCountUp, useDashboardAnimationFlag } from '@/hooks/useCountUp';
 import { useDashboard, useIsVisible } from '@/hooks/useDashboard';
-import { supabase } from '@/lib/supabase';
-import { EstoqueAtual } from '@/types/estoque';
-import { useQueryClient } from '@tanstack/react-query';
 import {
   Activity, AlertTriangle, ArrowRight, Calendar,
-  DollarSign, FileText, HelpCircle, Package, Search, ShoppingBasket,
-  TrendingDown, TrendingUp, Truck, Users
+  DollarSign, FileText, HelpCircle, Search, ShoppingBasket,
+  TrendingUp, Truck, Users
 } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
@@ -72,24 +69,6 @@ const Tooltip: React.FC<{ text: string }> = ({ text }) => {
         document.body
       )}
     </div>
-  );
-};
-
-// ─── Badge ────────────────────────────────────────────────────────────────────
-const Badge = ({
-  children, variant
-}: { children: React.ReactNode; variant: 'default' | 'destructive' | 'warning' | 'success' | 'outline' }) => {
-  const styles = {
-    default:     'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
-    destructive: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300',
-    warning:     'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300',
-    success:     'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
-    outline:     'border border-gray-200 text-gray-800 dark:border-gray-700 dark:text-gray-300',
-  };
-  return (
-    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${styles[variant]}`}>
-      {children}
-    </span>
   );
 };
 
@@ -190,58 +169,161 @@ const StatCard: React.FC<StatCardProps> = ({
   </div>
 );
 
+// ─── Cartões de análise (mesmo padrão da Receita mensal) ─────────────────────
+const brl = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+
+const CartaoAnalise: React.FC<{
+  titulo: string;
+  descricao: string;
+  ajuda?: string;
+  link?: { to: string; label: string };
+  children: React.ReactNode;
+}> = ({ titulo, descricao, ajuda, link, children }) => (
+  <div className="flex h-full flex-col rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-5">
+    <div className="mb-4 flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <h3 className="flex items-center text-[15px] font-semibold text-gray-900 dark:text-white">
+          {titulo}
+          {ajuda && <Tooltip text={ajuda} />}
+        </h3>
+        <p className="mt-0.5 text-[12.5px] text-gray-500 dark:text-gray-400">{descricao}</p>
+      </div>
+      {link && (
+        <Link
+          to={link.to}
+          className="inline-flex shrink-0 items-center gap-1 text-[12.5px] font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+        >
+          {link.label} <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      )}
+    </div>
+    {children}
+  </div>
+);
+
+const CarregandoLinhas: React.FC<{ n?: number }> = ({ n = 5 }) => (
+  <div className="space-y-4" aria-hidden="true">
+    {[...Array(n)].map((_, i) => (
+      <div key={i} className="space-y-1.5">
+        <div className="flex justify-between gap-3">
+          <Skeleton className="h-3.5 w-1/2" />
+          <Skeleton className="h-3.5 w-16" />
+        </div>
+        <Skeleton className="h-1 w-full rounded-full" />
+      </div>
+    ))}
+  </div>
+);
+
+const SemDados: React.FC<{ titulo: string; texto: string }> = ({ titulo, texto }) => (
+  <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
+    <p className="text-[13.5px] font-medium text-gray-700 dark:text-gray-200">{titulo}</p>
+    <p className="mt-0.5 text-[12.5px] text-gray-500 dark:text-gray-400">{texto}</p>
+  </div>
+);
+
+// Linha de ranking: posição, nome, detalhe, valor e barra proporcional ao primeiro.
+const LinhaRanking: React.FC<{ pos: number; nome: string; detalhe?: string; valor: string; pct: number; animar: boolean }> = ({
+  pos, nome, detalhe, valor, pct, animar,
+}) => (
+  <li className="grid grid-cols-[22px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5">
+    <span
+      className={`flex h-[22px] w-[22px] items-center justify-center rounded-md font-mono text-[11.5px] font-semibold ${
+        pos === 1 ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300' : 'text-gray-400'
+      }`}
+    >
+      {pos}
+    </span>
+    <div className="min-w-0">
+      <p className="truncate text-[13px] font-medium text-gray-900 dark:text-white">{nome}</p>
+      {detalhe && <p className="text-[11.5px] text-gray-500 dark:text-gray-400">{detalhe}</p>}
+    </div>
+    <span className="font-mono text-[13px] font-semibold tabular-nums text-gray-900 dark:text-white">{valor}</span>
+    <div className="col-start-2 col-end-4 h-1 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700/70">
+      <div
+        className={`h-full rounded-full bg-blue-600 transition-[width] duration-700 dark:bg-blue-400 ${pos === 1 ? '' : 'opacity-60'}`}
+        style={{ width: animar ? `${Math.max(pct, pct > 0 ? 2 : 0)}%` : '0%' }}
+      />
+    </div>
+  </li>
+);
+
 // ─── InadimplenciaCard ────────────────────────────────────────────────────────
+const FAIXAS_ATRASO = [
+  { key: 'ate30', label: 'Até 30 dias', cor: 'bg-amber-300 dark:bg-amber-400/70' },
+  { key: 'de30a60', label: '31 a 60 dias', cor: 'bg-orange-400 dark:bg-orange-400/80' },
+  { key: 'de60a90', label: '61 a 90 dias', cor: 'bg-red-400 dark:bg-red-400/80' },
+  { key: 'acima90', label: 'Mais de 90 dias', cor: 'bg-red-600 dark:bg-red-500' },
+];
+
 const InadimplenciaCard: React.FC<{
   data: { faixas: Record<string, number>; totais: Record<string, number> } | null;
   isLoading: boolean;
 }> = ({ data, isLoading }) => {
   const { ref, isVisible } = useIsVisible();
-  const fmt = (v: number) =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
-
-  const faixas = [
-    { key: 'ate30',   label: 'Até 30 dias', color: 'bg-yellow-400', textColor: 'text-yellow-700 dark:text-yellow-400' },
-    { key: 'de30a60', label: '30–60 dias',  color: 'bg-orange-400', textColor: 'text-orange-700 dark:text-orange-400' },
-    { key: 'de60a90', label: '60–90 dias',  color: 'bg-red-400',    textColor: 'text-red-700 dark:text-red-400'       },
-    { key: 'acima90', label: '+90 dias',    color: 'bg-red-700',    textColor: 'text-red-900 dark:text-red-300'       },
-  ];
+  const total = data ? FAIXAS_ATRASO.reduce((t, f) => t + (data.totais[f.key] || 0), 0) : 0;
+  const entregas = data ? FAIXAS_ATRASO.reduce((t, f) => t + (data.faixas[f.key] || 0), 0) : 0;
 
   return (
-    <div ref={ref} className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-          <TrendingDown className="w-5 h-5 text-red-500" />
-          Inadimplência por Faixa
-          <Tooltip text="Débitos em aberto agrupados pelo tempo desde o retorno da entrega." />
-        </h3>
-        <Link to="/devedores" className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 flex items-center gap-1">
-          Ver devedores <ArrowRight className="w-3 h-3" />
-        </Link>
-      </div>
-      {isLoading || !isVisible ? (
-        <div className="space-y-3">
-          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
-        </div>
-      ) : !data ? (
-        <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">Não há dados suficientes para este período.</p>
-      ) : (
-        <div className="space-y-3">
-          {faixas.map(f => (
-            <div key={f.key} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-              <div className="flex items-center gap-2">
-                <div className={`w-2.5 h-2.5 rounded-full ${f.color}`} />
-                <span className="text-sm text-gray-700 dark:text-gray-300">{f.label}</span>
-                <span className="text-xs bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 px-1.5 py-0.5 rounded-full">
-                  {data.faixas[f.key] || 0}
-                </span>
+    <div ref={ref} className="h-full">
+      <CartaoAnalise
+        titulo="Inadimplência por faixa"
+        descricao="Quanto está em aberto, por tempo de atraso"
+        ajuda="Débitos em aberto agrupados pelo tempo desde o retorno da entrega."
+        link={{ to: '/devedores', label: 'Ver devedores' }}
+      >
+        {isLoading || !isVisible ? (
+          <CarregandoLinhas n={4} />
+        ) : !data || total === 0 ? (
+          <SemDados titulo="Nada em aberto" texto="Nenhum débito atrasado no momento." />
+        ) : (
+          <>
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+              <div>
+                <p className="text-xs text-gray-400">Total em aberto</p>
+                <p className="font-mono text-lg font-semibold tabular-nums text-gray-900 dark:text-white">{brl(total)}</p>
               </div>
-              <span className={`text-sm font-semibold ${f.textColor}`}>
-                {fmt(data.totais[f.key] || 0)}
-              </span>
+              <p className="text-[12.5px] text-gray-500 dark:text-gray-400">
+                {entregas} {entregas === 1 ? 'entrega' : 'entregas'}
+              </p>
             </div>
-          ))}
-        </div>
-      )}
+            {/* Barra única dividida pelas faixas */}
+            <div
+              className="mb-4 flex h-2 gap-px overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700/70"
+              role="img"
+              aria-label="Divisão do total por faixa de atraso"
+            >
+              {FAIXAS_ATRASO.map((f) => {
+                const v = data.totais[f.key] || 0;
+                return v > 0 ? <div key={f.key} className={f.cor} style={{ width: `${(v / total) * 100}%` }} /> : null;
+              })}
+            </div>
+            <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+              {FAIXAS_ATRASO.map((f) => {
+                const v = data.totais[f.key] || 0;
+                const n = data.faixas[f.key] || 0;
+                return (
+                  <li key={f.key} className="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
+                    <span className={`h-2.5 w-2.5 shrink-0 rounded-sm ${f.cor}`} />
+                    <span className="min-w-0 flex-1 truncate text-[13px] text-gray-700 dark:text-gray-300">
+                      {f.label}
+                      <span className="ml-1.5 text-[11.5px] text-gray-400">
+                        {n} {n === 1 ? 'entrega' : 'entregas'}
+                      </span>
+                    </span>
+                    <span className="w-10 text-right font-mono text-[11.5px] tabular-nums text-gray-400">
+                      {Math.round((v / total) * 100)}%
+                    </span>
+                    <span className="min-w-[7rem] whitespace-nowrap text-right font-mono text-[13px] font-semibold tabular-nums text-gray-900 dark:text-white">
+                      {brl(v)}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+      </CartaoAnalise>
     </div>
   );
 };
@@ -252,62 +334,37 @@ const TopVendedoresCard: React.FC<{
   isLoading: boolean;
 }> = ({ data, isLoading }) => {
   const { ref, isVisible } = useIsVisible();
-  const fmt = (v: number) =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+  const max = Math.max(...data.map((d) => d.total), 0);
+  const vazio = data.length === 0 || data.every((d) => !d.total && !d.entregas);
 
   return (
-    <div ref={ref} className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 h-80 overflow-hidden flex flex-col">
-      <div className="flex items-center gap-2 mb-4 flex-shrink-0">
-        <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-          Top Vendedores — Período Atual
-        </h3>
-        <Tooltip text="Os 5 vendedores com maior valor total no período atual (baseado no dia de fechamento)." />
-      </div>
-      {isLoading || !isVisible ? (
-        <div className="space-y-4">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="flex items-center justify-between">
-              <div className="flex items-center flex-1">
-                <Skeleton className="w-8 h-8 rounded-full flex-shrink-0" />
-                <div className="ml-3 flex-1 space-y-2">
-                  <Skeleton className="h-4 w-3/4" />
-                  <Skeleton className="h-3 w-1/2" />
-                </div>
-              </div>
-              <Skeleton className="h-4 w-20 ml-2" />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-3 overflow-y-auto pr-2">
-          {data.length > 0 ? data.map((seller, index) => (
-            <div
-              key={index}
-              className="flex items-center justify-between animate-fade-in-up"
-              style={{ animationDelay: `${index * 150}ms` }}
-            >
-              <div className="flex items-center min-w-0 flex-1">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0 ${
-                  index === 0 ? 'bg-yellow-500' :
-                  index === 1 ? 'bg-gray-400'   :
-                  index === 2 ? 'bg-orange-600' : 'bg-blue-500'
-                }`}>{index + 1}</div>
-                <div className="ml-3 min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{seller.nome}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{seller.entregas} entregas</p>
-                </div>
-              </div>
-              <span className="text-sm font-medium text-green-600 flex-shrink-0 ml-2">
-                {fmt(seller.total)}
-              </span>
-            </div>
-          )) : (
-            <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">
-              Nenhuma entrega no mês
-            </p>
-          )}
-        </div>
-      )}
+    <div ref={ref} className="h-full">
+      <CartaoAnalise
+        titulo="Melhores vendedores"
+        descricao="Valor vendido no período atual"
+        ajuda="Os 5 vendedores com maior valor total no período atual (baseado no dia de fechamento)."
+        link={{ to: '/vendedores', label: 'Ver todos' }}
+      >
+        {isLoading || !isVisible ? (
+          <CarregandoLinhas />
+        ) : vazio ? (
+          <SemDados titulo="Sem vendas no período" texto="Os vendedores aparecem aqui conforme registram entregas." />
+        ) : (
+          <ol className="space-y-3.5">
+            {data.map((v, i) => (
+              <LinhaRanking
+                key={`${v.nome}-${i}`}
+                pos={i + 1}
+                nome={v.nome}
+                detalhe={`${v.entregas} ${v.entregas === 1 ? 'entrega' : 'entregas'}`}
+                valor={brl(v.total)}
+                pct={max ? (v.total / max) * 100 : 0}
+                animar={isVisible}
+              />
+            ))}
+          </ol>
+        )}
+      </CartaoAnalise>
     </div>
   );
 };
@@ -317,134 +374,35 @@ interface TopProdutoItem { id: string; nome: string; unidade: string; qtd: numbe
 
 const TopProdutosCard: React.FC<{ data: TopProdutoItem[]; isLoading: boolean }> = ({ data, isLoading }) => {
   const { ref, isVisible } = useIsVisible();
-  const cores = ['bg-orange-500', 'bg-orange-400', 'bg-orange-300', 'bg-orange-200', 'bg-orange-100'];
+  const max = Math.max(...data.map((d) => d.qtd), 0);
 
   return (
-    <div ref={ref} className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 h-80 overflow-hidden flex flex-col">
-      <div className="flex items-center gap-2 mb-4 flex-shrink-0">
-        <Package className="w-5 h-5 text-orange-500 flex-shrink-0" />
-        <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-          Top Produtos — Período Atual
-        </h3>
-        <Tooltip text="Os 5 produtos mais entregues via cestas no período atual de cada vendedor." />
-      </div>
-      {isLoading || !isVisible ? (
-        <div className="space-y-4">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="flex items-center gap-3">
-              <Skeleton className="w-5 h-5 rounded flex-shrink-0" />
-              <div className="flex-1 space-y-1.5">
-                <div className="flex justify-between">
-                  <Skeleton className="h-3.5 w-2/3" />
-                  <Skeleton className="h-3.5 w-12" />
-                </div>
-                <Skeleton className="h-1.5 w-full rounded-full" />
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-3 overflow-y-auto pr-1 flex-1">
-          {data.length > 0 ? data.map((produto, index) => {
-            const maxQtd = data[0]?.qtd || 1;
-            const pct = Math.round((produto.qtd / maxQtd) * 100);
-            return (
-              <div
-                key={produto.id}
-                className="flex items-center gap-3 animate-fade-in-up"
-                style={{ animationDelay: `${index * 150}ms` }}
-              >
-                <span className="w-5 text-xs font-bold text-gray-400 text-center shrink-0">{index + 1}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate">{produto.nome}</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0 ml-2">
-                      {produto.qtd} {produto.unidade}
-                    </span>
-                  </div>
-                  <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-700 ${cores[index] ?? 'bg-orange-100'}`}
-                      style={{ width: isVisible ? `${pct}%` : '0%' }}
-                    />
-                  </div>
-                </div>
-              </div>
-            );
-          }) : (
-            <div className="flex flex-col items-center justify-center h-full text-center">
-              <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center mb-3">
-                <Package className="w-6 h-6 text-orange-500" />
-              </div>
-              <p className="text-sm font-medium text-gray-900 dark:text-white">Sem entregas no mês</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Nenhuma cesta entregue registrada ainda.</p>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ─── EstoqueAlertsCard ────────────────────────────────────────────────────────
-const EstoqueAlertsCard: React.FC<{ data: EstoqueAtual[]; isLoading: boolean }> = ({ data, isLoading }) => {
-  const { ref, isVisible } = useIsVisible();
-
-  return (
-    <div ref={ref} className="bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 h-80 overflow-hidden flex flex-col">
-      <div className="flex items-center justify-between mb-4 flex-shrink-0">
-        <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-          <AlertTriangle className="w-5 h-5 text-yellow-500" />
-          Alertas de Estoque
-          {!isLoading && data?.length > 0 && (
-            <span className="bg-red-100 text-red-800 text-xs font-medium px-2.5 py-0.5 rounded dark:bg-red-900 dark:text-red-300">
-              {data.length}
-            </span>
-          )}
-          <Tooltip text="Produtos com estoque zerado ou abaixo de 20 unidades que precisam de reposição." />
-        </h3>
-        <Link to="/estoque/movimentacoes" className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 flex items-center gap-1">
-          Ver todos <ArrowRight className="w-3 h-3" />
-        </Link>
-      </div>
-      {isLoading || !isVisible ? (
-        <div className="space-y-4">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="flex items-center justify-between">
-              <Skeleton className="h-4 w-3/4" />
-              <Skeleton className="h-4 w-16 ml-2" />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-3 overflow-y-auto pr-2 h-full">
-          {data?.length > 0 ? data.map((produto, index) => (
-            <div
-              key={produto.id}
-              className="flex items-center justify-between animate-fade-in-up border-b border-gray-100 dark:border-gray-700 pb-2 last:border-0 last:pb-0"
-              style={{ animationDelay: `${index * 150}ms` }}
-            >
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{produto.produto_nome}</p>
-                <p className={`text-xs font-medium ${produto.status_estoque === 'ZERADO' ? 'text-red-600' : 'text-orange-600'}`}>
-                  {produto.status_estoque === 'ZERADO' ? 'Estoque Esgotado' : 'Estoque Baixo'}
-                </p>
-              </div>
-              <Badge variant={produto.status_estoque === 'ZERADO' ? 'destructive' : 'warning'}>
-                {produto.qtd_estoque} {produto.unidade_medida}
-              </Badge>
-            </div>
-          )) : (
-            <div className="flex flex-col items-center justify-center h-full text-center">
-              <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-3">
-                <TrendingUp className="w-6 h-6 text-green-600 dark:text-green-400" />
-              </div>
-              <p className="text-sm font-medium text-gray-900 dark:text-white">Estoque Saudável</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Nenhum produto abaixo do mínimo.</p>
-            </div>
-          )}
-        </div>
-      )}
+    <div ref={ref} className="h-full">
+      <CartaoAnalise
+        titulo="Produtos mais entregues"
+        descricao="Quantidade que saiu nas cestas no período atual"
+        ajuda="Os 5 produtos mais entregues via cestas no período atual de cada vendedor."
+        link={{ to: '/estoque/relatorio', label: 'Ver estoque' }}
+      >
+        {isLoading || !isVisible ? (
+          <CarregandoLinhas />
+        ) : data.length === 0 ? (
+          <SemDados titulo="Sem entregas no período" texto="Nenhuma cesta entregue registrada ainda." />
+        ) : (
+          <ol className="space-y-3.5">
+            {data.map((p, i) => (
+              <LinhaRanking
+                key={p.id}
+                pos={i + 1}
+                nome={p.nome}
+                valor={`${p.qtd.toLocaleString('pt-BR')} ${p.unidade}`}
+                pct={max ? (p.qtd / max) * 100 : 0}
+                animar={isVisible}
+              />
+            ))}
+          </ol>
+        )}
+      </CartaoAnalise>
     </div>
   );
 };
@@ -521,51 +479,12 @@ const VendedoresPorTipoCard: React.FC<{
 
 // ─── Dashboard Principal ──────────────────────────────────────────────────────
 const Dashboard: React.FC = () => {
-  const { userType, permissions, adminId, userProfile } = useAuth();
-  const queryClient = useQueryClient();
+  const { userType, permissions, userProfile } = useAuth();
   const isExpedicao = userType !== 'admin' && permissions?.expedicao === true;
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
 
   // ── Realtime ─────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!adminId) return;
-
-    const refetch = (keys: string[]) => {
-      keys.forEach(key =>
-        queryClient.refetchQueries({
-          predicate: (query) => query.queryKey[0] === key,
-          type: 'active',
-        })
-      );
-    };
-
-    const channel = supabase
-      .channel(`dashboard-realtime-${adminId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'entregas' }, () => {
-        refetch(['dashboard_core', 'dashboard_entregas_hoje', 'dashboard_inadimplencia', 'dashboard_top_vendedores']);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'entregas_cestas_vendedor' }, () => {
-        refetch(['dashboard_core', 'dashboard_top_produtos']);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pagamentos' }, () => {
-        refetch(['dashboard_core', 'dashboard_inadimplencia', 'dashboard_faturamento_mensal']);
-      })
-      // ✅ Pagamentos do atacado também atualizam o gráfico
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'vendas_atacado_pagamentos' }, () => {
-        refetch(['dashboard_faturamento_mensal']);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'movimentacoes_estoque' }, () => {
-        refetch(['dashboard_estoque_alerts']);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'estoque_vendedor' }, () => {
-        refetch(['dashboard_estoque_alerts']);
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [adminId, queryClient]);
+  // Atualização em tempo real: feita para o sistema todo em useRealtimeInvalidator (MainLayout).
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentDateTime(new Date()), 60000);
@@ -759,22 +678,17 @@ const Dashboard: React.FC = () => {
       {!isExpedicao && (
         <DashboardSection title="Análises" description="Evolução e desempenho no período">
           <ReceitaMensalChart data={charts.faturamentoMensal} isLoading={loadingStates.grafico} />
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          {/* Rankings e a dívida por tempo de atraso (acompanhar a cobrança).
+              Os produtos em falta ficam no "Precisa de você", com a ação de compra. */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
             <TopVendedoresCard data={vendedores} isLoading={loadingStates.vendedores} />
             <TopProdutosCard data={topProdutos} isLoading={loadingStates.topProdutos} />
+            <div className="grid lg:col-span-2 2xl:col-span-1">
+              <InadimplenciaCard data={inadimplencia} isLoading={loadingStates.inadimplencia} />
+            </div>
           </div>
         </DashboardSection>
       )}
-
-      {/* SEÇÃO 3 — Detalhe do que precisa de atenção */}
-      <DashboardSection title="Atenção necessária" description="Detalhe da inadimplência e do estoque">
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          {!isExpedicao && (
-            <InadimplenciaCard data={inadimplencia} isLoading={loadingStates.inadimplencia} />
-          )}
-          <EstoqueAlertsCard data={estoqueAlerts} isLoading={loadingStates.estoque} />
-        </div>
-      </DashboardSection>
     </div>
   );
 };

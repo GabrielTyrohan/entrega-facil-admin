@@ -26,6 +26,7 @@ import {
   gerarChaveIdempotenciaImportacaoFiscal,
   LIMITE_ITENS_IMPORTACAO_FISCAL,
   montarItemImportacaoFiscal,
+  preencherFiscalImportados,
   UNIDADES_MEDIDA_IMPORTACAO_FISCAL,
   validarEscolhaComercialImportacao,
   type EscolhaComercialImportacaoFiscal,
@@ -133,6 +134,11 @@ export default function SincronizacaoFiscal() {
     useState<RespostaImportacaoFiscalLote | null>(null);
   const [isValidando, setIsValidando] = useState(false);
   const [isGravando, setIsGravando] = useState(false);
+  // Opcional: copiar os campos fiscais da referência logo após importar.
+  // Desligado por padrão: o recomendado é preencher manualmente.
+  const [preencherFiscalAuto, setPreencherFiscalAuto] = useState(false);
+  const [cienteResponsabilidadeFiscal, setCienteResponsabilidadeFiscal] =
+    useState(false);
   const [avisoAtualizacao, setAvisoAtualizacao] = useState<string | null>(null);
   const chaveIdempotenciaPendente =
     useRef<ChaveIdempotenciaPendente | null>(null);
@@ -593,6 +599,13 @@ export default function SincronizacaoFiscal() {
       );
       return;
     }
+    if (preencherFiscalAuto && !cienteResponsabilidadeFiscal) {
+      setErroGravacao(
+        'Para preencher os campos fiscais automaticamente, marque que está ciente do aviso.',
+      );
+      return;
+    }
+    const preencherDepois = preencherFiscalAuto;
 
     const itens = itensPayloadAtuais;
     const assinatura = JSON.stringify(itens);
@@ -676,6 +689,27 @@ export default function SincronizacaoFiscal() {
           `${resposta.totalCriados} produto(s) importado(s) com fiscal_status pendente de revisão.`,
         );
       }
+
+      if (preencherDepois) {
+        const ids = resposta.itens
+          .map((item) => item.produtoId)
+          .filter((id): id is string => !!id);
+        try {
+          const r = await preencherFiscalImportados(ids);
+          toast.success(
+            `Campos fiscais preenchidos automaticamente em ${r.preenchidos} produto(s). ` +
+              'Confira e valide na Revisão fiscal.',
+          );
+        } catch {
+          // Os produtos já foram importados; só o preenchimento falhou.
+          toast.error(
+            'Os produtos foram importados, mas não foi possível preencher os campos fiscais. ' +
+              'Preencha na Revisão fiscal.',
+          );
+        }
+      }
+      setPreencherFiscalAuto(false);
+      setCienteResponsabilidadeFiscal(false);
 
       await recarregarPreviaSilenciosamente();
     } catch (err) {
@@ -1070,6 +1104,13 @@ export default function SincronizacaoFiscal() {
           isGravando={isGravando}
           erroGravacao={erroGravacao}
           falhaGravacao={falhaGravacao}
+          preencherFiscalAuto={preencherFiscalAuto}
+          onPreencherFiscalAutoChange={(v) => {
+            setPreencherFiscalAuto(v);
+            if (!v) setCienteResponsabilidadeFiscal(false);
+          }}
+          cienteResponsabilidadeFiscal={cienteResponsabilidadeFiscal}
+          onCienteResponsabilidadeFiscalChange={setCienteResponsabilidadeFiscal}
           onClose={fecharConfirmacao}
           onConfirmar={confirmarGravacao}
         />
@@ -2290,6 +2331,10 @@ interface ConfirmacaoImportacaoFiscalProps {
   isGravando: boolean;
   erroGravacao: string | null;
   falhaGravacao: RespostaImportacaoFiscalLote | null;
+  preencherFiscalAuto: boolean;
+  onPreencherFiscalAutoChange: (valor: boolean) => void;
+  cienteResponsabilidadeFiscal: boolean;
+  onCienteResponsabilidadeFiscalChange: (valor: boolean) => void;
   onClose: () => void;
   onConfirmar: () => void;
 }
@@ -2301,9 +2346,14 @@ function ConfirmacaoImportacaoFiscal({
   isGravando,
   erroGravacao,
   falhaGravacao,
+  preencherFiscalAuto,
+  onPreencherFiscalAutoChange,
+  cienteResponsabilidadeFiscal,
+  onCienteResponsabilidadeFiscalChange,
   onClose,
   onConfirmar,
 }: ConfirmacaoImportacaoFiscalProps) {
+  const bloqueadoPeloAviso = preencherFiscalAuto && !cienteResponsabilidadeFiscal;
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
@@ -2345,9 +2395,63 @@ function ConfirmacaoImportacaoFiscal({
         <div className="p-5 space-y-4">
           <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-3 text-xs text-blue-800 dark:text-blue-200">
             Serão criados produtos com os dados comerciais da referência. Os
-            campos fiscais definitivos permanecerão{' '}
-            <strong>pendentes de revisão</strong> e não serão copiados da
-            referência. Nenhum produto existente ou estoque atual será alterado.
+            produtos ficarão <strong>pendentes de revisão fiscal</strong> e só
+            entram em NF-e depois de validados. Nenhum produto existente ou
+            estoque atual será alterado.
+          </div>
+
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2">
+            <label className="flex items-start gap-2 text-sm text-gray-900 dark:text-white cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={preencherFiscalAuto}
+                disabled={isGravando}
+                onChange={(e) => onPreencherFiscalAutoChange(e.target.checked)}
+              />
+              <span>
+                <strong>Preencher campos fiscais automaticamente</strong>
+                <span className="block text-xs text-gray-600 dark:text-gray-400">
+                  Copia da planilha de referência o NCM, CEST, CFOP, CSOSN e
+                  PIS/COFINS (quando houver) e sugere o IBS/CBS pelo NCM. Os
+                  produtos continuam pendentes até você conferir e validar na
+                  Revisão fiscal.
+                </span>
+              </span>
+            </label>
+
+            {preencherFiscalAuto && (
+              <div
+                role="alert"
+                className="rounded-md border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3 text-xs text-amber-900 dark:text-amber-200 space-y-2"
+              >
+                <p className="font-semibold">Atenção</p>
+                <p>
+                  A melhor opção é sempre preencher os campos fiscais
+                  manualmente, de preferência com o seu contador. Os dados
+                  automáticos vêm da planilha de referência e de sugestões, e
+                  podem estar desatualizados, incorretos ou incompletos.
+                </p>
+                <p>
+                  O Entrega Fácil não se responsabiliza por informações fiscais
+                  inválidas ou pela falta de alguma informação. A conferência e
+                  a validação de cada produto são de responsabilidade da
+                  empresa.
+                </p>
+                <label className="flex items-start gap-2 cursor-pointer font-medium">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={cienteResponsabilidadeFiscal}
+                    disabled={isGravando}
+                    onChange={(e) =>
+                      onCienteResponsabilidadeFiscalChange(e.target.checked)
+                    }
+                  />
+                  Estou ciente e quero preencher automaticamente.
+                </label>
+              </div>
+            )}
           </div>
 
           {erroGravacao && (
@@ -2497,7 +2601,8 @@ function ConfirmacaoImportacaoFiscal({
             <button
               type="button"
               onClick={onConfirmar}
-              disabled={isGravando}
+              disabled={isGravando || bloqueadoPeloAviso}
+              title={bloqueadoPeloAviso ? 'Marque que está ciente do aviso para continuar.' : undefined}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isGravando ? (

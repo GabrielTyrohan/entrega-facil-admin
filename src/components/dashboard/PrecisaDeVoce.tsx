@@ -5,7 +5,8 @@
 // que é a mesma do menu e vem do cache).
 // ============================================
 
-import { AlertTriangle, CheckCircle2, Inbox, Package, Users } from 'lucide-react';
+import { useState } from 'react';
+import { AlertTriangle, CheckCircle2, ChevronDown, Inbox, Package, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePedidosPendentesCount } from '@/hooks/usePedidosVendedor';
@@ -25,9 +26,10 @@ interface Tarefa {
   icon: typeof Inbox;
   titulo: string;
   detalhe: string;
-  acao: string;
-  to: string;
+  acao?: string; // sem ação: só aviso (ex.: expedição vê o estoque, mas não registra compra)
+  to?: string;
   principal?: boolean;
+  lista?: { id: string; nome: string; qtd: string; zerado: boolean }[]; // detalhe que abre no próprio item
 }
 
 const TOM: Record<Tom, string> = {
@@ -43,7 +45,9 @@ export default function PrecisaDeVoce({ estoqueAlerts, inadimplencia, autonomosP
   const { isAdmin, permissions } = useAuth();
   const podePedidos = isAdmin || !!permissions?.cestas_vendedor || !!permissions?.produtos || !!permissions?.expedicao;
   const podeCobranca = isAdmin || !!permissions?.cobranca;
-  const podeEstoque = isAdmin || !!permissions?.produtos;
+  const podeCompra = isAdmin || !!permissions?.produtos;
+  const podeEstoque = podeCompra || !!permissions?.expedicao;
+  const [aberto, setAberto] = useState<string | null>(null);
   const { data: pedidos = 0 } = usePedidosPendentesCount(podePedidos);
 
   const tarefas: Tarefa[] = [];
@@ -63,7 +67,7 @@ export default function PrecisaDeVoce({ estoqueAlerts, inadimplencia, autonomosP
 
   if (podeEstoque && estoqueAlerts.length > 0) {
     const zerados = estoqueAlerts.filter((p) => p.status_estoque === 'ZERADO');
-    const nomes = estoqueAlerts.slice(0, 3).map((p) => `${p.produto_nome} (${p.qtd_estoque} ${p.unidade_medida})`).join(', ');
+    const nomes = estoqueAlerts.slice(0, 3).map((p) => p.produto_nome).join(', ');
     tarefas.push({
       id: 'estoque',
       tom: zerados.length ? 'bad' : 'warn',
@@ -72,8 +76,15 @@ export default function PrecisaDeVoce({ estoqueAlerts, inadimplencia, autonomosP
         ? `${plural(zerados.length, 'produto sem estoque', 'produtos sem estoque')}${estoqueAlerts.length > zerados.length ? ` e ${estoqueAlerts.length - zerados.length} acabando` : ''}`
         : plural(estoqueAlerts.length, 'produto com estoque baixo', 'produtos com estoque baixo'),
       detalhe: nomes + (estoqueAlerts.length > 3 ? '…' : ''),
-      acao: 'Registrar compra',
-      to: '/estoque/compras/nova',
+      ...(podeCompra ? { acao: 'Registrar compra', to: '/estoque/compras/nova' } : {}),
+      lista: [...estoqueAlerts]
+        .sort((a, b) => (a.qtd_estoque ?? 0) - (b.qtd_estoque ?? 0))
+        .map((p) => ({
+          id: String(p.id ?? p.produto_nome),
+          nome: p.produto_nome,
+          qtd: `${p.qtd_estoque} ${p.unidade_medida ?? ''}`.trim(),
+          zerado: p.status_estoque === 'ZERADO',
+        })),
     });
   }
 
@@ -145,15 +156,29 @@ export default function PrecisaDeVoce({ estoqueAlerts, inadimplencia, autonomosP
           <ul className="divide-y divide-gray-200 dark:divide-gray-700">
             {tarefas.map((t) => {
               const Icon = t.icon;
+              const expandido = aberto === t.id;
               return (
-                <li key={t.id} className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3.5 px-4 py-3">
+                <li key={t.id} className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-x-3.5 gap-y-2 px-4 py-3">
                   <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${TOM[t.tom]}`}>
                     <Icon className="h-[18px] w-[18px]" />
                   </div>
                   <div className="min-w-0">
                     <p className="text-[13.5px] font-semibold text-gray-900 dark:text-white">{t.titulo}</p>
                     <p className="truncate text-[12.5px] text-gray-500 dark:text-gray-400">{t.detalhe}</p>
+                    {t.lista && t.lista.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setAberto(expandido ? null : t.id)}
+                        aria-expanded={expandido}
+                        aria-controls={`lista-${t.id}`}
+                        className="mt-0.5 inline-flex items-center gap-1 text-[12.5px] font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                      >
+                        {expandido ? 'Esconder lista' : `Ver ${t.lista.length === 1 ? 'o produto' : `os ${t.lista.length} produtos`}`}
+                        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expandido ? 'rotate-180' : ''}`} />
+                      </button>
+                    )}
                   </div>
+                  {t.to && t.acao ? (
                   <Link
                     to={t.to}
                     className={`inline-flex h-8 items-center whitespace-nowrap rounded-md px-3 text-[13px] font-medium shadow-sm transition-colors ${
@@ -164,6 +189,26 @@ export default function PrecisaDeVoce({ estoqueAlerts, inadimplencia, autonomosP
                   >
                     {t.acao}
                   </Link>
+                  ) : <span />}
+                  {expandido && t.lista && (
+                    <ul
+                      id={`lista-${t.id}`}
+                      className="col-start-2 col-end-4 max-h-64 divide-y divide-gray-100 overflow-y-auto rounded-md border border-gray-200 dark:divide-gray-700 dark:border-gray-700"
+                    >
+                      {t.lista.map((item) => (
+                        <li key={item.id} className="flex items-center justify-between gap-3 px-3 py-1.5 text-[13px]">
+                          <span className="truncate text-gray-700 dark:text-gray-200">{item.nome}</span>
+                          <span
+                            className={`shrink-0 font-mono tabular-nums ${
+                              item.zerado ? 'font-semibold text-red-600 dark:text-red-400' : 'text-amber-700 dark:text-amber-400'
+                            }`}
+                          >
+                            {item.zerado ? `Sem estoque · ${item.qtd}` : item.qtd}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               );
             })}

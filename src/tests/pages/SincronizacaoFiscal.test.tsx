@@ -936,6 +936,66 @@ describe('SincronizacaoFiscal', () => {
           confirmar_descricao_duplicada: false,
         },
       ]);
+      // Sem marcar a opção, nada de preenchimento fiscal automático.
+      expect(
+        mockRpc.mock.calls.filter((c) => c[0] === 'preencher_fiscal_importados'),
+      ).toHaveLength(0);
+    });
+
+    it('10b. preenchimento fiscal automático exige ciência do aviso e roda após importar', async () => {
+      renderPage();
+      await abrirAbaNovosProdutos();
+      await selecionarCandidatoValido();
+      await configurarCandidatoValido();
+
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Validar selecionados' }),
+      );
+      await waitFor(() =>
+        expect(chamadasRpcDoModo('validar')).toHaveLength(1),
+      );
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Importar selecionados' }),
+      );
+
+      await userEvent.click(
+        screen.getByRole('checkbox', {
+          name: /Preencher campos fiscais automaticamente/,
+        }),
+      );
+      expect(
+        screen.getByText(/não se responsabiliza por informações fiscais/),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/melhor opção é sempre preencher os campos fiscais/),
+      ).toBeInTheDocument();
+      const confirmar = screen.getByRole('button', {
+        name: 'Confirmar e importar',
+      });
+      expect(confirmar).toBeDisabled();
+
+      await userEvent.click(
+        screen.getByRole('checkbox', {
+          name: 'Estou ciente e quero preencher automaticamente.',
+        }),
+      );
+      expect(confirmar).toBeEnabled();
+      await userEvent.click(confirmar);
+
+      expect(
+        await screen.findByText('Importação concluída'),
+      ).toBeInTheDocument();
+      await waitFor(() =>
+        expect(
+          mockRpc.mock.calls.filter(
+            (c) => c[0] === 'preencher_fiscal_importados',
+          ),
+        ).toHaveLength(1),
+      );
+      const chamada = mockRpc.mock.calls.find(
+        (c) => c[0] === 'preencher_fiscal_importados',
+      )!;
+      expect(chamada[1]).toEqual({ p_produto_ids: ['produto-criado-1'] });
     });
 
     it('11. reutiliza a mesma chave UUID em retry da mesma operação', async () => {

@@ -584,3 +584,38 @@ export async function chamarImportacaoFiscalLote(
 
   return normalizarRespostaImportacaoFiscal(data, modo);
 }
+
+/** RPC opcional que copia os campos fiscais da planilha de referência. */
+export const RPC_PREENCHER_FISCAL_IMPORTADOS = 'preencher_fiscal_importados';
+
+export interface ResultadoPreenchimentoFiscal {
+  preenchidos: number;
+  ignorados: number;
+}
+
+/**
+ * Preenche automaticamente os campos fiscais dos produtos recém-importados
+ * (NCM, CEST, CFOP, CSOSN, PIS/COFINS da referência e sugestão IBS/CBS pelo
+ * NCM). Só preenche campo vazio e NÃO valida: os produtos continuam
+ * pendentes de revisão fiscal.
+ */
+export async function preencherFiscalImportados(
+  produtoIds: string[],
+): Promise<ResultadoPreenchimentoFiscal> {
+  const ids = Array.from(new Set(produtoIds.filter(Boolean)));
+  if (ids.length === 0) return { preenchidos: 0, ignorados: 0 };
+
+  const { data, error } = await supabase.rpc(RPC_PREENCHER_FISCAL_IMPORTADOS, {
+    p_produto_ids: ids,
+  });
+  if (error) {
+    throw new Error(
+      error.message || 'Não foi possível preencher os campos fiscais.',
+    );
+  }
+  const r = (data ?? {}) as Partial<ResultadoPreenchimentoFiscal>;
+  return {
+    preenchidos: Number(r.preenchidos ?? 0),
+    ignorados: Number(r.ignorados ?? 0),
+  };
+}

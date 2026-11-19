@@ -17,6 +17,7 @@ import {
   LIMITE_ITENS_IMPORTACAO_FISCAL,
   montarItemImportacaoFiscal,
   normalizarRespostaImportacaoFiscal,
+  preencherFiscalImportados,
   UNIDADES_MEDIDA_IMPORTACAO_FISCAL,
   validarEscolhaComercialImportacao,
 } from '../../services/importacaoFiscalLoteService';
@@ -376,5 +377,30 @@ describe('importacaoFiscalLoteService', () => {
     expect(arquivo).not.toMatch(/functions\.invoke/);
     expect(arquivo).not.toMatch(/supabase\s*\.\s*from\s*\(/);
     expect(arquivo).toContain('importar_produtos_fiscal_lote_seguro');
+  });
+});
+
+describe('preencherFiscalImportados', () => {
+  beforeEach(() => {
+    mockRpc.mockReset();
+  });
+
+  it('chama a RPC com ids únicos e devolve os totais', async () => {
+    mockRpc.mockResolvedValue({ data: { preenchidos: 2, ignorados: 1 }, error: null });
+    const r = await preencherFiscalImportados(['a', 'b', 'a', 'c', '']);
+    expect(mockRpc).toHaveBeenCalledWith('preencher_fiscal_importados', {
+      p_produto_ids: ['a', 'b', 'c'],
+    });
+    expect(r).toEqual({ preenchidos: 2, ignorados: 1 });
+  });
+
+  it('não chama a RPC sem produtos', async () => {
+    expect(await preencherFiscalImportados([])).toEqual({ preenchidos: 0, ignorados: 0 });
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('propaga o erro da RPC', async () => {
+    mockRpc.mockResolvedValue({ data: null, error: { message: 'Sem permissão' } });
+    await expect(preencherFiscalImportados(['a'])).rejects.toThrow('Sem permissão');
   });
 });

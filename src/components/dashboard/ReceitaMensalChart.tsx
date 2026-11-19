@@ -4,7 +4,7 @@
 // Dados: get_faturamento_12_periodos_por_admin (pagamentos das entregas + vendas atacado).
 // ============================================
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 interface MonthData {
   month: string; // 'MM/YY'
@@ -35,17 +35,18 @@ function passoRedondo(bruto: number) {
 }
 
 // Largura real do gráfico em px: o SVG é desenhado 1:1, sem ampliar texto em telas largas.
+// Ref de callback: a caixa só aparece depois do carregamento, então o observer precisa
+// ser ligado quando o elemento surge (um useEffect com [] rodaria antes e nunca mediria).
 function useLargura<T extends HTMLElement>(inicial: number) {
-  const ref = useRef<T>(null);
+  const [el, setEl] = useState<T | null>(null);
   const [largura, setLargura] = useState(inicial);
   useEffect(() => {
-    const el = ref.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(([e]) => setLargura(Math.round(e.contentRect.width)));
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
-  return [ref, largura] as const;
+  }, [el]);
+  return [setEl, largura] as const;
 }
 
 export default function ReceitaMensalChart({ data, isLoading }: { data: MonthData[]; isLoading: boolean }) {

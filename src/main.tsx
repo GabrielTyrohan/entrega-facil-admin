@@ -7,20 +7,11 @@ import './index.css'
 import { queryClient } from './lib/cache/cacheConfig'
 import { persistOptions } from './lib/cache/indexedDBPersister'
 
-// Queries do dashboard nunca são persistidas no IndexedDB
-// pois precisam ser sempre buscadas frescas do servidor
-const DASHBOARD_KEYS = [
-  'dashboard_stats',
-  'dashboard_entregas_hoje',
-  'dashboard_grafico',
-  'dashboard_inadimplencia',
-  'dashboard_top_produtos',
-  'dashboard_estoque',
-  'dashboard_acertos',
-  'dashboard_vendedores',
-  'dashboard_charts',
-  'dashboard_fluxo',
-]
+// Dados que nunca vão para o disco (IndexedDB): precisam vir sempre frescos do servidor.
+// Pelo prefixo, para valer também para chaves novas do Início ('dashboard_core', 'dashboard_top_vendedores'…).
+const NAO_PERSISTIR = ['dashboard', 'view_estoque_atual', 'estoque_atual', 'pedidos_vendedor'];
+const naoPersistir = (key: unknown) =>
+  typeof key === 'string' && NAO_PERSISTIR.some((prefixo) => key.startsWith(prefixo));
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -30,9 +21,8 @@ createRoot(document.getElementById('root')!).render(
         ...persistOptions,
         dehydrateOptions: {
           shouldDehydrateQuery: (query) => {
-            const key = query.queryKey[0] as string;
-            // Não persiste queries do dashboard nem queries com erro
-            return !DASHBOARD_KEYS.includes(key) && query.state.status !== 'error';
+            // Não persiste o Início, o estoque, os pedidos nem consultas com erro
+            return !naoPersistir(query.queryKey[0]) && query.state.status === 'success';
           },
         },
       }}

@@ -1,3 +1,4 @@
+import { esquecerDonoDoCache, garantirCacheDoUsuario, limparCache } from '@/lib/cache/limparCache';
 import { prefetchEssentialData } from '@/lib/cache/prefetch';
 import { CACHE_KEYS } from '@/lib/constants/queryKeys';
 import { supabase } from '@/lib/supabase';
@@ -289,7 +290,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       await supabase.auth.signOut();
       setUser(null);
-      queryClient.removeQueries({ queryKey: [CACHE_KEYS.USER_PROFILE] });
+      // Apaga tudo que ficou guardado (memória e disco) para o próximo a usar o computador.
+      await limparCache(queryClient);
+      esquecerDonoDoCache();
       toast.success('Logout realizado com sucesso');
     } catch (error) {
       console.error('❌ Erro no logout:', error);
@@ -302,7 +305,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const initAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) setUser(session.user);
+        if (session?.user) {
+          // Cache guardado de outra pessoa (ex.: outro login neste computador) não é reaproveitado.
+          await garantirCacheDoUsuario(queryClient, session.user.id);
+          setUser(session.user);
+        }
       } catch (error) {
         console.error('Erro ao verificar sessão:', error);
       } finally {
@@ -313,6 +320,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) await garantirCacheDoUsuario(queryClient, session.user.id);
       setUser(session?.user ?? null);
       if (!session?.user) {
         // Limpa presença se sessão cair por token expirado
@@ -323,7 +331,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           presenceChannelRef.current = null;
           presenceTrackedRef.current = false;
         }
-        queryClient.removeQueries({ queryKey: [CACHE_KEYS.USER_PROFILE] });
+        // Sessão caiu (expirou ou saiu em outra janela): não deixa dados guardados.
+        limparCache(queryClient).catch(() => {});
+        esquecerDonoDoCache();
       }
     });
 

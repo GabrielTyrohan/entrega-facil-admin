@@ -5,6 +5,7 @@ import Header from './Header';
 import Sidebar from './Sidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePedidosPendentesCount, usePedidosRealtime } from '@/hooks/usePedidosVendedor';
+import { useRealtimeInvalidator } from '@/hooks/useRealtimeInvalidator';
 
 const MainLayout: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -15,6 +16,8 @@ const MainLayout: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
     isAdmin || !!permissions?.cestas_vendedor || !!permissions?.produtos || !!permissions?.expedicao;
   const { data: pedidosPendentes = 0 } = usePedidosPendentesCount(podeAtenderPedidos);
   usePedidosRealtime(podeAtenderPedidos);
+  // Telas abertas se atualizam sozinhas quando entregas, pagamentos, estoque, acertos ou caixa mudam no banco.
+  useRealtimeInvalidator();
   // Preferência de sidebar recolhida (somente desktop) persistida em localStorage
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     try {

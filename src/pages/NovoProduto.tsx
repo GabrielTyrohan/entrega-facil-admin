@@ -16,7 +16,8 @@ import {
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { useAuth } from '../contexts/AuthContext';
+import { gtinValido } from '@/utils/gtin';
+import { filtrarNcmCompletos, formatarNcm, termosParaNCM, type NcmSugestao } from '@/utils/ncm';
 import { supabase } from '../lib/supabase';
 import { montarPayloadCadastroProduto } from '../services/produtoService';
 
@@ -93,7 +94,6 @@ interface DadosProduto {
 
 const NovoProduto: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
 
   // =====================================================
   // ESTADOS
@@ -138,6 +138,9 @@ const NovoProduto: React.FC = () => {
   const [sugestoesNCM, setSugestoesNCM] = useState<NCMInfo[]>([]);
   const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
   const [ncmBuscaTermo, setNcmBuscaTermo] = useState('');
+  // Sugestões de NCM pelo nome do produto (quando o código de barras não traz NCM)
+  const [ncmPeloNome, setNcmPeloNome] = useState<{ termo: string; lista: NcmSugestao[] } | null>(null);
+  const [buscandoNcmPeloNome, setBuscandoNcmPeloNome] = useState(false);
 
   // =====================================================
   // EFFECTS
@@ -159,9 +162,42 @@ const NovoProduto: React.FC = () => {
   // FUNÇÕES - BUSCAR POR CÓDIGO DE BARRAS
   // =====================================================
 
+  // Por que o NCM não veio na busca por código de barras (campo aviso_ncm da função).
+  const MOTIVO_SEM_NCM: Record<string, string> = {
+    cosmos_limite: 'O Cosmos atingiu o limite de consultas do seu plano, por isso o NCM não veio. Digite o NCM ou tente mais tarde.',
+    cosmos_chave_recusada: 'O Cosmos recusou a chave cadastrada (COSMOS_TOKEN). Confira a chave no Supabase. Digite o NCM.',
+    cosmos_indisponivel: 'O Cosmos não respondeu agora, por isso o NCM não veio. Digite o NCM ou tente de novo.',
+    cosmos_sem_chave: 'O NCM só vem automático com a chave do Cosmos. Digite o NCM do produto.',
+  };
+
+  // Procura o NCM na tabela oficial pelo nome, do termo mais específico ao mais geral.
+  // Só sugere: quem escolhe é o usuário (classificação fiscal é responsabilidade da empresa).
+  const sugerirNcmPeloNome = async (nome: string) => {
+    const termos = termosParaNCM(nome);
+    if (!termos.length) return;
+    setBuscandoNcmPeloNome(true);
+    setNcmPeloNome(null);
+    try {
+      for (const termo of termos) {
+        const { data } = await supabase.functions.invoke('pesquisar-ncm', { body: { termo } });
+        const lista = filtrarNcmCompletos(data?.ncms ?? []).slice(0, 8);
+        if (lista.length) {
+          setNcmPeloNome({ termo, lista });
+          return;
+        }
+      }
+      setNcmPeloNome({ termo: termos[termos.length - 1], lista: [] });
+    } catch (e) {
+      console.error('Erro ao sugerir NCM:', e);
+    } finally {
+      setBuscandoNcmPeloNome(false);
+    }
+  };
+
   const handleBuscarEAN = async () => {
-    if (!formData.codigo_barras || formData.codigo_barras.length < 8) {
-      toast.error('Digite um código de barras válido (mínimo 8 dígitos)');
+    const codigo = (formData.codigo_barras || '').replace(/D/g, '');
+    if (!gtinValido(codigo)) {
+      toast.error('Código de barras inválido. Confira os números (8, 12, 13 ou 14 dígitos).');
       return;
     }
 
@@ -169,30 +205,46 @@ const NovoProduto: React.FC = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke('buscar-produto-ean', {
-        body: { 
-          ean: formData.codigo_barras,
-          administrador_id: user?.id 
-        }
+        body: { ean: codigo }
       });
 
-      if (error) throw new Error(error.message);
-      if (data?.error) throw new Error(data.error);
+      if (error) {
+        // A função manda a explicação no corpo da resposta (ex.: sem permissão).
+        let msg = 'Não foi possível consultar agora. Tente de novo ou preencha manualmente.';
+        try {
+          const corpo = await (error as { context?: Response }).context?.json();
+          if (corpo?.error) msg = corpo.error;
+        } catch { /* sem corpo legível */ }
+        throw new Error(msg);
+      }
 
       if (data?.success && data?.produto) {
         const produto: ProdutoEAN = data.produto;
-        
+
         setFormData(prev => ({
           ...prev,
-          produto_nome: produto.descricao,
-          ncm: produto.ncm,
-          ncm_descricao: produto.ncm_descricao || ''
+          produto_nome: produto.descricao || prev.produto_nome,
+          // Algumas fontes não trazem NCM: mantém o que já foi digitado.
+          ncm: produto.ncm || prev.ncm,
+          ncm_descricao: produto.ncm ? produto.ncm_descricao || '' : prev.ncm_descricao
         }));
 
-        toast.success('✅ Produto encontrado! Dados preenchidos automaticamente.');
+        if (produto.ncm) {
+          toast.success('Produto encontrado! Nome e NCM preenchidos.');
+          setNcmPeloNome(null);
+        } else {
+          toast.success('Produto encontrado! Nome preenchido. Veja as sugestões de NCM.');
+          if (data?.aviso_ncm === 'cosmos_chave_recusada') toast.warning(MOTIVO_SEM_NCM.cosmos_chave_recusada);
+          if (!formData.ncm) sugerirNcmPeloNome(produto.descricao);
+        }
+      } else if (data?.motivo === 'codigo_invalido') {
+        toast.error('Código de barras inválido. Confira os números.');
+      } else {
+        toast.info('Produto não encontrado nas bases públicas. Preencha os dados manualmente.');
       }
     } catch (error: any) {
       console.error('Erro ao buscar EAN:', error);
-      toast.error(error.message || 'Produto não encontrado. Preencha manualmente.');
+      toast.error(error.message || 'Não foi possível consultar agora. Preencha manualmente.');
     } finally {
       setLoadingEAN(false);
     }
@@ -215,10 +267,8 @@ const NovoProduto: React.FC = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke('pesquisar-ncm', {
-        body: { 
-          termo,
-          administrador_id: user?.id 
-        }
+        // Sem administrador_id: a função descobre pela sessão (para funcionária, user.id não é o dono).
+        body: { termo }
       });
 
       if (error) throw new Error(error.message);
@@ -245,6 +295,7 @@ const NovoProduto: React.FC = () => {
     setNcmBuscaTermo('');
     setMostrarSugestoes(false);
     setSugestoesNCM([]);
+    setNcmPeloNome(null);
     
     if (errors.ncm) {
       setErrors(prev => {
@@ -265,8 +316,7 @@ const NovoProduto: React.FC = () => {
     try {
       const { data, error } = await supabase.functions.invoke('validar-ncm', {
         body: { 
-          ncm: formData.ncm,
-          administrador_id: user?.id 
+          ncm: formData.ncm
         }
       });
 
@@ -369,18 +419,24 @@ const NovoProduto: React.FC = () => {
       const produtoPayload: DadosProduto = montarPayloadCadastroProduto(formData);
 
       // Chamar Edge Function que faz TUDO
+      // O dono do produto vem da sessão (na função); não enviar administrador_id.
       const { data, error } = await supabase.functions.invoke('cadastrar-produto', {
-        body: {
-          produto: produtoPayload,
-          administrador_id: user?.id
-        }
+        body: { produto: produtoPayload }
       });
 
-      if (error) throw new Error(error.message);
+      if (error) {
+        let msg = 'Não foi possível cadastrar o produto. Tente de novo.';
+        try {
+          const corpo = await (error as { context?: Response }).context?.json();
+          if (corpo?.error) msg = corpo.error;
+        } catch { /* sem corpo legível */ }
+        throw new Error(msg);
+      }
       if (data?.error) throw new Error(data.error);
 
       if (data?.success && data?.produto) {
-        toast.success('🎉 Produto cadastrado com sucesso!');
+        toast.success('Produto cadastrado com sucesso!');
+        (data.avisos as string[] | undefined)?.forEach((aviso) => toast.warning(aviso));
 
         // Redirecionar após 1.5 segundos
         setTimeout(() => {
@@ -680,6 +736,50 @@ const NovoProduto: React.FC = () => {
               </div>
             </div>
             
+            {/* NCM pelo nome do produto */}
+            {!formData.ncm && formData.produto_nome.trim().length >= 3 && (
+              <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-500/30 dark:bg-blue-500/10">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">
+                    {ncmPeloNome?.lista.length
+                      ? <>Sugestões de NCM para “{ncmPeloNome.termo}”</>
+                      : ncmPeloNome
+                        ? <>Nenhum NCM encontrado pelo nome. Pesquise no campo NCM com outra palavra.</>
+                        : <>Não sabe o NCM? Procure pelo nome do produto.</>}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => sugerirNcmPeloNome(formData.produto_nome)}
+                    disabled={buscandoNcmPeloNome}
+                    className="rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-60 dark:border-blue-500/40 dark:bg-gray-800 dark:text-blue-300"
+                  >
+                    {buscandoNcmPeloNome ? 'Procurando…' : ncmPeloNome ? 'Procurar de novo' : 'Sugerir pelo nome'}
+                  </button>
+                </div>
+                {ncmPeloNome && ncmPeloNome.lista.length > 0 && (
+                  <>
+                    <ul className="mt-3 divide-y divide-blue-100 overflow-hidden rounded-md border border-blue-100 bg-white dark:divide-gray-700 dark:border-gray-700 dark:bg-gray-800">
+                      {ncmPeloNome.lista.map((n) => (
+                        <li key={n.codigo}>
+                          <button
+                            type="button"
+                            onClick={() => handleSelecionarNCM({ codigo: n.codigo, descricao: n.descricao })}
+                            className="flex w-full items-baseline gap-3 px-3 py-2 text-left text-sm hover:bg-blue-50 dark:hover:bg-gray-700"
+                          >
+                            <span className="shrink-0 font-mono font-semibold text-gray-900 dark:text-white">{formatarNcm(n.codigo)}</span>
+                            <span className="text-gray-600 dark:text-gray-300">{n.descricao}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                      Confira com seu contador: o NCM define os impostos da nota.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
