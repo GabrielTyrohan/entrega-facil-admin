@@ -196,6 +196,14 @@ async function uploadAll(vendedor: any, body: any) {
     }
   }
 
+  const somenteDigitos = (v: any) => String(v || '').replace(/\D/g, '')
+  const nomeDoCliente = (c: any) => {
+    const nome = [c?.nome, c?.sobrenome].map((p: any) => String(p || '').trim()).filter(Boolean).join(' ')
+    return nome || String(c?.razao_social || c?.nome_fantasia || '').trim() || 'sem nome'
+  }
+  const clienteDoEnvio = (campo: 'cpf' | 'cnpj', valor: any) =>
+    clientes.find((c: any) => somenteDigitos(c?.[campo]) === somenteDigitos(valor))
+
   const cpfs = [...new Set(clientes
     .map((c: any) => String(c?.cpf || '').replace(/\D/g, ''))
     .filter(Boolean))]
@@ -205,8 +213,10 @@ async function uploadAll(vendedor: any, body: any) {
       .select('id, vendedor_id, cpf')
       .in('cpf', cpfs)
     if (error) throw new Error('Falha ao validar CPF de clientes')
-    if ((cpfExistentes || []).some((c: any) => String(c.vendedor_id) !== String(vendedorId))) {
-      throw new Error('CPF já cadastrado para outro vendedor/empresa')
+    const conflitoCPF = (cpfExistentes || []).find((c: any) => String(c.vendedor_id) !== String(vendedorId))
+    if (conflitoCPF) {
+      const nome = nomeDoCliente(clienteDoEnvio('cpf', conflitoCPF.cpf))
+      throw new Error(`O cliente ${nome} já está cadastrado com outro vendedor ou em outra empresa. Corrija o CPF no cadastro.`)
     }
   }
 
@@ -219,8 +229,10 @@ async function uploadAll(vendedor: any, body: any) {
       .select('id, vendedor_id, cnpj')
       .in('cnpj', cnpjs)
     if (error) throw new Error('Falha ao validar CNPJ de clientes')
-    if ((cnpjExistentes || []).some((c: any) => String(c.vendedor_id) !== String(vendedorId))) {
-      throw new Error('CNPJ já cadastrado para outro vendedor/empresa')
+    const conflitoCNPJ = (cnpjExistentes || []).find((c: any) => String(c.vendedor_id) !== String(vendedorId))
+    if (conflitoCNPJ) {
+      const nome = nomeDoCliente(clienteDoEnvio('cnpj', conflitoCNPJ.cnpj))
+      throw new Error(`O cliente ${nome} já está cadastrado com outro vendedor ou em outra empresa. Corrija o CNPJ no cadastro.`)
     }
   }
 
