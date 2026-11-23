@@ -301,7 +301,9 @@ export const useEstoqueAlertsDashboard = (adminId: string, enabled: boolean) => 
       const { data, error } = await supabase
         .from('produtos_cadastrado')
         .select('id, produto_nome, qtd_estoque, estoque_minimo, unidade_medida')
-        .eq('administrador_id', adminId);
+        .eq('administrador_id', adminId)
+        // Só os de estoque baixo (mesmo corte do filtro abaixo): evita baixar o catálogo inteiro.
+        .or('qtd_estoque.lt.20,qtd_estoque.is.null');
 
 
       if (error) throw error;
