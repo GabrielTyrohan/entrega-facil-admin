@@ -96,9 +96,20 @@ async function rpc(name: string, args: Record<string, unknown>) {
   return data
 }
 
-async function downloadCore(vendedor: any) {
+// Data válida enviada pelo app (ISO). Qualquer outra coisa vira download completo.
+function dataDoCorpo(valor: unknown): string | null {
+  if (typeof valor !== 'string' || !valor) return null
+  const t = Date.parse(valor)
+  return Number.isFinite(t) ? new Date(t).toISOString() : null
+}
+
+async function downloadCore(vendedor: any, body: any = {}) {
   const vendedorId = vendedor.id
   const adminId = vendedor.administrador_id
+  // Clientes incrementais: o app manda clientesDesde (com folga) e guarda o cursorClientes
+  // devolvido. Sem clientesDesde (APK antigo ou primeira vez) vem a lista completa.
+  const clientesDesde = dataDoCorpo(body?.clientesDesde)
+  const cursorClientes = new Date().toISOString()
 
   const [
     clientes,
@@ -110,7 +121,9 @@ async function downloadCore(vendedor: any) {
     produtosCadastrado,
     cestasBaseResult,
   ] = await Promise.all([
-    rpc('get_clientes_vendedor', { p_vendedor_id: vendedorId }),
+    clientesDesde
+      ? rpc('get_clientes_vendedor', { p_vendedor_id: vendedorId, p_updated_after: clientesDesde })
+      : rpc('get_clientes_vendedor', { p_vendedor_id: vendedorId }),
     rpc('get_produtos_vendedor', { p_vendedor_id: vendedorId }),
     rpc('get_entregas_vendedor', { p_vendedor_id: vendedorId }),
     rpc('get_entregas_pendentes_vendedor', { p_vendedor_id: vendedorId }),
@@ -142,6 +155,8 @@ async function downloadCore(vendedor: any) {
       percentual_minimo: vendedor.percentual_minimo,
     },
     clientes: clientes || [],
+    clientesIncremental: Boolean(clientesDesde),
+    cursorClientes,
     produtos: produtos || [],
     entregas: entregas || [],
     entregasPendentes: entregasPendentes || [],
@@ -294,7 +309,7 @@ Deno.serve(async (req) => {
 
     let data: any
     if (action === 'download') {
-      data = await downloadCore(vendedor)
+      data = await downloadCore(vendedor, body)
     } else if (action === 'download_itens') {
       data = await downloadItens(vendedor, body)
     } else if (action === 'download_estoque') {
