@@ -312,6 +312,9 @@ const Vendedores: React.FC = () => {
                     </td>
                     <td className={cls.td}>
                       <Etiqueta tom={vendedor.ativo ? 'ok' : 'neutro'}>{vendedor.ativo ? 'Ativo' : 'Inativo'}</Etiqueta>
+                      {vendedor.modelo_venda === 'revendedor' && (
+                        <Etiqueta tom="destaque" className="ml-1">Revendedor</Etiqueta>
+                      )}
                     </td>
                     <td className={cls.td}>
                       <div className="flex flex-wrap items-center gap-1">

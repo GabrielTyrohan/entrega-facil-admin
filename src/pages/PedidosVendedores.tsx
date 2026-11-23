@@ -10,6 +10,7 @@ import {
   usePedidosVendedor,
   useRecusarPedido,
 } from '@/hooks/usePedidosVendedor';
+import PainelPedidoRevendedor from '@/components/pedidos/PainelPedidoRevendedor';
 
 const STATUS_LABEL: Record<StatusPedido, string> = {
   pendente: 'Aguardando',
@@ -286,8 +287,9 @@ const PedidosVendedores: React.FC = () => {
                     >
                       {ativo && <span aria-hidden="true" className="absolute inset-y-0 left-0 w-0.5 bg-blue-600" />}
                       <div className="flex items-center justify-between gap-3">
-                        <span className="text-[13.5px] font-medium text-gray-900 dark:text-white">
+                        <span className="flex items-center gap-1.5 text-[13.5px] font-medium text-gray-900 dark:text-white">
                           #{p.numero} · {p.vendedor?.nome ?? 'Vendedor'}
+                          {p.vendedor?.modelo_venda === 'revendedor' && <Etiqueta tom="destaque">Revendedor</Etiqueta>}
                         </span>
                         <Etiqueta tom={STATUS_TOM[p.status]} className="shrink-0">{STATUS_LABEL[p.status]}</Etiqueta>
                       </div>
@@ -303,7 +305,11 @@ const PedidosVendedores: React.FC = () => {
 
         <div>
           {selecionado ? (
-            <PainelAtendimento key={selecionado.id} pedido={selecionado} onFechar={() => setSelecionadoId(null)} />
+            selecionado.vendedor?.modelo_venda === 'revendedor' ? (
+              <PainelPedidoRevendedor key={selecionado.id} pedido={selecionado} onFechar={() => setSelecionadoId(null)} />
+            ) : (
+              <PainelAtendimento key={selecionado.id} pedido={selecionado} onFechar={() => setSelecionadoId(null)} />
+            )
           ) : (
             <div className="hidden rounded-lg border border-dashed border-gray-300 p-8 text-center text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400 lg:block">
               Selecione um pedido para ver os itens e atender.

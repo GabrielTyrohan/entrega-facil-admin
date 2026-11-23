@@ -64,6 +64,10 @@ export interface Vendedor {
   comissao_percentual?: number | null
   /** efetivado | autonomo — vínculo de trabalho (informativo). */
   tipo_contrato?: string | null
+  /** Fase 9: consignado (padrão) | revendedor (compra do dono e revende). */
+  modelo_venda?: string | null
+  /** Fase 9: cadastro PJ (CNPJ) do revendedor, usado nas vendas PJ a ele. */
+  cliente_pj_id?: string | null
 }
 
 export interface Cliente {

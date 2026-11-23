@@ -564,8 +564,16 @@ const EntregaAvulsa: React.FC = () => {
                 onChange={e => setVendedorSelecionado(vendedores.find(v => v.id === e.target.value) ?? null)}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white">
                 <option value="">— Selecione um vendedor —</option>
-                {vendedores.map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
+                {/* Fase 9: revendedor compra os avulsos por Venda PJ, não recebe por liberação. */}
+                {vendedores
+                  .filter(v => (v as Vendedor & { modelo_venda?: string | null }).modelo_venda !== 'revendedor')
+                  .map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
               </select>
+            )}
+            {vendedores.some(v => (v as Vendedor & { modelo_venda?: string | null }).modelo_venda === 'revendedor') && (
+              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                Revendedores não aparecem aqui: eles compram os produtos em Vendas PJ.
+              </p>
             )}
             {vendedorSelecionado && (
               <p className="mt-2 text-sm text-green-600 dark:text-green-400 flex items-center gap-1">

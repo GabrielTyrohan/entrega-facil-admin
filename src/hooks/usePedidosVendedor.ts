@@ -27,7 +27,7 @@ export interface PedidoVendedor {
   atendido_por_nome: string | null;
   atendido_em: string | null;
   created_at: string;
-  vendedor?: { nome: string } | null;
+  vendedor?: { nome: string; modelo_venda?: string | null } | null;
   itens: PedidoVendedorItem[];
 }
 
@@ -45,7 +45,7 @@ export function usePedidosVendedor(status: StatusPedido | 'todos' = 'pendente') 
         .from('pedidos_vendedor')
         .select(
           'id, numero, vendedor_id, status, observacao, resposta, atendido_por_nome, atendido_em, created_at, ' +
-          'vendedor:vendedores(nome), ' +
+          'vendedor:vendedores(nome, modelo_venda), ' +
           'itens:pedidos_vendedor_itens(id, tipo, descricao, quantidade_solicitada, quantidade_atendida, cesta_id, produto_cadastrado_id)'
         )
         .eq('administrador_id', adminId!)

@@ -26,6 +26,7 @@ import {
   RefreshCw,
   Settings,
   ShoppingBasket,
+  Store,
   ShoppingCart,
   Truck,
   Undo2,
@@ -89,6 +90,7 @@ export const MENU_ITEMS: MenuItem[] = [
 
   // COMERCIAL E FISCAL
   { path: '/vendas-atacado', label: 'Vendas Atacado', icon: ShoppingCart, permission: 'vendas_atacado', group: 'Comercial' },
+  { path: '/revendedores', label: 'Revendedores', icon: Store, permissionAny: ['vendas_atacado', 'cestas_vendedor'], group: 'Comercial' },
   { path: '/orcamentos-pj', label: 'Orçamento PJ', icon: FileText, permission: 'orcamentos_pj', group: 'Comercial' },
   { path: '/tabela-precos', label: 'Tabela de Preços', icon: Receipt, permission: 'vendas_atacado', group: 'Comercial' },
   { path: '/historico-pdfs', label: 'Histórico de Notas', icon: FileText, adminOnly: true, group: 'Operacional' },
@@ -126,6 +128,7 @@ export const PATH_TO_SECTION: Record<string, string> = {
   '/acertos-diarios': 'Financeiro',
   '/relatorios': 'Financeiro',
   '/vendas-atacado': 'Comercial e fiscal',
+  '/revendedores': 'Comercial e fiscal',
   '/orcamentos-pj': 'Comercial e fiscal',
   '/tabela-precos': 'Comercial e fiscal',
   '/historico-pdfs': 'Comercial e fiscal',

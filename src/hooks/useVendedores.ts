@@ -26,6 +26,9 @@ export interface Vendedor {
   dia_fechamento?: number | null;
   admin_id?: string;
   comissao_percentual?: number;
+  /** Fase 9: 'consignado' (padrão) ou 'revendedor' (compra do dono e revende). */
+  modelo_venda?: 'consignado' | 'revendedor' | string | null;
+  cliente_pj_id?: string | null;
 }
 
 // ===== BUSCAR VENDEDORES (com paginação + busca server-side) =====

@@ -71,6 +71,8 @@ export function useComissoesVendedores() {
         .select('id, nome, comissao_percentual, dia_fechamento')
         .eq('administrador_id', adminId!)
         .eq('ativo', true)
+        // Fase 9: revendedor não tem comissão (fica com o dinheiro das vendas)
+        .neq('modelo_venda', 'revendedor')
         .order('nome');
       if (error) throw error;
 

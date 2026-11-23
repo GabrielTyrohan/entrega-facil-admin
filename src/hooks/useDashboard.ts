@@ -110,6 +110,7 @@ export const useDashboardCore = (adminId: string) => {
           // Inadimplência: mantém a lógica atual (não depende de período corrente)
           supabase.from('entregas').select('id, valor, vendedor_id, "dataRetorno", pagamentos(valor)')
             .in('vendedor_id', vendedorIds)
+            .eq('revenda', false)
             .not('dataRetorno', 'is', null),
 
           supabase.from('vendas_atacado')
@@ -234,6 +235,7 @@ export const useInadimplenciaFaixas = (adminId: string, enabled: boolean) => {
         .from('entregas')
         .select('id, valor, vendedor_id, "dataRetorno", pagamentos(valor)')
         .in('vendedor_id', vendedorIds)
+        .eq('revenda', false)
         .not('dataRetorno', 'is', null);
 
       if (error) throw error;

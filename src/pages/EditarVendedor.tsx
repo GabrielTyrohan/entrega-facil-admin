@@ -7,6 +7,7 @@ import { QUERY_KEYS } from '../lib/constants/queryKeys';
 import { supabase } from '../lib/supabase';
 import { VendedorService } from '../services/vendedorService';
 import { toast } from '../utils/toast';
+import ModeloVendaCard from '../components/vendedores/ModeloVendaCard';
 
 interface DadosBancarios {
   banco: string;
@@ -38,6 +39,12 @@ const EditarVendedor: React.FC = () => {
     comissaoPercentual: 0,
     tipoContrato: '' as '' | 'efetivado' | 'autonomo',
   });
+  // Fase 9: modelo de venda (consignado | revendedor) é trocado por RPC própria, fora do formulário.
+  const [modeloVenda, setModeloVenda] = useState<{ modelo: 'consignado' | 'revendedor'; clientePj: string | null }>({
+    modelo: 'consignado',
+    clientePj: null,
+  });
+  const [recarregar, setRecarregar] = useState(0);
 
   const [dadosBancarios, setDadosBancarios] = useState<DadosBancarios>({
     banco: '',
@@ -107,7 +114,11 @@ const EditarVendedor: React.FC = () => {
             ? vendedor.tipo_contrato
             : '',
         });
-        
+        setModeloVenda({
+          modelo: vendedor.modelo_venda === 'revendedor' ? 'revendedor' : 'consignado',
+          clientePj: vendedor.cliente_pj_id ?? null,
+        });
+
         // Carregar dados bancários se existirem
         if (vendedor.dados_bancarios) {
           const dados = typeof vendedor.dados_bancarios === 'string' 
@@ -124,7 +135,7 @@ const EditarVendedor: React.FC = () => {
     };
 
     carregarVendedor();
-  }, [id, user?.id, navigate]);
+  }, [id, user?.id, navigate, recarregar]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -638,6 +649,19 @@ const EditarVendedor: React.FC = () => {
           </div>
         </div>
       </form>
+
+      {id && (
+        <ModeloVendaCard
+          vendedorId={id}
+          modeloAtual={modeloVenda.modelo}
+          clientePjAtual={modeloVenda.clientePj}
+          podeAlterar={isAdmin}
+          onAlterado={() => {
+            queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.VENDEDORES] });
+            setRecarregar((n) => n + 1);
+          }}
+        />
+      )}
 
       {/* Confirmation Modal */}
       {showConfirmResetModal && (

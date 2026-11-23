@@ -75,7 +75,7 @@ async function getSession(req: Request) {
 
   const { data: vendedor, error: vendError } = await supabaseAdmin
     .from('vendedores')
-    .select('id, administrador_id, ativo, bloqueado, tipo_vinculo, status_pagamento_vendedor, data_vencimento_vendedor, assinatura_ativa, dia_fechamento, percentual_minimo')
+    .select('id, administrador_id, ativo, bloqueado, tipo_vinculo, status_pagamento_vendedor, data_vencimento_vendedor, assinatura_ativa, dia_fechamento, percentual_minimo, modelo_venda')
     .eq('id', sessao.vendedor_id)
     .single()
 
@@ -141,6 +141,12 @@ async function downloadCore(vendedor: any, body: any = {}) {
     throw new Error(`Falha ao carregar cestas base: ${cestasBaseResult.error.message}`)
   }
 
+  // Fase 9: o revendedor recebe o preço que pagou (X), o sugerido (Y) e os preços próprios.
+  const revendedor = vendedor.modelo_venda === 'revendedor'
+  const precosRevendedor = revendedor
+    ? await rpc('precos_compra_revendedor', { p_vendedor_id: vendedorId })
+    : null
+
   return {
     vendedor: {
       id: vendedor.id,
@@ -153,7 +159,9 @@ async function downloadCore(vendedor: any, body: any = {}) {
       assinatura_ativa: vendedor.assinatura_ativa,
       dia_fechamento: vendedor.dia_fechamento,
       percentual_minimo: vendedor.percentual_minimo,
+      modelo_venda: vendedor.modelo_venda || 'consignado',
     },
+    precosRevendedor,
     clientes: clientes || [],
     clientesIncremental: Boolean(clientesDesde),
     cursorClientes,
@@ -346,6 +354,21 @@ Deno.serve(async (req) => {
         p_vendedor_id: vendedor.id,
         p_pedido_id: String(body?.pedidoId || ''),
       })
+    } else if (action === 'precos_revendedor') {
+      // Fase 9: preços de compra, sugeridos e próprios do revendedor.
+      data = await rpc('precos_compra_revendedor', { p_vendedor_id: vendedor.id })
+    } else if (action === 'definir_precos') {
+      // Fase 9: o revendedor salva os próprios preços de revenda (preco null volta ao sugerido).
+      const precos = Array.isArray(body?.precos) ? body.precos : []
+      const salvos = await rpc('definir_precos_revendedor', {
+        p_vendedor_id: vendedor.id,
+        p_precos: precos.map((p: any) => ({
+          tipo: String(p?.tipo || ''),
+          id: String(p?.id || ''),
+          preco: p?.preco === null || p?.preco === undefined || p?.preco === '' ? null : Number(p.preco),
+        })),
+      })
+      data = { salvos, precos: await rpc('precos_compra_revendedor', { p_vendedor_id: vendedor.id }) }
     } else if (action === 'comissao') {
       // Extrato de comissão do vendedor (Fase 5), somente leitura.
       data = await rpc('extrato_comissao_vendedor', { p_vendedor_id: vendedor.id })

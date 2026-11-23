@@ -195,6 +195,12 @@ const CestasVendedor: React.FC = () => {
       .eq('id', modalEntregaLote!.vendedorId)
       .single();
 
+    // Fase 9: o revendedor compra as cestas (Venda PJ); não recebe por liberação.
+    if (vendedorData?.modelo_venda === 'revendedor') {
+      toast.error('Este vendedor é revendedor e compra as cestas. Use Vendas PJ ou atenda o pedido dele como venda.');
+      return;
+    }
+
     if (vendedorData?.tipo_vinculo !== 'autonomo') {
       await handleConfirmarEntregaLote();
       return;

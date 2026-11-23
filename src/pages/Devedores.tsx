@@ -219,6 +219,7 @@ const Devedores: React.FC = () => {
           )
         `)
         .eq('cliente_id', devedor.cliente_id)
+        .eq('revenda', false) // Fase 9: dívida de cliente do revendedor é dele
         .not('dataRetorno', 'is', null)
         // Fase 6b: entrega devolvida não é dívida (o pago virou crédito)
         .or('status_entrega.is.null,status_entrega.neq.devolução');
@@ -343,6 +344,8 @@ const Devedores: React.FC = () => {
           )
         `)
         .not('dataRetorno', 'is', null)
+        // Fase 9: dívida de cliente do revendedor é dele, não da empresa
+        .eq('revenda', false)
         // Fase 6b: entrega devolvida não é dívida (o pago virou crédito)
         .or('status_entrega.is.null,status_entrega.neq.devolução');
 

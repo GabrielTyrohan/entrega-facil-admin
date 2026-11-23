@@ -27,6 +27,11 @@ Migrations e Edge Functions dos 3 sistemas ficam versionadas **aqui**, em
 - **Comissão:** `comissao_percentual` × pagamentos com `data_pagamento` dentro da janela. O fechamento
   (`fechar_periodo_vendedor`) congela o valor; um pagamento lançado depois com data antiga vira ajuste.
   `tipo_contrato` (efetivado/autônomo) é só informativo. `tipo_vinculo` diz quem paga a assinatura.
+- **Revendedor (Fase 9):** `vendedores.modelo_venda` = `consignado` (padrão) | `revendedor`. O revendedor tem
+  CNPJ (`cliente_pj_id`), compra do dono por venda PJ (cesta = soma do `preco_unt` da composição; avulso =
+  `preco_unt`; o preço da cesta é só sugestão) e revende pelo próprio preço (`precos_revendedor`). Não recebe
+  liberação nem comissão; `entregas.revenda` tira as vendas dele do faturamento, devedores e comissão do dono.
+  Troca de modelo só pelo dono (`definir_modelo_vendedor`), com o estoque do vendedor zerado.
 - **Pedidos do vendedor:** sempre pendentes até uma funcionária ou o dono atender ou recusar.
 - **Troca e devolução:** feitas só pelo vendedor, no app. Na troca, o valor pago abate a nova entrega;
   na devolução, vira crédito do cliente.

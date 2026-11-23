@@ -69,6 +69,7 @@ const Relatorios: React.FC = () => {
           )
         `)
         .eq('entregas.vendedores.administrador_id', administrador_id)
+        .eq('entregas.revenda', false) // Fase 9: recebimentos do revendedor são dele
         .order('data_pagamento', { ascending: false })
         .limit(10000);
         
@@ -101,6 +102,7 @@ const Relatorios: React.FC = () => {
           vendedor:vendedores(id, nome, administrador_id)
         `)
         .in('vendedor_id', vendedorIds)
+        .eq('revenda', false) // Fase 9: vendas do revendedor ficam fora do faturamento do dono
         .order('data_entrega', { ascending: false })
         .limit(10000);
 

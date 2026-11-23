@@ -59,6 +59,7 @@ import ListaVendas from './pages/VendasAtacado/ListaVendas';
 import NovaVendaAtacado from './pages/VendasAtacado/NovaVendaAtacado';
 import OfflinePage from './pages/OfflinePage';
 import PedidosVendedores from './pages/PedidosVendedores';
+import Revendedores from './pages/Revendedores';
 import Comissoes from './pages/Comissoes';
 import Devolucoes from './pages/Devolucoes';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
@@ -234,6 +235,13 @@ function App() {
                             <ExpedicaoGuard>
                               <RequirePermission permission="vendas_atacado">
                                 <ListaVendas />
+                              </RequirePermission>
+                            </ExpedicaoGuard>
+                          } />
+                          <Route path="/revendedores" element={
+                            <ExpedicaoGuard>
+                              <RequirePermission permission={['vendas_atacado', 'cestas_vendedor']}>
+                                <Revendedores />
                               </RequirePermission>
                             </ExpedicaoGuard>
                           } />
