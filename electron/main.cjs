@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, dialog, shell } = require('electron');
 const path = require('path');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
@@ -59,6 +59,12 @@ function createWindow() {
   // ✅ Reativa foco ao restaurar da minimização
   mainWindow.on('restore', () => {
     mainWindow.webContents.focus();
+  });
+
+  // Links com target="_blank" (Política, Termos) abrem no navegador do computador, não numa janela do app.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
   });
 
   mainWindow.on('closed', () => { mainWindow = null; });

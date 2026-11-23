@@ -2,6 +2,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { AlertCircle, Eye, EyeOff, LogIn } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import LinksLegais from '@/components/LinksLegais';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
@@ -239,6 +240,7 @@ const LoginPage = () => {
             (Admin ou Funcionário)
           </span>
         </p>
+        <LinksLegais className="mt-4" />
       </div>
     </div>
   );

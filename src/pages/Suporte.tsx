@@ -13,6 +13,7 @@ import {
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSuporteSolicitacoes } from '../hooks/useSuporteSolicitacoes';
+import LinksLegais from '@/components/LinksLegais';
 
 const Suporte: React.FC = () => {
   const { user, isLoading } = useAuth();
@@ -191,6 +192,7 @@ const Suporte: React.FC = () => {
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Suporte & Avisos</h1>
           <p className="text-gray-600 dark:text-gray-400">Central de comunicação com o desenvolvedor</p>
         </div>
+        <LinksLegais className="text-sm" />
       </div>
 
       {/* Card de Status do Sistema */}
