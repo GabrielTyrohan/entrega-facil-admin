@@ -62,7 +62,9 @@ function createWindow() {
   });
 
   // Links com target="_blank" (Política, Termos) abrem no navegador do computador, não numa janela do app.
+  // Janela em branco (window.open('') da impressão de Relatórios) continua abrindo dentro do app.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (!url || url === 'about:blank') return { action: 'allow' };
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
