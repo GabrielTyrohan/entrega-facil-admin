@@ -9,7 +9,8 @@ import { useEffect } from 'react';
 // Só entram tabelas que estão na publicação `supabase_realtime` (conferido em 2026-11-18):
 // entregas, entregas_cestas_vendedor, pagamentos, movimentacoes_estoque, estoque_vendedor,
 // acertos_diarios e lancamentos_caixa. (pedidos_vendedor tem canal próprio em usePedidosVendedor.)
-// O Supabase só envia eventos de linhas que o usuário pode ler (RLS).
+// O Supabase só envia eventos de linhas que o usuário pode ler (RLS); inclusões e alterações
+// também são filtradas pela empresa (administrador_id) para não pesar no Realtime.
 const INICIO_VENDAS = [
   'dashboard_core',
   'dashboard_entregas_hoje',
@@ -155,12 +156,20 @@ export const useRealtimeInvalidator = () => {
     const invalidador = criarInvalidador(queryClient);
     let channel = supabase.channel(`dados-realtime-${adminId}`);
     for (const tabela of Object.keys(TABLE_QUERY_MAP)) {
-      channel = channel.on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: tabela },
-        (payload: { new?: Linha | null; old?: Linha | null }) =>
-          invalidador.agendar(tabela, payload?.new && Object.keys(payload.new).length ? payload.new : payload?.old)
-      );
+      const aoMudar = (payload: { new?: Linha | null; old?: Linha | null }) =>
+        invalidador.agendar(tabela, payload?.new && Object.keys(payload.new).length ? payload.new : payload?.old);
+      // Inclusões e alterações só da empresa: o Realtime descarta as das outras antes de conferir
+      // o RLS de cada tela aberta. Todas estas tabelas têm administrador_id (entregas e
+      // pagamentos desde a migration 20261123150000). Exclusões não aceitam filtro no Supabase;
+      // elas são raras, não passam pelo RLS e trazem só o id.
+      for (const evento of ['INSERT', 'UPDATE'] as const) {
+        channel = channel.on(
+          'postgres_changes',
+          { event: evento, schema: 'public', table: tabela, filter: `administrador_id=eq.${adminId}` },
+          aoMudar
+        );
+      }
+      channel = channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: tabela }, aoMudar);
     }
     channel.subscribe();
 

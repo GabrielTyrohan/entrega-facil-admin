@@ -5,11 +5,15 @@ import type { ReactNode } from 'react';
 
 type Handler = (payload?: { new?: Record<string, unknown> | null; old?: Record<string, unknown> | null }) => void;
 const { canal, removeChannel, consultaProdutos } = vi.hoisted(() => {
+  // handlers[tabela] = o de INSERT (os testes simulam inclusões); assinaturas guarda todas.
   const handlers: Record<string, Handler> = {};
+  const assinaturas: { table: string; event: string; filter?: string }[] = [];
   const canal = {
     handlers,
-    on: vi.fn((_tipo: string, filtro: { table: string }, cb: Handler) => {
-      handlers[filtro.table] = cb;
+    assinaturas,
+    on: vi.fn((_tipo: string, filtro: { table: string; event: string; filter?: string }, cb: Handler) => {
+      assinaturas.push({ table: filtro.table, event: filtro.event, filter: filtro.filter });
+      if (filtro.event === 'INSERT') handlers[filtro.table] = cb;
       return canal;
     }),
     subscribe: vi.fn(() => canal),
@@ -37,6 +41,7 @@ describe('useRealtimeInvalidator', () => {
     vi.useFakeTimers();
     qc = new QueryClient();
     Object.keys(canal.handlers).forEach((k) => delete canal.handlers[k]);
+    canal.assinaturas.length = 0;
     consultaProdutos.in.mockReset();
   });
   afterEach(() => vi.useRealTimers());
@@ -52,6 +57,20 @@ describe('useRealtimeInvalidator', () => {
       'movimentacoes_estoque',
       'pagamentos',
     ]);
+  });
+
+  it('inclusões e alterações vêm filtradas pela empresa; exclusões sem filtro (o Supabase não filtra DELETE)', () => {
+    renderHook(() => useRealtimeInvalidator(), { wrapper });
+    const tabelas = [...new Set(canal.assinaturas.map((a) => a.table))];
+    expect(tabelas).toHaveLength(7);
+    for (const tabela of tabelas) {
+      const daTabela = canal.assinaturas.filter((a) => a.table === tabela);
+      expect(daTabela).toEqual([
+        { table: tabela, event: 'INSERT', filter: 'administrador_id=eq.admin-1' },
+        { table: tabela, event: 'UPDATE', filter: 'administrador_id=eq.admin-1' },
+        { table: tabela, event: 'DELETE', filter: undefined },
+      ]);
+    }
   });
 
   it('um pagamento novo marca Devedores e Pagamentos como desatualizados, agrupando eventos seguidos', () => {
