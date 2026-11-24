@@ -3,6 +3,9 @@
 Desktop (Vite + React + TypeScript + Electron) do **dono** e das **funcionárias** de uma
 empresa de cestas básicas. Responda e escreva textos para o usuário em português.
 
+**Antes de explorar o código, leia `documentacao/mapa-do-codigo.md`** (rota → página → hook/service → RPC)
+e siga a skill `contexto-enxuto`: grep antes de read, sem varredura global.
+
 ## Os 3 sistemas (mesmo Supabase: `fpemgftaedlgmcdxtncg`)
 
 | Pasta | Quem usa | Stack |
@@ -83,6 +86,7 @@ Migrations e Edge Functions dos 3 sistemas ficam versionadas **aqui**, em
 - **Documentar tudo no Obsidian** (o vault é esta pasta): ao fim de cada fase ou alteração, antes do commit,
   crie ou atualize `documentacao/fases/<fase>.md` e `documentacao/estado-atual.md`, ligue as notas em
   `documentacao/INDEX.md` e rode o lint da skill obsidian-notes. Use links relativos em markdown e
-  frontmatter (`title`, `date`, `tags`).
+  frontmatter (`title`, `date`, `tags`). Se criar, mover ou apagar página, hook, service, RPC ou Edge Function,
+  atualize também `documentacao/mapa-do-codigo.md`.
 - Plano geral das fases: `C:\Users\gabri\.claude\plans\no-momento-estou-te-recursive-meadow.md`
   (todas as fases concluídas: 1 a 7, incluindo 6b, 6d e 6e). Estado atual: `documentacao/estado-atual.md`.
