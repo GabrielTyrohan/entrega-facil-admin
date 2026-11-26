@@ -21,6 +21,16 @@ describe('revisão fiscal em lote', () => {
       .toEqual(['NCM', 'PIS', 'CST IBS/CBS', 'cClassTrib']);
   });
 
+  it('recusa CSOSN com a origem na frente e PIS/COFINS com 1 dígito (teste Contora 26/11)', () => {
+    expect(pendenciasFiscais({ ...base, cst_icms: '0500', cst_pis: '1', cst_cofins: '1' })).toEqual([
+      'CSOSN inválido (sem a origem na frente)',
+      'PIS inválido (2 dígitos)',
+      'COFINS inválido (2 dígitos)',
+    ]);
+    expect(pendenciasFiscais({ ...base, cst_icms: '500', cst_pis: '01', cst_cofins: '01' })).toEqual([]);
+    expect(pendenciasFiscais({ ...base, cst_icms: '00', cst_pis: '99', cst_cofins: '98' })).toEqual([]);
+  });
+
   it('só envia os campos preenchidos (vazio = não muda)', () => {
     expect(camposPreenchidos({ cst_pis: ' 49 ', cst_cofins: '', cclasstrib: '200003', ncm: '   ' }))
       .toEqual({ cst_pis: '49', cclasstrib: '200003' });

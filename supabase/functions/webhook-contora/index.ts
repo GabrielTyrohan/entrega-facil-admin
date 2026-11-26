@@ -104,7 +104,10 @@ Deno.serve(async (req) => {
       const processamento = pick(payload, ['data.processing_status', 'processing_status', 'document.processing_status'])
       const protocolo = pick(payload, ['data.protocol', 'data.authorization.protocol', 'protocol'])
       const chave = pick(payload, ['data.access_key', 'data.key', 'access_key'])
-      const motivo = pick(payload, ['data.rejection.message', 'data.status_reason', 'data.error.message', 'message'])
+      // Formato real (conferido em 26/11/2026): data.last_error_message,
+      // data.last_error_code e context.error.
+      const motivo = pick(payload, ['data.last_error_message', 'context.error', 'data.rejection.message', 'data.status_reason', 'data.error.message', 'message'])
+      const codigoErro = pick(payload, ['data.last_error_code', 'data.rejection.code', 'data.error.code'])
 
       const update: Record<string, unknown> = {
         provedor_status: provedorStatus ?? evento.replace('document.', ''),
@@ -115,7 +118,9 @@ Deno.serve(async (req) => {
       if (protocolo) update.protocolo_autorizacao = String(protocolo)
       if (chave) update.chave_acesso = String(chave)
       if (['document.rejected', 'document.failed', 'document.build_sync_failed', 'document.cancellation_rejected'].includes(evento)) {
-        update.erro_mensagem = String(motivo ?? evento).slice(0, 2000)
+        // Sem motivo no aviso, mantém a mensagem que a emissão já gravou.
+        if (motivo) update.erro_mensagem = String(motivo).slice(0, 2000)
+        if (codigoErro) update.erro_codigo = String(codigoErro).slice(0, 100)
       }
 
       await supabaseAdmin.from('notas_fiscais').update(update).eq('provedor_documento_id', String(documentoId))

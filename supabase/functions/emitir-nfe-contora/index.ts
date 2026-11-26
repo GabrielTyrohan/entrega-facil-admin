@@ -99,6 +99,21 @@ async function registrarLog(input: {
   } catch (_) {}
 }
 
+/** Rascunho que a Contora recusou (no build ou na criação): precisa de um novo. */
+function rascunhoComFalha(nota: { provedor_status?: unknown; processamento_status?: unknown } | null): boolean {
+  if (!nota) return false
+  const prov = String(nota.provedor_status || '').toLowerCase()
+  const proc = String(nota.processamento_status || '').toLowerCase()
+  return ['error', 'failed', 'rejected'].includes(prov) ||
+    ['failed', 'erro_build', 'erro_draft', 'build_failed'].includes(proc)
+}
+
+/** 6 caracteres do SHA-256 (a chave de idempotência da Contora vai até 120). */
+async function hashCurto(texto: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(texto))
+  return Array.from(new Uint8Array(buf)).slice(0, 3).map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 async function contoraFetch(path: string, init: RequestInit, cnpj: string, idempotencyKey?: string) {
   if (!CONTORA_TOKEN) {
     throw new Error('CONTORA_API_TOKEN_HOMOLOGACAO não configurado no Supabase')
@@ -352,6 +367,14 @@ Deno.serve(async (req) => {
       if (!fiscal.cst_icms) throw new Error(`CSOSN/CST ICMS não configurado: ${item.descricao}`)
       if (!fiscal.cst_pis) throw new Error(`CST PIS não configurado: ${item.descricao}`)
       if (!fiscal.cst_cofins) throw new Error(`CST COFINS não configurado: ${item.descricao}`)
+      // Formato: CST ICMS com 2 dígitos ou CSOSN com 3 (sem a origem na frente);
+      // CST PIS/COFINS com 2 dígitos. Ex.: '0500' e '1' são recusados.
+      if (!/^\d{2,3}$/.test(String(fiscal.cst_icms).trim())) {
+        throw new Error(`CSOSN/CST ICMS "${fiscal.cst_icms}" inválido em ${item.descricao}: use 2 dígitos (CST) ou 3 (CSOSN), sem a origem na frente. Corrija na Revisão Fiscal.`)
+      }
+      if (!/^\d{2}$/.test(String(fiscal.cst_pis).trim()) || !/^\d{2}$/.test(String(fiscal.cst_cofins).trim())) {
+        throw new Error(`CST PIS/COFINS inválido em ${item.descricao}: use 2 dígitos (ex.: 01, 49). Corrija na Revisão Fiscal.`)
+      }
 
       const quantity = asNumber(item.quantidade)
       const unitPrice = asNumber(item.valor_venda_unitario)
@@ -414,7 +437,10 @@ Deno.serve(async (req) => {
 
     if (existingError) throw new Error(`Erro ao verificar idempotência local: ${existingError.message}`)
 
-    const existingBuilt = existing?.provedor_documento_id && (
+    // Depois do webhook, o build fica em provedor_status ('built_unsigned') e
+    // processamento_status vira 'completed'.
+    const existingBuilt = existing?.provedor_documento_id && !rascunhoComFalha(existing) && (
+      String(existing.provedor_status || '').toLowerCase().startsWith('built') ||
       String(existing.processamento_status || '').toLowerCase().includes('built_unsigned') ||
       String(existing.processamento_status || '').toLowerCase().includes('built') ||
       String(existing.processamento_status || '').toLowerCase().includes('validado')
@@ -557,7 +583,18 @@ Deno.serve(async (req) => {
 
     let documento: any = null
 
-    if (notaLocal.provedor_documento_id) {
+    // Rascunho que falhou na Contora não pode ser editado nem apagado; a
+    // orientação dela é "corrija o payload e reenvie com o mesmo número".
+    // Então, depois de uma falha, cria um rascunho novo com o mesmo número.
+    const rascunhoFalhou = rascunhoComFalha(notaLocal)
+
+    // A chave muda quando o conteúdo muda: o mesmo pedido repetido devolve a
+    // mesma resposta (24 h na Contora), e um pedido corrigido vira um rascunho
+    // novo em vez de dar 409 (mesma chave com corpo diferente).
+    // Formato curto (≈ 93 caracteres; a Contora aceita até 120).
+    const draftKey = `ef:${adminId}:orc:${orcamentoId}:nfe:h:${await hashCurto(JSON.stringify(payload))}`
+
+    if (notaLocal.provedor_documento_id && !rascunhoFalhou) {
       documento = {
         id: notaLocal.provedor_documento_id,
         status: notaLocal.provedor_status,
@@ -568,7 +605,9 @@ Deno.serve(async (req) => {
         administrador_id: adminId,
         tipo: 'info',
         servico,
-        mensagem: `Criando rascunho Contora em homologação para orçamento ${orcamentoId}`,
+        mensagem: rascunhoFalhou
+          ? `Recriando rascunho Contora (o anterior ${notaLocal.provedor_documento_id} falhou) para orçamento ${orcamentoId}`
+          : `Criando rascunho Contora em homologação para orçamento ${orcamentoId}`,
       })
 
       try {
@@ -576,7 +615,7 @@ Deno.serve(async (req) => {
           '/nfe/drafts',
           { method: 'POST', body: JSON.stringify(payload) },
           cnpjEmitente,
-          idempotencyKey
+          draftKey
         )
 
         documento = draftResult?.data
@@ -616,7 +655,7 @@ Deno.serve(async (req) => {
         `/nfe/drafts/${documento.id}/build`,
         { method: 'POST', body: JSON.stringify({ sign: false }) },
         cnpjEmitente,
-        `${idempotencyKey}:build`
+        `ef:${documento.id}:build`
       )
     } catch (buildError: any) {
       await supabaseAdmin

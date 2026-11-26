@@ -1,6 +1,6 @@
 // Fase 6e — "Notas do mês": consumo de eventos fiscais na Fiscal Contora.
 // O limite é da CONTA Contora (todas as empresas dividem). Lê os cabeçalhos
-// X-Fiscal-Quota-* e o consumo por CNPJ (/dashboard/companies), guarda em
+// X-Fiscal-Quota-* (quando vierem) e a empresa pelo CNPJ (/companies), guarda em
 // contora_consumo e devolve para a tela. Se a Contora falhar, devolve o
 // último valor guardado.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
@@ -40,6 +40,19 @@ function eventosDoItem(item: any): number | null {
 
 function documentoDoItem(item: any): string {
   return onlyDigits(item?.document ?? item?.cnpj ?? item?.company_document ?? item?.company?.document ?? '')
+}
+
+/** Limite da conta pelos cabeçalhos X-Fiscal-*; null quando a Contora não envia nenhum. */
+function quotaDosCabecalhos(h: Headers): Record<string, unknown> | null {
+  const q = {
+    limite: num(h.get('X-Fiscal-Quota-Event-Limit')),
+    usados: num(h.get('X-Fiscal-Quota-Event-Used')),
+    restantes: num(h.get('X-Fiscal-Quota-Event-Remaining')),
+    uso_percentual: num(h.get('X-Fiscal-Quota-Event-Usage')),
+    aviso: h.get('X-Fiscal-Quota-Warning'),
+    saldo_carteira: num(h.get('X-Fiscal-Wallet-Balance')),
+  }
+  return Object.values(q).some((v) => v !== null) ? q : null
 }
 
 function resposta(status: number, body: unknown) {
@@ -82,33 +95,38 @@ Deno.serve(async (req) => {
       : await supabaseAdmin.from('administradores').select('id, cpf_cnpj, nome_empresa').eq('id', adminId!)
 
     let erroContora: string | null = null
+    const naContora = new Set<string>()
     try {
       if (!CONTORA_TOKEN) throw new Error('Token da Fiscal Contora não configurado')
-      const res = await fetch(`${CONTORA_BASE_URL}/dashboard/companies`, {
-        headers: { Authorization: `Bearer ${CONTORA_TOKEN}`, Accept: 'application/json' },
-      })
-      const raw = await res.text()
-      let data: any = null
-      try { data = raw ? JSON.parse(raw) : null } catch { data = null }
-      if (!res.ok) throw new Error(`Fiscal Contora HTTP ${res.status}`)
 
-      const h = res.headers
-      const base = {
-        limite: num(h.get('X-Fiscal-Quota-Event-Limit')),
-        usados: num(h.get('X-Fiscal-Quota-Event-Used')),
-        restantes: num(h.get('X-Fiscal-Quota-Event-Remaining')),
-        uso_percentual: num(h.get('X-Fiscal-Quota-Event-Usage')),
-        aviso: h.get('X-Fiscal-Quota-Warning'),
-        saldo_carteira: num(h.get('X-Fiscal-Wallet-Balance')),
+      // Conferido em 26/11/2026 com o token real: /dashboard/companies só traz
+      // totais ({ total, with_certificate, ... }). A lista por empresa é
+      // /companies, paginada ({ data: [...], meta: { has_more_pages } }).
+      const itens: any[] = []
+      let base: Record<string, unknown> | null = null
+      for (let page = 1; page <= 20; page++) {
+        const res = await fetch(`${CONTORA_BASE_URL}/companies?per_page=100&page=${page}`, {
+          headers: { Authorization: `Bearer ${CONTORA_TOKEN}`, Accept: 'application/json' },
+        })
+        const raw = await res.text()
+        let data: any = null
+        try { data = raw ? JSON.parse(raw) : null } catch { data = null }
+        if (!res.ok) throw new Error(`Fiscal Contora HTTP ${res.status}`)
+
+        if (!base) base = quotaDosCabecalhos(res.headers)
+        if (Array.isArray(data?.data)) itens.push(...data.data)
+        if (!data?.meta?.has_more_pages) break
       }
-      const itens: any[] = Array.isArray(data?.data) ? data.data : []
 
       for (const e of empresas ?? []) {
         const cnpj = onlyDigits(e.cpf_cnpj)
         const item = itens.find((i) => cnpj && documentoDoItem(i) === cnpj) ?? null
+        if (item) naContora.add(e.id)
+        // Sem os cabeçalhos X-Fiscal-Quota-* (a conta não os envia hoje),
+        // mantém o último limite salvo em vez de apagar com null.
         await supabaseAdmin.from('contora_consumo').upsert({
           administrador_id: e.id,
-          ...base,
+          ...(base ?? {}),
           eventos_empresa: item ? eventosDoItem(item) : null,
           detalhe: item,
           atualizado_em: new Date().toISOString(),
@@ -125,7 +143,12 @@ Deno.serve(async (req) => {
       .in('administrador_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000'])
 
     const nomes = new Map((empresas ?? []).map((e: any) => [e.id, e.nome_empresa]))
-    const lista = (consumo ?? []).map((c: any) => ({ ...c, nome_empresa: nomes.get(c.administrador_id) ?? null }))
+    const lista = (consumo ?? []).map((c: any) => ({
+      ...c,
+      nome_empresa: nomes.get(c.administrador_id) ?? null,
+      // null quando não deu para consultar a Contora agora
+      empresa_na_contora: erroContora ? null : naContora.has(c.administrador_id),
+    }))
 
     return resposta(200, {
       success: true,

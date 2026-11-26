@@ -33,16 +33,31 @@ export interface ResultadoLoteFiscal {
   erros: { id: string; nome: string; faltando: string[] }[];
 }
 
+/** Códigos aceitos (iguais aos da migration 20261126150000_fiscal_codigos_validos). */
+export const CODIGOS_ICMS_VALIDOS = new Set([
+  '101', '102', '103', '201', '202', '203', '300', '400', '500', '900',
+  '00', '02', '10', '15', '20', '30', '40', '41', '50', '51', '53', '60', '61', '70', '90',
+]);
+export const CODIGOS_PIS_COFINS_VALIDOS = new Set([
+  '01', '02', '03', '04', '05', '06', '07', '08', '09',
+  '49', '50', '51', '52', '53', '54', '55', '56',
+  '60', '61', '62', '63', '64', '65', '66', '67',
+  '70', '71', '72', '73', '74', '75', '98', '99',
+]);
+
 /** Mesma regra do banco (fiscal_pendencias_produto), para mostrar na tela. */
 export function pendenciasFiscais(p: ProdutoFiscalLinha): string[] {
   const d = (v: string | null) => (v ?? '').replace(/\D/g, '');
-  const vazio = (v: string | null) => !(v ?? '').trim();
+  const t = (v: string | null) => (v ?? '').trim();
   const out: string[] = [];
   if (d(p.ncm).length !== 8) out.push('NCM');
   if (d(p.cfop_padrao).length !== 4) out.push('CFOP');
-  if (vazio(p.cst_icms)) out.push('CSOSN');
-  if (vazio(p.cst_pis)) out.push('PIS');
-  if (vazio(p.cst_cofins)) out.push('COFINS');
+  if (!t(p.cst_icms)) out.push('CSOSN');
+  else if (!CODIGOS_ICMS_VALIDOS.has(t(p.cst_icms))) out.push('CSOSN inválido (sem a origem na frente)');
+  if (!t(p.cst_pis)) out.push('PIS');
+  else if (!CODIGOS_PIS_COFINS_VALIDOS.has(t(p.cst_pis))) out.push('PIS inválido (2 dígitos)');
+  if (!t(p.cst_cofins)) out.push('COFINS');
+  else if (!CODIGOS_PIS_COFINS_VALIDOS.has(t(p.cst_cofins))) out.push('COFINS inválido (2 dígitos)');
   if (!p.cst_ibscbs) out.push('CST IBS/CBS');
   if (!p.cclasstrib) out.push('cClassTrib');
   return out;

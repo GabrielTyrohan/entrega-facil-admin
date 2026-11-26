@@ -22,6 +22,16 @@ export interface ConsumoFiscal {
   saldo_carteira: number | null;
   eventos_empresa: number | null;
   atualizado_em: string;
+  /** true/false conforme a empresa aparece em /companies; null se a Contora não respondeu */
+  empresa_na_contora?: boolean | null;
+}
+
+/** Texto do card quando ainda não há limite para mostrar. */
+export function textoSemLimite(c: Pick<ConsumoFiscal, 'empresa_na_contora'> | null): string {
+  if (c?.empresa_na_contora) {
+    return 'A empresa já está na Fiscal Contora, mas a conta ainda não informou o limite de notas do mês.';
+  }
+  return 'O consumo aparece depois que a empresa estiver cadastrada na Fiscal Contora.';
 }
 
 export interface RespostaConsumoFiscal {

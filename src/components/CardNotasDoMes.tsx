@@ -4,6 +4,7 @@ import {
   ConsumoFiscal,
   nivelConsumo,
   obterConsumoFiscal,
+  textoSemLimite,
   percentualUsado,
 } from '@/services/contoraConfigService';
 
@@ -78,7 +79,7 @@ const CardNotasDoMes: React.FC = () => {
         <p className="text-sm text-gray-500">Consultando…</p>
       ) : !consumo || consumo.limite === null ? (
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          {aviso ?? 'O consumo aparece depois que a empresa estiver cadastrada na Fiscal Contora.'}
+          {aviso ?? textoSemLimite(consumo)}
         </p>
       ) : (
         <>
