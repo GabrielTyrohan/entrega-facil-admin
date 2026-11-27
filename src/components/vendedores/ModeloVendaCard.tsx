@@ -8,6 +8,8 @@ interface Props {
   vendedorId: string;
   modeloAtual: ModeloVenda;
   clientePjAtual: string | null;
+  /** vendedores.cpf_cnpj: preenche o campo quando o revendedor ainda não tem cadastro PJ ligado. */
+  cnpjVendedor?: string | null;
   /** Só o dono troca o modelo; funcionárias veem a informação. */
   podeAlterar: boolean;
   onAlterado?: () => void;
@@ -21,37 +23,51 @@ function mensagemErro(e: unknown): string {
 const nomeCliente = (c: { razao_social: string | null; nome_fantasia: string | null; nome: string | null }) =>
   c.razao_social || c.nome_fantasia || c.nome || 'Sem nome';
 
+const soDigitos = (v: string | null | undefined) => (v ?? '').replace(/\D/g, '');
+
+/** 00.000.000/0000-00 enquanto digita. */
+export function mascaraCnpj(v: string): string {
+  const d = soDigitos(v).slice(0, 14);
+  return d
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1/$2')
+    .replace(/(\d{4})(\d)/, '$1-$2');
+}
+
 /**
  * Fase 9 — modelo de venda do vendedor.
  * Consignado: recebe cestas e avulsos do dono, o dinheiro das vendas é do dono e ganha comissão.
  * Revendedor: compra do dono por Venda PJ (pelo valor dos produtos da cesta) e fica com o dinheiro.
  */
-const ModeloVendaCard: React.FC<Props> = ({ vendedorId, modeloAtual, clientePjAtual, podeAlterar, onAlterado }) => {
+const ModeloVendaCard: React.FC<Props> = ({ vendedorId, modeloAtual, clientePjAtual, cnpjVendedor, podeAlterar, onAlterado }) => {
   const [modelo, setModelo] = useState<ModeloVenda>(modeloAtual);
-  const [clientePj, setClientePj] = useState<string>(clientePjAtual ?? '');
-  const { data: clientesPJ = [], isLoading } = useClientesPJ(podeAlterar);
+  const { data: clientesPJ = [] } = useClientesPJ(!!clientePjAtual);
   const definir = useDefinirModeloVendedor();
+
+  // Cadastro PJ já ligado ao revendedor (só para mostrar).
+  const ligado = useMemo(() => clientesPJ.find((c) => c.id === clientePjAtual) ?? null, [clientesPJ, clientePjAtual]);
+  const cnpjLigado = soDigitos(ligado?.cnpj);
+  const cnpjInicial = cnpjLigado || (soDigitos(cnpjVendedor).length === 14 ? soDigitos(cnpjVendedor) : '');
+  const [cnpj, setCnpj] = useState<string>(mascaraCnpj(cnpjInicial));
 
   useEffect(() => {
     setModelo(modeloAtual);
-    setClientePj(clientePjAtual ?? '');
-  }, [modeloAtual, clientePjAtual]);
+  }, [modeloAtual]);
+  useEffect(() => {
+    setCnpj(mascaraCnpj(cnpjInicial));
+  }, [cnpjInicial]);
 
-  // O cadastro PJ do revendedor não pode estar na carteira dele (apareceria como cliente no app).
-  const opcoes = useMemo(
-    () => clientesPJ.filter((c) => c.vendedor_id !== vendedorId && (c.cnpj ?? '').trim() !== ''),
-    [clientesPJ, vendedorId]
-  );
-
-  const mudou = modelo !== modeloAtual || (modelo === 'revendedor' && clientePj !== (clientePjAtual ?? ''));
+  const digitos = soDigitos(cnpj);
+  const mudou = modelo !== modeloAtual || (modelo === 'revendedor' && digitos !== cnpjLigado);
 
   const salvar = async () => {
-    if (modelo === 'revendedor' && !clientePj) {
-      toast.error('Escolha o cadastro PJ (CNPJ) do revendedor');
+    if (modelo === 'revendedor' && digitos.length !== 14) {
+      toast.error('Informe o CNPJ do revendedor (14 números)');
       return;
     }
     try {
-      await definir.mutateAsync({ vendedorId, modelo, clientePjId: modelo === 'revendedor' ? clientePj : null });
+      await definir.mutateAsync({ vendedorId, modelo, cnpj: modelo === 'revendedor' ? digitos : null });
       toast.success(modelo === 'revendedor' ? 'Vendedor agora é revendedor' : 'Vendedor voltou ao modelo consignado');
       onAlterado?.();
     } catch (e) {
@@ -105,26 +121,28 @@ const ModeloVendaCard: React.FC<Props> = ({ vendedorId, modeloAtual, clientePjAt
         <div className="mt-4 space-y-2">
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Cadastro PJ do revendedor (CNPJ) *
+              CNPJ do revendedor *
             </span>
-            <select
-              value={clientePj}
-              onChange={(e) => setClientePj(e.target.value)}
-              disabled={!podeAlterar || isLoading || definir.isPending}
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="00.000.000/0000-00"
+              value={cnpj}
+              onChange={(e) => setCnpj(mascaraCnpj(e.target.value))}
+              disabled={!podeAlterar || definir.isPending}
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-            >
-              <option value="">{isLoading ? 'Carregando…' : 'Selecione o CNPJ'}</option>
-              {opcoes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {nomeCliente(c)} — {c.cnpj}
-                </option>
-              ))}
-            </select>
+            />
           </label>
+          {ligado && (
+            <p className="text-xs text-gray-600 dark:text-gray-300">
+              Ligado ao cadastro <span className="font-medium">{nomeCliente(ligado)}</span>.
+            </p>
+          )}
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            As compras do revendedor são vendas PJ para esse CNPJ (com nota fiscal). Se ele ainda não tem cadastro,
-            crie em <Link to="/clientes" className="text-blue-600 hover:underline dark:text-blue-400">Clientes</Link> (pessoa jurídica),
-            na carteira de outro vendedor (ex.: o do escritório).
+            É o CNPJ da empresa do próprio revendedor: as compras dele são vendas PJ para esse CNPJ. O sistema usa o
+            cadastro PJ com esse CNPJ ou cria um com os dados do vendedor. Esse cadastro não aparece como cliente no
+            app dele. Para completar os dados fiscais, edite em{' '}
+            <Link to="/clientes" className="text-blue-600 hover:underline dark:text-blue-400">Clientes</Link>.
           </p>
         </div>
       )}

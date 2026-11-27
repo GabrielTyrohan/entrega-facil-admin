@@ -68,6 +68,8 @@ export interface Vendedor {
   modelo_venda?: string | null
   /** Fase 9: cadastro PJ (CNPJ) do revendedor, usado nas vendas PJ a ele. */
   cliente_pj_id?: string | null
+  /** CPF ou CNPJ do vendedor (do revendedor, o CNPJ da empresa dele). */
+  cpf_cnpj?: string | null
 }
 
 export interface Cliente {

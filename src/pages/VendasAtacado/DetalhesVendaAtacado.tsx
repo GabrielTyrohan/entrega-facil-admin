@@ -6,6 +6,29 @@ import { useReactToPrint } from 'react-to-print';
 import { useRegistrarPagamento, useVendaAtacadoById } from '../../hooks/useVendasAtacado';
 import { supabase } from '../../lib/supabase';
 import { applyCurrencyMask, currencyMaskToNumber, formatCurrency } from '../../utils/currencyUtils';
+import { calcularParcelas, proximaParcela } from '../../utils/parcelas';
+import { toast } from '../../utils/toast';
+
+const FORMAS_PAGAMENTO = ['Pix', 'Dinheiro', 'Boleto', 'Cartão', 'Transferência', 'Cheque'];
+
+interface PagamentoVenda {
+  id: string;
+  valor: number;
+  forma_pagamento: string | null;
+  observacao: string | null;
+  data_pagamento: string | null;
+  created_at: string | null;
+}
+
+const hojeISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+function mensagemErro(e: unknown): string {
+  if (e && typeof e === 'object' && 'message' in e) return String((e as { message: string }).message);
+  return 'Erro desconhecido';
+}
 
 const DetalhesVendaAtacado = () => {
   const { id } = useParams();
@@ -16,12 +39,33 @@ const DetalhesVendaAtacado = () => {
   const [modalPagamento, setModalPagamento] = useState(false);
   const [valorNovoPagamento, setValorNovoPagamento] = useState('');
   const [obsNovoPagamento, setObsNovoPagamento] = useState('');
+  const [formaNovoPagamento, setFormaNovoPagamento] = useState('Pix');
+  const [dataNovoPagamento, setDataNovoPagamento] = useState(hojeISO);
   const registrarPagamento = useRegistrarPagamento();
-  
+
   const { data: venda, isLoading, error } = useVendaAtacadoById(id || '');
 
   const valorPagoAtual = Number((venda as any)?.valor_pago || 0);
-  const saldoRestante = Number(venda?.valor_total || 0) - valorPagoAtual;
+  const saldoRestante = Math.round((Number(venda?.valor_total || 0) - valorPagoAtual) * 100) / 100;
+  const parcelas = Math.max(1, Number((venda as any)?.parcelas || 1));
+  const pagamentos: PagamentoVenda[] = useMemo(
+    () =>
+      [...(((venda as any)?.vendas_atacado_pagamentos as PagamentoVenda[] | undefined) ?? [])].sort((a, b) =>
+        `${a.data_pagamento ?? ''}${a.created_at ?? ''}`.localeCompare(`${b.data_pagamento ?? ''}${b.created_at ?? ''}`)
+      ),
+    [venda]
+  );
+  const valoresParcelas = calcularParcelas(Number(venda?.valor_total || 0), parcelas);
+  const parcelaSugerida = proximaParcela(Number(venda?.valor_total || 0), parcelas, pagamentos.length, saldoRestante);
+  const numeroParcelaDaVez = Math.min(pagamentos.length + 1, parcelas);
+
+  const abrirModalPagamento = () => {
+    const formaVenda = FORMAS_PAGAMENTO.find((f) => f.toLowerCase() === String(venda?.forma_pagamento || '').toLowerCase());
+    setFormaNovoPagamento(formaVenda ?? (String(venda?.forma_pagamento || '').startsWith('Boleto') ? 'Boleto' : 'Pix'));
+    setDataNovoPagamento(hojeISO());
+    setValorNovoPagamento(parcelas > 1 ? applyCurrencyMask(String(Math.round(parcelaSugerida * 100))) : '');
+    setModalPagamento(true);
+  };
 
   // Unifica itens: prioriza JSONB, fallback para tabela filha
   const itensUnificados: any[] = useMemo(() => {
@@ -99,18 +143,28 @@ const DetalhesVendaAtacado = () => {
     if (!valor || valor <= 0) {
       return;
     }
+    if (valor > saldoRestante + 0.001) {
+      toast.error(`O valor é maior que o que falta pagar (${formatCurrency(saldoRestante)})`);
+      return;
+    }
     try {
-      await registrarPagamento.mutateAsync({
+      const res = await registrarPagamento.mutateAsync({
         vendaId: id!,
         valorNovoPagamento: valor,
-        valorPagoAtual,
-        valorTotal: Number(venda?.valor_total || 0),
+        formaPagamento: formaNovoPagamento,
+        dataPagamento: dataNovoPagamento || undefined,
+        observacao: obsNovoPagamento.trim() || undefined,
       });
+      toast.success(
+        res.novoStatus === 'pago'
+          ? 'Pagamento registrado. Venda quitada.'
+          : `Pagamento registrado. Falta ${formatCurrency(res.saldo)}.`
+      );
       setModalPagamento(false);
       setValorNovoPagamento('');
       setObsNovoPagamento('');
     } catch (err) {
-      console.error(err);
+      toast.error('Não foi possível registrar o pagamento: ' + mensagemErro(err));
     }
   };
 
@@ -160,7 +214,7 @@ const DetalhesVendaAtacado = () => {
         <div className="flex gap-2">
           {venda.status_pagamento !== 'pago' && venda.status_pagamento !== 'cancelado' && (
             <button
-              onClick={() => setModalPagamento(true)}
+              onClick={abrirModalPagamento}
               className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors shadow-sm font-medium text-sm"
             >
               <DollarSign size={18} className="mr-2" />
@@ -278,6 +332,13 @@ const DetalhesVendaAtacado = () => {
               <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg print:mt-2 print:p-2 print:border print:border-gray-200">
                 <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Forma de Pagamento</span>
                 <span className="font-medium text-gray-900 dark:text-white print:text-sm">{venda.forma_pagamento}</span>
+                {parcelas > 1 && (
+                  <span className="mt-1 block text-sm text-gray-600 dark:text-gray-300">
+                    A prazo em {parcelas}x de {formatCurrency(valoresParcelas[0])}
+                    {valoresParcelas[parcelas - 1] !== valoresParcelas[0] &&
+                      ` (a última de ${formatCurrency(valoresParcelas[parcelas - 1])})`}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -363,6 +424,47 @@ const DetalhesVendaAtacado = () => {
               </table>
             </div>
           </div>
+
+          {/* Histórico de pagamentos */}
+          <div className="mb-2">
+            <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 print:mb-2">
+              Pagamentos recebidos
+            </h3>
+            {pagamentos.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">Nenhum pagamento registrado ainda.</p>
+            ) : (
+              <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-700/50 print:bg-gray-100">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider print:px-3 print:py-2">Data</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider print:px-3 print:py-2">Forma</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider print:px-3 print:py-2">Observação</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider print:px-3 print:py-2">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    {pagamentos.map((p) => (
+                      <tr key={p.id}>
+                        <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white print:px-3 print:py-2 print:text-xs">
+                          {p.data_pagamento ? format(parseISO(p.data_pagamento), 'dd/MM/yyyy') : '-'}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300 print:px-3 print:py-2 print:text-xs">
+                          {p.forma_pagamento || '-'}
+                        </td>
+                        <td className="px-6 py-3 text-sm text-gray-600 dark:text-gray-300 print:px-3 print:py-2 print:text-xs">
+                          {p.observacao || '-'}
+                        </td>
+                        <td className="px-6 py-3 whitespace-nowrap text-sm font-semibold text-green-600 dark:text-green-400 text-right print:px-3 print:py-2 print:text-xs">
+                          {formatCurrency(Number(p.valor))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -411,6 +513,13 @@ const DetalhesVendaAtacado = () => {
               </div>
 
               <div className="flex gap-2">
+                {parcelas > 1 && (
+                  <button type="button"
+                    onClick={() => setValorNovoPagamento(applyCurrencyMask(String(Math.round(parcelaSugerida * 100))))}
+                    className="flex-1 py-2 text-xs font-medium border border-blue-300 text-blue-700 dark:text-blue-400 dark:border-blue-700 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors">
+                    Parcela {numeroParcelaDaVez}/{parcelas} ({formatCurrency(parcelaSugerida)})
+                  </button>
+                )}
                 <button type="button"
                   onClick={() => setValorNovoPagamento(applyCurrencyMask(String(Math.round(saldoRestante * 100))))}
                   className="flex-1 py-2 text-xs font-medium border border-green-300 text-green-700 dark:text-green-400 dark:border-green-700 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors">
@@ -421,6 +530,27 @@ const DetalhesVendaAtacado = () => {
                   className="flex-1 py-2 text-xs font-medium border border-gray-300 text-gray-600 dark:text-gray-400 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                   Metade
                 </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Forma de pagamento</label>
+                  <select
+                    value={formaNovoPagamento}
+                    onChange={(e) => setFormaNovoPagamento(e.target.value)}
+                    className="block w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent">
+                    {FORMAS_PAGAMENTO.map((f) => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Data do pagamento</label>
+                  <input
+                    type="date"
+                    value={dataNovoPagamento}
+                    max={hojeISO()}
+                    onChange={(e) => setDataNovoPagamento(e.target.value)}
+                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent" />
+                </div>
               </div>
 
               <div>

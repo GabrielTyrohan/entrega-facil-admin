@@ -264,8 +264,11 @@ export const useVendaAtacadoById = (id: string, enabled = true) => {
         id, nome
       ),
       vendas_atacado_itens (
-        id, produto_cadastrado_id, descricao, 
+        id, produto_cadastrado_id, descricao,
         quantidade, preco_unitario, subtotal
+      ),
+      vendas_atacado_pagamentos (
+        id, valor, forma_pagamento, observacao, data_pagamento, created_at
       )
     `)
     .eq('id', id)
@@ -286,58 +289,33 @@ export const useRegistrarPagamento = () => {
 
 
   return useMutation({
+    // Regra de negócio (saldo, permissão, venda cancelada) não melhora tentando de novo.
+    retry: false,
+    // O banco grava o histórico, o valor pago e a situação numa transação só.
     mutationFn: async ({
       vendaId,
       valorNovoPagamento,
-      valorPagoAtual,
-      valorTotal,
       formaPagamento,
+      dataPagamento,
       observacao,
     }: {
       vendaId: string;
       valorNovoPagamento: number;
-      valorPagoAtual: number;
-      valorTotal: number;
       formaPagamento?: string;
+      /** AAAA-MM-DD; sem valor, o banco usa hoje. */
+      dataPagamento?: string;
       observacao?: string;
     }) => {
-      const novoValorPago = valorPagoAtual + valorNovoPagamento;
-      const novoStatus =
-        novoValorPago >= valorTotal
-          ? 'pago'
-          : novoValorPago > 0
-          ? 'parcial'
-          : 'pendente';
-
-
-      const { error: updateError } = await supabase
-        .from('vendas_atacado')
-        .update({
-          valor_pago: novoValorPago,
-          status_pagamento: novoStatus,
-          pago: novoStatus === 'pago',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', vendaId);
-
-
-      if (updateError) throw updateError;
-
-
-      const { error: insertError } = await supabase
-        .from('vendas_atacado_pagamentos')
-        .insert({
-          venda_id: vendaId,
-          valor: valorNovoPagamento,
-          forma_pagamento: formaPagamento || null,
-          observacao: observacao || null,
-        });
-
-
-      if (insertError) throw insertError;
-
-
-      return { novoValorPago, novoStatus };
+      const { data, error } = await supabase.rpc('registrar_pagamento_venda_atacado', {
+        p_venda_id: vendaId,
+        p_valor: Math.round(valorNovoPagamento * 100) / 100,
+        p_forma_pagamento: formaPagamento || null,
+        p_data_pagamento: dataPagamento || null,
+        p_observacao: observacao || null,
+      });
+      if (error) throw error;
+      const res = data as { valor_pago: number; saldo: number; status_pagamento: string };
+      return { novoValorPago: Number(res.valor_pago), novoStatus: res.status_pagamento, saldo: Number(res.saldo) };
     },
 
     // ✅ CORRIGIDO — duas invalidações agrupadas em Promise.all — um único ciclo de re-render

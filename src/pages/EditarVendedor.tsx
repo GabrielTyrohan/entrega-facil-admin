@@ -40,9 +40,10 @@ const EditarVendedor: React.FC = () => {
     tipoContrato: '' as '' | 'efetivado' | 'autonomo',
   });
   // Fase 9: modelo de venda (consignado | revendedor) é trocado por RPC própria, fora do formulário.
-  const [modeloVenda, setModeloVenda] = useState<{ modelo: 'consignado' | 'revendedor'; clientePj: string | null }>({
+  const [modeloVenda, setModeloVenda] = useState<{ modelo: 'consignado' | 'revendedor'; clientePj: string | null; cpfCnpj: string | null }>({
     modelo: 'consignado',
     clientePj: null,
+    cpfCnpj: null,
   });
   const [recarregar, setRecarregar] = useState(0);
 
@@ -117,6 +118,7 @@ const EditarVendedor: React.FC = () => {
         setModeloVenda({
           modelo: vendedor.modelo_venda === 'revendedor' ? 'revendedor' : 'consignado',
           clientePj: vendedor.cliente_pj_id ?? null,
+          cpfCnpj: vendedor.cpf_cnpj ?? null,
         });
 
         // Carregar dados bancários se existirem
@@ -655,6 +657,7 @@ const EditarVendedor: React.FC = () => {
           vendedorId={id}
           modeloAtual={modeloVenda.modelo}
           clientePjAtual={modeloVenda.clientePj}
+          cnpjVendedor={modeloVenda.cpfCnpj}
           podeAlterar={isAdmin}
           onAlterado={() => {
             queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.VENDEDORES] });

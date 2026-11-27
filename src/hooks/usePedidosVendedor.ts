@@ -26,8 +26,10 @@ export interface PedidoVendedor {
   resposta: string | null;
   atendido_por_nome: string | null;
   atendido_em: string | null;
+  /** Revendedor: a venda PJ criada ao atender o pedido. */
+  venda_atacado_id?: string | null;
   created_at: string;
-  vendedor?: { nome: string; modelo_venda?: string | null } | null;
+  vendedor?: { nome: string; modelo_venda?: string | null; cliente_pj_id?: string | null } | null;
   itens: PedidoVendedorItem[];
 }
 
@@ -44,8 +46,8 @@ export function usePedidosVendedor(status: StatusPedido | 'todos' = 'pendente') 
       let query = supabase
         .from('pedidos_vendedor')
         .select(
-          'id, numero, vendedor_id, status, observacao, resposta, atendido_por_nome, atendido_em, created_at, ' +
-          'vendedor:vendedores(nome, modelo_venda), ' +
+          'id, numero, vendedor_id, status, observacao, resposta, atendido_por_nome, atendido_em, venda_atacado_id, created_at, ' +
+          'vendedor:vendedores(nome, modelo_venda, cliente_pj_id), ' +
           'itens:pedidos_vendedor_itens(id, tipo, descricao, quantidade_solicitada, quantidade_atendida, cesta_id, produto_cadastrado_id)'
         )
         .eq('administrador_id', adminId!)

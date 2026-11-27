@@ -68,11 +68,15 @@ export function useClientesPJ(enabled = true) {
 export function useDefinirModeloVendedor() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (vars: { vendedorId: string; modelo: ModeloVenda; clientePjId?: string | null }) => {
+    // Erro de regra de negócio (CNPJ inválido, estoque não zerado) não melhora tentando de novo.
+    retry: false,
+    /** cnpj: o banco acha o cadastro PJ com esse CNPJ ou cria um com os dados do revendedor. */
+    mutationFn: async (vars: { vendedorId: string; modelo: ModeloVenda; cnpj?: string | null; clientePjId?: string | null }) => {
       const { data, error } = await supabase.rpc('definir_modelo_vendedor', {
         p_vendedor_id: vars.vendedorId,
         p_modelo: vars.modelo,
         p_cliente_pj_id: vars.clientePjId ?? null,
+        p_cnpj: vars.cnpj ?? null,
       });
       if (error) throw error;
       return data as { vendedor_id: string; modelo_venda: ModeloVenda; cliente_pj_id: string | null };
@@ -129,10 +133,12 @@ export function usePrecosProdutos(ids: string[]) {
 export function useAtenderPedidoRevendedor() {
   const queryClient = useQueryClient();
   return useMutation({
+    // Erro de regra de negócio (ex.: revendedor sem CNPJ) não melhora tentando de novo.
+    retry: false,
     mutationFn: async (vars: {
       pedidoId: string;
       itens: { item_id: string; quantidade: number }[];
-      venda: { status_pagamento: 'pendente' | 'pago'; pago: boolean; valor_pago: number; forma_pagamento?: string | null; data_pagamento?: string | null };
+      venda: { status_pagamento: 'pendente' | 'pago'; pago: boolean; valor_pago: number; forma_pagamento?: string | null; data_pagamento?: string | null; observacoes?: string; parcelas?: number };
       resposta?: string;
     }) => {
       const { data, error } = await supabase.rpc('atender_pedido_revendedor', {

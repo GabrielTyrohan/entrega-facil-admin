@@ -11,11 +11,7 @@ const { mockDefinir, mockToastError } = vi.hoisted(() => ({
 vi.mock('@/hooks/useRevendedores', () => ({
   useClientesPJ: () => ({
     data: [
-      { id: 'pj-1', razao_social: 'Revenda Ltda', nome_fantasia: null, nome: null, cnpj: '12.345.678/0001-90', vendedor_id: 'escritorio' },
-      // Cadastro na carteira do próprio vendedor não pode ser escolhido
-      { id: 'pj-2', razao_social: 'Da Carteira', nome_fantasia: null, nome: null, cnpj: '98.765.432/0001-10', vendedor_id: 'vend-1' },
-      // Sem CNPJ também não
-      { id: 'pj-3', razao_social: 'Sem CNPJ', nome_fantasia: null, nome: null, cnpj: '', vendedor_id: 'escritorio' },
+      { id: 'pj-1', razao_social: 'Revenda Ltda', nome_fantasia: null, nome: null, cnpj: '38347228000125', vendedor_id: 'vend-1' },
     ],
     isLoading: false,
   }),
@@ -26,7 +22,7 @@ vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), error: mockToastError },
 }));
 
-import ModeloVendaCard from '@/components/vendedores/ModeloVendaCard';
+import ModeloVendaCard, { mascaraCnpj } from '@/components/vendedores/ModeloVendaCard';
 
 function renderCard(props: Partial<React.ComponentProps<typeof ModeloVendaCard>> = {}) {
   return render(
@@ -36,44 +32,52 @@ function renderCard(props: Partial<React.ComponentProps<typeof ModeloVendaCard>>
   );
 }
 
+const campoCnpj = () => screen.getByPlaceholderText('00.000.000/0000-00') as HTMLInputElement;
+
 describe('ModeloVendaCard (Fase 9 — revendedor)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDefinir.mockResolvedValue({ vendedor_id: 'vend-1', modelo_venda: 'revendedor', cliente_pj_id: 'pj-1' });
   });
 
-  it('só mostra cadastros PJ com CNPJ que não estão na carteira do vendedor', () => {
-    renderCard();
-    fireEvent.click(screen.getByRole('radio', { name: /Revendedor/ }));
-    const opcoes = screen.getAllByRole('option').map((o) => o.textContent);
-    expect(opcoes.some((t) => t?.includes('Revenda Ltda'))).toBe(true);
-    expect(opcoes.some((t) => t?.includes('Da Carteira'))).toBe(false);
-    expect(opcoes.some((t) => t?.includes('Sem CNPJ'))).toBe(false);
+  it('formata o CNPJ enquanto digita', () => {
+    expect(mascaraCnpj('38347228000125')).toBe('38.347.228/0001-25');
+    expect(mascaraCnpj('3834')).toBe('38.34');
+    expect(mascaraCnpj('38.347.228/0001-2599')).toBe('38.347.228/0001-25');
   });
 
-  it('exige o CNPJ antes de virar revendedor', async () => {
+  it('exige o CNPJ completo antes de virar revendedor', () => {
     renderCard();
     fireEvent.click(screen.getByRole('radio', { name: /Revendedor/ }));
+    fireEvent.change(campoCnpj(), { target: { value: '38347' } });
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar modelo de venda' }));
     expect(mockDefinir).not.toHaveBeenCalled();
-    expect(mockToastError).toHaveBeenCalledWith('Escolha o cadastro PJ (CNPJ) do revendedor');
+    expect(mockToastError).toHaveBeenCalledWith('Informe o CNPJ do revendedor (14 números)');
   });
 
-  it('chama definir_modelo_vendedor com o CNPJ escolhido', async () => {
+  it('preenche com o CNPJ do vendedor e manda só os números', async () => {
     const onAlterado = vi.fn();
-    renderCard({ onAlterado });
+    renderCard({ onAlterado, cnpjVendedor: '38.347.228/0001-25' });
     fireEvent.click(screen.getByRole('radio', { name: /Revendedor/ }));
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'pj-1' } });
+    expect(campoCnpj().value).toBe('38.347.228/0001-25');
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar modelo de venda' }));
     await waitFor(() =>
-      expect(mockDefinir).toHaveBeenCalledWith({ vendedorId: 'vend-1', modelo: 'revendedor', clientePjId: 'pj-1' }),
+      expect(mockDefinir).toHaveBeenCalledWith({ vendedorId: 'vend-1', modelo: 'revendedor', cnpj: '38347228000125' }),
     );
     expect(onAlterado).toHaveBeenCalled();
+  });
+
+  it('mostra o cadastro já ligado e não pede para salvar de novo', () => {
+    renderCard({ modeloAtual: 'revendedor', clientePjAtual: 'pj-1' });
+    expect(campoCnpj().value).toBe('38.347.228/0001-25');
+    expect(screen.getByText('Revenda Ltda')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Confirmar modelo de venda' })).toBeNull();
   });
 
   it('funcionária vê o modelo mas não altera', () => {
     renderCard({ podeAlterar: false, modeloAtual: 'revendedor', clientePjAtual: 'pj-1' });
     expect(screen.getByRole('radio', { name: /Revendedor/ })).toBeDisabled();
+    expect(campoCnpj()).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Confirmar modelo de venda' })).toBeNull();
     expect(screen.getByText('Só o dono da empresa pode trocar o modelo de venda.')).toBeInTheDocument();
   });

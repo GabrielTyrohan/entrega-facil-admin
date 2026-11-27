@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { Check, Package, ShoppingBasket, Store, X } from 'lucide-react';
+import { AlertTriangle, Check, Package, ShoppingBasket, Store, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { toast } from '@/utils/toast';
+import { calcularParcelas } from '@/utils/parcelas';
 import { cls } from '@/components/ui/lista';
 import { useRecusarPedido, type PedidoVendedor } from '@/hooks/usePedidosVendedor';
 import {
@@ -16,6 +18,7 @@ interface Props {
 }
 
 const FORMAS = ['Pix', 'Dinheiro', 'Boleto', 'Cartão', 'Transferência'];
+const OPCOES_PARCELAS = Array.from({ length: 12 }, (_, i) => i + 1);
 
 function mensagemErro(e: unknown): string {
   if (e && typeof e === 'object' && 'message' in e) return String((e as { message: string }).message);
@@ -44,8 +47,11 @@ const PainelPedidoRevendedor: React.FC<Props> = ({ pedido, onFechar }) => {
   const [modoRecusa, setModoRecusa] = useState(false);
   const [pago, setPago] = useState(false);
   const [forma, setForma] = useState('Pix');
+  const [parcelas, setParcelas] = useState(1);
   const pendente = pedido.status === 'pendente';
   const ocupado = atender.isPending || recusar.isPending;
+  // O pedido vira venda PJ para o CNPJ do revendedor: sem o cadastro PJ ligado, o banco recusa.
+  const semCnpj = pedido.vendedor != null && pedido.vendedor.cliente_pj_id === null;
 
   const precoUnit = (item: PedidoVendedor['itens'][number]): number | null => {
     if (item.tipo === 'cesta') {
@@ -59,15 +65,23 @@ const PainelPedidoRevendedor: React.FC<Props> = ({ pedido, onFechar }) => {
 
   const total = pedido.itens.reduce((s, i) => s + (Number(quantidades[i.id]) || 0) * (precoUnit(i) ?? 0), 0);
   const totalInformado = Object.values(quantidades).reduce((a, b) => a + (Number(b) || 0), 0);
+  const valoresParcelas = calcularParcelas(total, parcelas);
+  const parcelasIguais = valoresParcelas.every((v) => v === valoresParcelas[0]);
+  const textoParcelas = parcelasIguais
+    ? `${parcelas}x de ${formatarBRL(valoresParcelas[0])}`
+    : `${parcelas - 1}x de ${formatarBRL(valoresParcelas[0])} + 1x de ${formatarBRL(valoresParcelas[parcelas - 1])}`;
 
   const confirmar = async () => {
     try {
+      const observacoes = !pago && parcelas > 1
+        ? `Pedido #${pedido.numero} do revendedor — a prazo em ${textoParcelas}`
+        : undefined;
       const res = await atender.mutateAsync({
         pedidoId: pedido.id,
         itens: pedido.itens.map((i) => ({ item_id: i.id, quantidade: Number(quantidades[i.id]) || 0 })),
         venda: pago
           ? { status_pagamento: 'pago', pago: true, valor_pago: Math.round(total * 100) / 100, forma_pagamento: forma, data_pagamento: new Date().toISOString().slice(0, 10) }
-          : { status_pagamento: 'pendente', pago: false, valor_pago: 0, forma_pagamento: forma },
+          : { status_pagamento: 'pendente', pago: false, valor_pago: 0, forma_pagamento: forma, observacoes, parcelas },
         resposta: resposta.trim() || undefined,
       });
       toast.success(`Venda #${res.venda.numero_pedido} criada: ${formatarBRL(res.venda.valor_total)}`);
@@ -107,6 +121,20 @@ const PainelPedidoRevendedor: React.FC<Props> = ({ pedido, onFechar }) => {
       </div>
 
       <div className="space-y-4 px-5 py-4">
+        {pendente && semCnpj && (
+          <div className="flex gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-[13px] text-amber-900 dark:border-amber-700/60 dark:bg-amber-900/20 dark:text-amber-200">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              Este revendedor ainda não tem o cadastro PJ (CNPJ) ligado, então o pedido não pode virar venda.
+              O dono liga o CNPJ em{' '}
+              <Link to={`/vendedores/editar/${pedido.vendedor_id}`} className="font-medium underline">
+                Editar vendedor → Modelo de venda
+              </Link>
+              . Depois é só voltar aqui e atender.
+            </span>
+          </div>
+        )}
+
         {pedido.observacao && (
           <div className="rounded-md bg-gray-50 px-3 py-2.5 text-[13px] text-gray-700 dark:bg-gray-900/50 dark:text-gray-300">
             <span className="font-medium">Observação do revendedor: </span>
@@ -194,6 +222,25 @@ const PainelPedidoRevendedor: React.FC<Props> = ({ pedido, onFechar }) => {
                     {FORMAS.map((f) => <option key={f} value={f}>{f}</option>)}
                   </select>
                 </div>
+                {!pago && (
+                  <div className="flex flex-wrap items-center justify-between gap-3 text-[13px]">
+                    <label className="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                      Pagar em
+                      <select
+                        value={parcelas}
+                        onChange={(e) => setParcelas(Number(e.target.value))}
+                        disabled={ocupado}
+                        aria-label="Quantidade de parcelas"
+                        className="h-8 rounded-md border border-gray-300 bg-white px-2 text-[13px] dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                      >
+                        {OPCOES_PARCELAS.map((n) => <option key={n} value={n}>{n}x</option>)}
+                      </select>
+                    </label>
+                    <span className="font-mono font-semibold tabular-nums text-gray-900 dark:text-white">
+                      {textoParcelas}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 
@@ -227,7 +274,7 @@ const PainelPedidoRevendedor: React.FC<Props> = ({ pedido, onFechar }) => {
                   <button onClick={() => setModoRecusa(true)} disabled={ocupado} className={`${cls.btn} text-red-600 dark:text-red-400`}>
                     Recusar
                   </button>
-                  <button onClick={confirmar} disabled={ocupado || totalInformado <= 0} className={cls.btnPri}>
+                  <button onClick={confirmar} disabled={ocupado || semCnpj || totalInformado <= 0} className={cls.btnPri}>
                     <Check className="h-4 w-4" />
                     {atender.isPending ? 'Criando venda…' : 'Atender como venda'}
                   </button>
@@ -243,6 +290,13 @@ const PainelPedidoRevendedor: React.FC<Props> = ({ pedido, onFechar }) => {
         ) : (
           <div className="space-y-1.5 text-[13px] text-gray-600 dark:text-gray-400">
             {pedido.atendido_por_nome && <p>Atendido por {pedido.atendido_por_nome}</p>}
+            {pedido.venda_atacado_id && (
+              <p>
+                <Link to={`/vendas-atacado/${pedido.venda_atacado_id}`} className="font-medium text-blue-600 underline dark:text-blue-400">
+                  Abrir a venda PJ para registrar os pagamentos
+                </Link>
+              </p>
+            )}
             {pedido.resposta && <p>Recado: {pedido.resposta}</p>}
           </div>
         )}
